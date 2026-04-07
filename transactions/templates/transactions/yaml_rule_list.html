@@ -1,0 +1,132 @@
+{% extends "transactions/base.html" %}
+{% block title %}Rules — Project Finance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">Rules</h2>
+  <div class="d-flex gap-2">
+    <form method="post" action="{% url 'transactions:classify_unclassified' %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-primary">Classify Unclassified</button>
+    </form>
+    <form method="post" action="{% url 'transactions:reclassify_all' %}" class="d-inline"
+          onsubmit="return confirm('This will reset all non-manual transactions and re-apply all rules. Continue?')">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-warning">Reclassify All</button>
+    </form>
+    <a href="{% url 'transactions:yaml_rule_add' %}{% if filter_group %}?group={{ filter_group|urlencode }}&category={{ filter_category|urlencode }}{% endif %}" class="btn btn-primary">+ Add Rule</a>
+  </div>
+</div>
+
+<div class="row">
+  <!-- ── Left panel: group/category filter ── -->
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-header fw-bold">
+        Groups &amp; Categories
+      </div>
+      <div class="list-group list-group-flush">
+        {% for grp, cats in group_categories.items %}
+        <!-- Group header (non-clickable) -->
+        <div class="list-group-item d-flex justify-content-between align-items-center fw-semibold bg-light">
+          {% if grp == 'expense' %}<span class="badge bg-danger">{{ grp|title }}</span>
+          {% elif grp == 'income' %}<span class="badge bg-success">{{ grp|title }}</span>
+          {% elif grp == 'transaction' %}<span class="badge bg-info">Transfer</span>
+          {% else %}<span class="badge bg-secondary">{{ grp|title }}</span>{% endif %}
+        </div>
+        {% for cat in cats %}
+        <a href="?group={{ grp }}&category={{ cat|urlencode }}{% if search_q %}&q={{ search_q|urlencode }}{% endif %}"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center ps-4 {% if filter_category == cat and filter_group == grp %}active{% endif %}">
+          <span class="small">{{ cat }}</span>
+        </a>
+        {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right panel: rules table ── -->
+  <div class="col-md-9">
+    {% if filter_category %}
+    <div class="d-flex align-items-center mb-3">
+      <span class="fw-bold me-2">
+        {% if filter_group == 'expense' %}<span class="badge bg-danger">Expense</span>
+        {% elif filter_group == 'income' %}<span class="badge bg-success">Income</span>
+        {% elif filter_group == 'transaction' %}<span class="badge bg-info">Transfer</span>
+        {% else %}<span class="badge bg-secondary">{{ filter_group|title }}</span>{% endif %}
+      </span>
+      <h5 class="mb-0">{{ filter_category }}</h5>
+      <div class="ms-auto d-flex gap-1">
+        <span class="badge bg-secondary">{{ cat_rule_count }} rule{{ cat_rule_count|pluralize }}</span>
+        <span class="badge bg-primary">{{ cat_txn_count }} transaction{{ cat_txn_count|pluralize }}</span>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if rules %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle table-sm">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 60px;">ID</th>
+            <th>Description</th>
+            <th>Account</th>
+            <th>Metadata</th>
+            <th>Amount Range</th>
+            <th>Detail</th>
+            <th class="text-center" style="width: 80px;">Txns</th>
+            <th class="text-end" style="width: 130px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rule in rules %}
+          <tr>
+            <td class="text-muted small">{{ rule.pk }}</td>
+            <td>
+              {% if rule.description %}<code>{{ rule.description }}</code>{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if rule.account_type %}
+                <span class="badge bg-light text-dark border">{{ rule.account_type }}</span>
+              {% else %}
+                <span class="text-muted">any</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if rule.metadata_display %}<code>{{ rule.metadata_display }}</code>{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if rule.amount_min is not None or rule.amount_max is not None %}
+                {% if rule.amount_min is not None %}≥ {{ rule.amount_min }}{% endif %}
+                {% if rule.amount_min is not None and rule.amount_max is not None %} &amp; {% endif %}
+                {% if rule.amount_max is not None %}≤ {{ rule.amount_max }}{% endif %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{% if rule.detail %}{{ rule.detail }}{% else %}—{% endif %}</td>
+            <td class="text-center">
+              <a href="{% url 'transactions:transaction_list' %}?rule={{ rule.pk }}" class="badge bg-secondary text-decoration-none">{{ rule.txn_count }}</a>
+            </td>
+            <td class="text-end text-nowrap">
+              <a href="{% url 'transactions:yaml_rule_edit' rule.pk %}?next={{ effective_path|urlencode }}" class="btn btn-sm btn-outline-primary">Edit</a>
+              <form method="post" action="{% url 'transactions:yaml_rule_delete' rule.pk %}" class="d-inline"
+                    onsubmit="return confirm('Delete this rule?')">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ effective_path }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="alert alert-light border text-center">
+      No rules{% if filter_group or filter_category or search_q %} matching your filter{% endif %}.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

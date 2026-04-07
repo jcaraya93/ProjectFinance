@@ -1,0 +1,250 @@
+{% extends "transactions/base.html" %}
+{% load finance_filters %}
+{% block title %}Dashboard — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <!-- Left panel: dashboard list -->
+  <div class="col-md-2">
+    {% include "transactions/_dashboard_sidebar.html" with active_dashboard="overview" %}
+  </div>
+
+  <!-- Right panel: dashboard content -->
+  <div class="col-md-10">
+
+    <!-- Currency toggle -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Overview — Last 12 Months</h4>
+      <div class="btn-group btn-group-sm">
+        <a href="?display_currency=CRC" class="btn {% if display_currency == 'CRC' %}btn-primary{% else %}btn-outline-primary{% endif %}">₡ CRC</a>
+        <a href="?display_currency=USD" class="btn {% if display_currency == 'USD' %}btn-primary{% else %}btn-outline-primary{% endif %}">$ USD</a>
+      </div>
+    </div>
+
+<!-- ═══ LAST MONTH ═══ -->
+<h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Last Month — {{ summary.last_month_name }}</h5>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card summary-card border-start-success">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Recurring Income</h6>
+        <h3 class="card-title mb-1 text-success">{{ summary.currency_symbol }}{{ summary.last_month_income|format_number }}</h3>
+        <div class="small text-muted">
+          Median: {{ summary.currency_symbol }}{{ summary.median_income|format_number }}
+          {% if summary.income_pct > 0 %}<span class="text-success ms-1">▲ {{ summary.income_pct|floatformat:0 }}%</span>
+          {% elif summary.income_pct < 0 %}<span class="text-danger ms-1">▼ {{ summary.income_pct|floatformat:0 }}%</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card summary-card border-start-danger">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Expenses</h6>
+        <h3 class="card-title mb-1 text-danger">{{ summary.currency_symbol }}{{ summary.last_month_expenses|format_number }}</h3>
+        <div class="small text-muted">
+          Median: {{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}
+          {% if summary.expenses_pct > 0 %}<span class="text-danger ms-1">▲ {{ summary.expenses_pct|floatformat:0 }}%</span>
+          {% elif summary.expenses_pct < 0 %}<span class="text-success ms-1">▼ {{ summary.expenses_pct|floatformat:0 }}%</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card summary-card border-start-primary">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Cash Flow</h6>
+        <h3 class="card-title mb-1 {% if summary.last_month_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}">{{ summary.currency_symbol }}{{ summary.last_month_cashflow|format_number }}</h3>
+        <div class="small text-muted">
+          Median: {{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}
+          {% if summary.cashflow_pct > 0 %}<span class="text-success ms-1">▲ {{ summary.cashflow_pct|floatformat:0 }}%</span>
+          {% elif summary.cashflow_pct < 0 %}<span class="text-danger ms-1">▼ {{ summary.cashflow_pct|floatformat:0 }}%</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OVERVIEW ═══ -->
+<h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Overview</h5>
+
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Avg. Recurring Income</h6>
+        <h3 class="card-title mb-1 text-success">{{ summary.currency_symbol }}{{ summary.avg_income|format_number }}</h3>
+        <div class="small text-muted">Median: {{ summary.currency_symbol }}{{ summary.median_income|format_number }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Avg. Expenses</h6>
+        <h3 class="card-title mb-1 text-danger">{{ summary.currency_symbol }}{{ summary.avg_expenses|format_number }}</h3>
+        <div class="small text-muted">Median: {{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Avg. Cash Flow</h6>
+        <h3 class="card-title mb-1 {% if summary.avg_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}">{{ summary.currency_symbol }}{{ summary.avg_cashflow|format_number }}</h3>
+        <div class="small text-muted">Median: {{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="card-title mb-0">Recurring Income vs Expenses</h5>
+          <div class="btn-group btn-group-sm" role="group">
+            <a href="?display_currency={{ display_currency }}&time_group=weekly" class="btn {% if time_group == 'weekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Weekly</a>
+            <a href="?display_currency={{ display_currency }}&time_group=biweekly" class="btn {% if time_group == 'biweekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Bi-weekly</a>
+            <a href="?display_currency={{ display_currency }}&time_group=monthly" class="btn {% if time_group == 'monthly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Monthly</a>
+            <a href="?display_currency={{ display_currency }}&time_group=quarterly" class="btn {% if time_group == 'quarterly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Quarterly</a>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Net Cash Flow</h5>
+        <div class="chart-container">
+          <canvas id="netCashflowBarChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart data blocks -->
+<script id="monthlyData" type="application/json">{{ monthly_data|safe }}</script>
+<script id="trendData" type="application/json">{{ trend_data|safe }}</script>
+  </div><!-- col-md-10 -->
+</div><!-- row -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function parseJSON(id) {
+    const el = document.getElementById(id);
+    if (!el || !el.textContent.trim()) return null;
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  }
+
+  // 1. Recurring Income vs Expenses (bar chart, side by side)
+  const monthlyRaw = parseJSON('monthlyData');
+  if (monthlyRaw) {
+    new Chart(document.getElementById('cashflowChart'), {
+      type: 'bar',
+      data: {
+        labels: monthlyRaw.labels || [],
+        datasets: [
+          {
+            label: 'Recurring Income',
+            data: monthlyRaw.income || [],
+            backgroundColor: 'rgba(25, 135, 84, 0.8)',
+          },
+          {
+            label: 'Expenses',
+            data: monthlyRaw.expenses || [],
+            backgroundColor: 'rgba(220, 53, 69, 0.8)',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true } },
+        plugins: { legend: { position: 'bottom' } },
+      },
+    });
+  }
+
+  // 6. Monthly Trend (dual line)
+  const trendRaw = parseJSON('trendData');
+  if (trendRaw) {
+    new Chart(document.getElementById('trendChart'), {
+      type: 'line',
+      data: {
+        labels: trendRaw.labels || [],
+        datasets: [
+          {
+            label: 'Recurring Income',
+            data: trendRaw.income || [],
+            borderColor: 'rgba(25, 135, 84, 1)',
+            backgroundColor: 'rgba(25, 135, 84, 0.05)',
+            borderDash: [6, 3],
+            fill: false,
+            tension: 0.3,
+            pointRadius: 4,
+          },
+          {
+            label: 'Expenses',
+            data: trendRaw.expenses || [],
+            borderColor: 'rgba(220, 53, 69, 1)',
+            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true } },
+        plugins: { legend: { position: 'bottom' } },
+      },
+    });
+  }
+
+  // 7. Net Cash Flow (bar)
+  if (trendRaw) {
+    const netData = (trendRaw.income || []).map(function (inc, i) {
+      return inc - (trendRaw.expenses || [])[i] || 0;
+    });
+    const barColors = netData.map(function (v) { return v >= 0 ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)'; });
+    new Chart(document.getElementById('netCashflowBarChart'), {
+      type: 'bar',
+      data: {
+        labels: trendRaw.labels || [],
+        datasets: [{
+          label: 'Net Cash Flow',
+          data: netData,
+          backgroundColor: barColors,
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: false } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+})();
+</script>
+{% endblock %}
+

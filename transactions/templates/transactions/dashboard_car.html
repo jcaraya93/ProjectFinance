@@ -1,0 +1,273 @@
+{% extends "transactions/base.html" %}
+{% load finance_filters %}
+{% block title %}Car Dashboard — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <!-- Left panel: dashboard list -->
+  <div class="col-md-2">
+    {% include "transactions/_dashboard_sidebar.html" with active_dashboard="car" %}
+  </div>
+
+  <!-- Right panel -->
+  <div class="col-md-10">
+
+    <!-- Currency toggle -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Car Dashboard</h4>
+      <div class="btn-group btn-group-sm">
+        <a href="?display_currency=CRC" class="btn {% if display_currency == 'CRC' %}btn-primary{% else %}btn-outline-primary{% endif %}">₡ CRC</a>
+        <a href="?display_currency=USD" class="btn {% if display_currency == 'USD' %}btn-primary{% else %}btn-outline-primary{% endif %}">$ USD</a>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SECTION 1: OVERVIEW                        -->
+    <!-- ═══════════════════════════════════════════ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Overview</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ last_month_total|format_number }}</h3>
+            <div class="small">
+              {% if median_pct > 0 %}<span class="text-danger">▲ {{ median_pct|floatformat:0 }}% above median</span>
+              {% elif median_pct < 0 %}<span class="text-success">▼ {{ median_pct|floatformat:0 }}% below median</span>
+              {% else %}<span class="text-muted">At median</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Monthly Average</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ avg_monthly|format_number }}</h3>
+            <div class="small text-muted">Median: {{ currency_symbol }}{{ median_monthly|format_number }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ car_last_year|format_number }}</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-lg-8">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-title">Monthly Cost Trend</h6>
+            <canvas id="trendChart" height="260"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-title">Cost Breakdown</h6>
+            <canvas id="breakdownChart" height="260"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- RUNNING COSTS                              -->
+    <!-- ═══════════════════════════════════════════ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Running Costs</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ running_last_month|format_number }}</h3>
+            <div class="small">
+              {% if running_median_pct > 0 %}<span class="text-danger">▲ {{ running_median_pct|floatformat:0 }}% above median</span>
+              {% elif running_median_pct < 0 %}<span class="text-success">▼ {{ running_median_pct|floatformat:0 }}% below median</span>
+              {% else %}<span class="text-muted">At median</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Monthly Average</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ running_avg|format_number }}</h3>
+            <div class="small text-muted">Median: {{ currency_symbol }}{{ running_median|format_number }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ running_last_year|format_number }}</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title">Monthly Running Costs</h6>
+            <canvas id="runningChart" height="125"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- OWNERSHIP COSTS                            -->
+    <!-- ═══════════════════════════════════════════ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Ownership Costs</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ ownership_last_month|format_number }}</h3>
+            <div class="small">
+              {% if ownership_median_pct > 0 %}<span class="text-danger">▲ {{ ownership_median_pct|floatformat:0 }}% above median</span>
+              {% elif ownership_median_pct < 0 %}<span class="text-success">▼ {{ ownership_median_pct|floatformat:0 }}% below median</span>
+              {% else %}<span class="text-muted">At median</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Monthly Average</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ ownership_avg|format_number }}</h3>
+            <div class="small text-muted">Median: {{ currency_symbol }}{{ ownership_median|format_number }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ ownership_last_year|format_number }}</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">🟠 Maintenance</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ maint_12m_total|format_number }}</h3>
+            <div class="small text-muted">{{ maint_12m_count }} event{{ maint_12m_count|pluralize }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">🔵 Insurance</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ ins_12m_total|format_number }}</h3>
+            <div class="small text-muted">{{ ins_12m_count }} event{{ ins_12m_count|pluralize }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">🟣 Tax</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ tax_12m_total|format_number }}</h3>
+            <div class="small text-muted">{{ tax_12m_count }} event{{ tax_12m_count|pluralize }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if periodic_timeline %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold">Payment Timeline</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in periodic_timeline %}
+            <tr>
+              <td class="text-nowrap">{{ e.date }}</td>
+              <td><span class="badge" style="background-color: {{ e.color }};">{{ e.type }}</span></td>
+              <td>{{ e.description }}</td>
+              <td class="text-end text-danger">{{ currency_symbol }}{{ e.amount|format_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-light border text-center mb-4">No periodic payments recorded.</div>
+    {% endif %}
+
+  </div><!-- col-md-10 -->
+</div><!-- row -->
+
+<script id="trendData" type="application/json">{{ trend_data|safe }}</script>
+<script id="breakdownData" type="application/json">{{ breakdown_data|safe }}</script>
+<script id="runningData" type="application/json">{{ running_data|safe }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var trend = JSON.parse(document.getElementById('trendData').textContent);
+  var bd = JSON.parse(document.getElementById('breakdownData').textContent);
+
+  var trendDS = [];
+  Object.keys(trend.datasets).forEach(function(cat) {
+    trendDS.push({ label: cat, data: trend.datasets[cat], backgroundColor: trend.colors[cat] || '#6c757d' });
+  });
+
+  new Chart(document.getElementById('trendChart'), {
+    type: 'bar',
+    data: { labels: trend.labels, datasets: trendDS },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+  });
+
+  new Chart(document.getElementById('breakdownChart'), {
+    type: 'doughnut',
+    data: { labels: bd.labels, datasets: [{ data: bd.values, backgroundColor: bd.colors }] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // ── Running Costs: Stacked bar ──
+  var running = JSON.parse(document.getElementById('runningData').textContent);
+  new Chart(document.getElementById('runningChart'), {
+    type: 'bar',
+    data: { labels: running.labels, datasets: running.datasets },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+  });
+})();
+</script>
+{% endblock %}

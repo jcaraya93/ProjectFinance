@@ -1,0 +1,125 @@
+{% extends "transactions/base.html" %}
+{% block title %}Statements — Project Finance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">Imported Statements</h2>
+  <a href="{% url 'transactions:upload' %}" class="btn btn-primary">Import Statement</a>
+</div>
+
+<div class="row">
+  <!-- Left panel: Account selector -->
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-header fw-bold">Accounts</div>
+      <div class="list-group list-group-flush">
+        {% for w in wallets %}
+        <a href="?wallet={{ w.key }}"
+           class="list-group-item list-group-item-action {% if selected_wallet == w.key %}active{% endif %}">
+          <div class="small">{{ w.label }}</div>
+        </a>
+        {% empty %}
+        <div class="list-group-item text-muted small">No accounts yet</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel: Ledgers for selected account -->
+  <div class="col-md-9">
+    {% if selected_account %}
+    <!-- Account description -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5 class="card-title mb-3">{{ selected_account.nickname|default:selected_account }} — {{ selected_currency }}</h5>
+        <div class="row">
+          <div class="col-sm-6 col-lg-3 mb-2">
+            {% if selected_account.account_type == 'credit_account' and typed_account %}
+            <div class="text-muted small">Card Number</div>
+            <div class="fw-bold">{{ typed_account.card_number }}</div>
+            {% elif selected_account.account_type == 'debit_account' and typed_account %}
+            <div class="text-muted small">IBAN</div>
+            <div class="fw-bold">{{ typed_account.iban }}</div>
+            {% endif %}
+          </div>
+          <div class="col-sm-6 col-lg-3 mb-2">
+            <div class="text-muted small">Type</div>
+            <div>
+              <span class="badge bg-primary">{{ selected_account.get_account_type_display }}</span>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-3 mb-2">
+            <div class="text-muted small">Statements</div>
+            <div class="fw-bold">{{ statement_count }}</div>
+          </div>
+          <div class="col-sm-6 col-lg-3 mb-2">
+            <div class="text-muted small">Transactions</div>
+            <div class="fw-bold">{{ transaction_count }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if ledgers %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          {% if selected_account.account_type == 'credit_account' %}
+          <tr>
+            <th>Statement Date</th>
+            <th class="text-center">Points</th>
+            <th class="text-end">Opening Balance</th>
+            <th class="text-end">Closing Balance</th>
+            <th class="text-end">Total Spent</th>
+            <th class="text-end">Total Payments</th>
+            <th class="text-center">Transactions</th>
+          </tr>
+          {% else %}
+          <tr>
+            <th>Statement Date</th>
+            <th class="text-end">Opening Balance</th>
+            <th class="text-end">Closing Balance</th>
+            <th class="text-end">Total Income</th>
+            <th class="text-end">Total Expenses</th>
+            <th class="text-center">Transactions</th>
+          </tr>
+          {% endif %}
+        </thead>
+        <tbody>
+          {% for lg in ledgers %}
+          {% if selected_account.account_type == 'credit_account' %}
+          <tr>
+            <td><strong>{{ lg.statement_import.statement_date|date:"M Y" }}</strong></td>
+            <td class="text-center">{{ lg.points|default:"—" }}</td>
+            <td class="text-end">{{ lg.currency_symbol }}{{ lg.previous_balance|floatformat:lg.decimals }}</td>
+            <td class="text-end">{{ lg.currency_symbol }}{{ lg.balance_at_cutoff|floatformat:lg.decimals }}</td>
+            <td class="text-end">{{ lg.currency_symbol }}{{ lg.total_spent|floatformat:lg.decimals }}</td>
+            <td class="text-end text-success">{{ lg.currency_symbol }}{{ lg.total_payments|floatformat:lg.decimals }}</td>
+            <td class="text-center"><a href="{% url 'transactions:transaction_list' %}?statement={{ lg.statement_import_id }}&adv_open=1" class="badge bg-secondary text-decoration-none">{{ lg.txn_count }}</a></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td><strong>{{ lg.statement_import.statement_date|date:"M Y" }}</strong></td>
+            <td class="text-end">{{ lg.currency_symbol }}{{ lg.previous_balance|floatformat:lg.decimals }}</td>
+            <td class="text-end">{{ lg.currency_symbol }}{{ lg.balance_at_cutoff|floatformat:lg.decimals }}</td>
+            <td class="text-end text-success">{{ lg.currency_symbol }}{{ lg.total_income|floatformat:lg.decimals }}</td>
+            <td class="text-end text-danger">{{ lg.currency_symbol }}{{ lg.total_expenses|floatformat:lg.decimals }}</td>
+            <td class="text-center"><a href="{% url 'transactions:transaction_list' %}?statement={{ lg.statement_import_id }}&adv_open=1" class="badge bg-secondary text-decoration-none">{{ lg.txn_count }}</a></td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">No statements for this account.</div>
+    {% endif %}
+
+    {% else %}
+    <div class="alert alert-light border text-center py-5">
+      <h5 class="text-muted">Select an account from the left panel</h5>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

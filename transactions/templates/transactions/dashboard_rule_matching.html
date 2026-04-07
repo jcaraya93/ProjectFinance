@@ -1,0 +1,212 @@
+{% extends "transactions/base.html" %}
+{% load finance_filters %}
+{% block title %}Rule Matching — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "transactions/_dashboard_sidebar.html" with active_dashboard="rule_matching" %}
+  </div>
+
+  <div class="col-md-10">
+
+    <h4 class="mb-3">Rule Matching</h4>
+
+    <!-- ═══ SUMMARY CARDS ═══ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Overview</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Total Rules</h6>
+            <h3 class="card-title mb-1">{{ total_rules|format_number }}</h3>
+            <div class="small text-muted">{{ active_rules }} active, {{ unused_count }} unused</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 border-start border-4 border-success">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Active Rules</h6>
+            <h3 class="card-title mb-1 text-success">{{ active_rules|format_number }}</h3>
+            <div class="small text-muted">with at least 1 match</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 border-start border-4 border-primary">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Rule-matched Txns</h6>
+            <h3 class="card-title mb-1 text-primary">{{ total_rule_matched|format_number }}</h3>
+            <div class="small text-muted">avg {{ avg_matches|floatformat:1 }} per active rule</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 border-start border-4 border-warning">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Unused Rules</h6>
+            <h3 class="card-title mb-1 text-warning">{{ unused_count|format_number }}</h3>
+            <div class="small text-muted">no transactions matched</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ CHARTS ROW ═══ -->
+    <div class="row g-3 mb-4">
+      <div class="col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Rules by Group</h5>
+            <div class="chart-container">
+              <canvas id="groupDoughnut"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-8">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Monthly Rule-matched Transactions</h5>
+            <div class="chart-container">
+              <canvas id="ruleActivityChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ RULES TABLES ═══ -->
+    <div class="row g-3 mb-4">
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Top Matching Rules</h5>
+            {% if top_rules %}
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Rule</th>
+                    <th class="text-end">Matches</th>
+                    <th class="text-end">Group / Category</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for rule in top_rules %}
+                  <tr>
+                    <td class="text-truncate" style="max-width: 200px;" title="{{ rule.description }}">{{ rule.description|default:"(no pattern)" }}</td>
+                    <td class="text-end">{{ rule.match_count }}</td>
+                    <td class="text-end"><span class="badge" style="background-color: {{ rule.category__color }}">{{ rule.category__group__slug }} / {{ rule.category__name }}</span></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No rule matches yet.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Unused Rules <span class="badge bg-secondary">{{ unused_rules|length }}</span></h5>
+            {% if unused_rules %}
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Rule</th>
+                    <th class="text-end">Group / Category</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for rule in unused_rules %}
+                  <tr>
+                    <td title="{{ rule.description }}">{{ rule.description|default:"(no pattern)" }}</td>
+                    <td class="text-end"><span class="badge" style="background-color: {{ rule.category__color }}">{{ rule.category__group__slug }} / {{ rule.category__name }}</span></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">All rules have at least one match. 🎉</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- col-md-10 -->
+</div><!-- row -->
+
+<script id="groupDoughnutData" type="application/json">{{ rules_by_group_data|safe }}</script>
+<script id="ruleActivityData" type="application/json">{{ rule_activity_data|safe }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function parseJSON(id) {
+    var el = document.getElementById(id);
+    if (!el || !el.textContent.trim()) return null;
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  }
+
+  // Rules by group doughnut
+  var gd = parseJSON('groupDoughnutData');
+  if (gd) {
+    new Chart(document.getElementById('groupDoughnut'), {
+      type: 'doughnut',
+      data: {
+        labels: gd.labels,
+        datasets: [{ data: gd.values, backgroundColor: gd.colors }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+                var pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
+                return ctx.label + ': ' + ctx.parsed + ' rules (' + pct + '%)';
+              }
+            }
+          }
+        },
+      },
+    });
+  }
+
+  // Monthly rule activity bar chart
+  var ra = parseJSON('ruleActivityData');
+  if (ra) {
+    new Chart(document.getElementById('ruleActivityChart'), {
+      type: 'bar',
+      data: {
+        labels: ra.labels,
+        datasets: [{
+          label: 'Rule-matched transactions',
+          data: ra.values,
+          backgroundColor: 'rgba(13, 110, 253, 0.7)',
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+})();
+</script>
+{% endblock %}

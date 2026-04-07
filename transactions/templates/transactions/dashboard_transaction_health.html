@@ -1,0 +1,265 @@
+{% extends "transactions/base.html" %}
+{% load finance_filters %}
+{% block title %}Classification Method — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <!-- Left panel: dashboard list -->
+  <div class="col-md-2">
+    {% include "transactions/_dashboard_sidebar.html" with active_dashboard="transaction_health" %}
+  </div>
+
+  <!-- Right panel: dashboard content -->
+  <div class="col-md-10">
+
+    <h4 class="mb-3">Classification Method</h4>
+
+    <!-- ═══ SUMMARY CARDS ═══ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Classification Overview</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Total Transactions</h6>
+            <h3 class="card-title mb-1">{{ total_transactions|format_number }}</h3>
+            <div class="small text-muted">across all accounts</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 border-start border-4 border-primary">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Rule-classified</h6>
+            <h3 class="card-title mb-1 text-primary">{{ rule_count|format_number }}</h3>
+            <div class="small text-muted">{{ rule_pct|floatformat:1 }}% of all transactions</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 border-start border-4 border-info">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Manual</h6>
+            <h3 class="card-title mb-1 text-info">{{ manual_count|format_number }}</h3>
+            <div class="small text-muted">{{ manual_pct|floatformat:1 }}% of all transactions</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 border-start border-4 border-warning">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Unclassified</h6>
+            <h3 class="card-title mb-1 text-warning">{{ unclassified_count|format_number }}</h3>
+            <div class="small text-muted">{{ unclassified_pct|floatformat:1 }}% of all transactions</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ CHARTS ROW ═══ -->
+    <div class="row g-3 mb-4">
+      <div class="col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Classification Breakdown</h5>
+            <div class="chart-container">
+              <canvas id="classificationDoughnut"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-8">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">Monthly Classification Trend</h5>
+            <div class="chart-container">
+              <canvas id="monthlyTrendChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ RULE COVERAGE BY CATEGORY ═══ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Rule Coverage by Category</h5>
+
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Category Classification Methods</h5>
+            <div class="chart-container" style="height: {{ category_chart_height }}px;">
+              <canvas id="categoryCoverageChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ RECENT UNCLASSIFIED ═══ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Recent Unclassified Transactions</h5>
+
+    <div class="card mb-4">
+      <div class="card-body">
+        {% if recent_unclassified %}
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Account</th>
+                <th class="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for txn in recent_unclassified %}
+              <tr>
+                <td>{{ txn.date|date:"Y-m-d" }}</td>
+                <td class="text-truncate" style="max-width: 300px;">{{ txn.description }}</td>
+                <td>{{ txn.raw_transaction.ledger.statement_import.account.nickname }}</td>
+                <td class="text-end">{{ txn.amount|format_number }} {{ txn.currency }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if unclassified_count > 20 %}
+        <div class="mt-2">
+          <a href="{% url 'transactions:transaction_list' %}?cls_method=unclassified" class="btn btn-sm btn-outline-warning">
+            View all {{ unclassified_count }} unclassified →
+          </a>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-muted mb-0">All transactions are classified. 🎉</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- col-md-10 -->
+</div><!-- row -->
+
+<!-- Chart data -->
+<script id="classificationData" type="application/json">{{ classification_data|safe }}</script>
+<script id="monthlyTrendData" type="application/json">{{ monthly_trend_data|safe }}</script>
+<script id="categoryCoverageData" type="application/json">{{ category_coverage_data|safe }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function parseJSON(id) {
+    var el = document.getElementById(id);
+    if (!el || !el.textContent.trim()) return null;
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  }
+
+  // Classification breakdown doughnut
+  var clsData = parseJSON('classificationData');
+  if (clsData) {
+    new Chart(document.getElementById('classificationDoughnut'), {
+      type: 'doughnut',
+      data: {
+        labels: clsData.labels,
+        datasets: [{
+          data: clsData.values,
+          backgroundColor: clsData.colors,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+                var pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
+                return ctx.label + ': ' + ctx.parsed.toLocaleString() + ' (' + pct + '%)';
+              }
+            }
+          }
+        },
+      },
+    });
+  }
+
+  // Monthly classification trend (stacked bar)
+  var trendData = parseJSON('monthlyTrendData');
+  if (trendData) {
+    new Chart(document.getElementById('monthlyTrendChart'), {
+      type: 'bar',
+      data: {
+        labels: trendData.labels,
+        datasets: [
+          {
+            label: 'Rule',
+            data: trendData.rule,
+            backgroundColor: 'rgba(13, 110, 253, 0.8)',
+          },
+          {
+            label: 'Manual',
+            data: trendData.manual,
+            backgroundColor: 'rgba(13, 202, 240, 0.8)',
+          },
+          {
+            label: 'Unclassified',
+            data: trendData.unclassified,
+            backgroundColor: 'rgba(255, 193, 7, 0.8)',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true },
+          y: { stacked: true, beginAtZero: true },
+        },
+        plugins: { legend: { position: 'bottom' } },
+      },
+    });
+  }
+
+  // Category coverage (horizontal stacked bar)
+  var catData = parseJSON('categoryCoverageData');
+  if (catData) {
+    new Chart(document.getElementById('categoryCoverageChart'), {
+      type: 'bar',
+      data: {
+        labels: catData.labels,
+        datasets: [
+          {
+            label: 'Rule',
+            data: catData.rule,
+            backgroundColor: 'rgba(13, 110, 253, 0.8)',
+          },
+          {
+            label: 'Manual',
+            data: catData.manual,
+            backgroundColor: 'rgba(13, 202, 240, 0.8)',
+          },
+          {
+            label: 'Unclassified',
+            data: catData.unclassified,
+            backgroundColor: 'rgba(255, 193, 7, 0.8)',
+          },
+        ],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, beginAtZero: true },
+          y: { stacked: true },
+        },
+        plugins: { legend: { position: 'bottom' } },
+      },
+    });
+  }
+})();
+</script>
+{% endblock %}
