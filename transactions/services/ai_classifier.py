@@ -7,7 +7,7 @@ from transactions.models import Transaction, Category, CategoryGroup
 load_dotenv()
 
 
-def classify_with_ai(descriptions, dry_run=False):
+def classify_with_ai(descriptions, user, dry_run=False):
     """
     Use Gemini to classify transaction descriptions.
     Returns a dict of {description: category_name} or 'Unclassified' if uncertain.
@@ -18,14 +18,12 @@ def classify_with_ai(descriptions, dry_run=False):
 
     genai.configure(api_key=api_key)
 
-    # Build category list grouped by type
-    groups = CategoryGroup.objects.prefetch_related('categories').all()
+    # Build category list grouped by type — scoped to the requesting user
     category_list = []
-    for group in groups:
-        for cat in group.categories.all():
-            if cat.name == 'Unclassified':
-                continue
-            category_list.append(f'{group.name} > {cat.name}')
+    for cat in Category.objects.filter(user=user).select_related('group'):
+        if cat.name == 'Unclassified':
+            continue
+        category_list.append(f'{cat.group.name} > {cat.name}')
 
     # Build unique descriptions
     unique_descs = list(set(descriptions))
@@ -69,23 +67,23 @@ Descriptions:
     return results
 
 
-def apply_ai_classifications(dry_run=False):
+def apply_ai_classifications(user, dry_run=False):
     """
     Classify all unclassified transactions using AI.
     Returns (classified_count, skipped_count, results_detail).
     """
     unclassified_txns = Transaction.objects.filter(
-        category__group__slug='unclassified'
+        user=user, category__group__slug='unclassified'
     ).select_related('category')
 
     if not unclassified_txns.exists():
         return 0, 0, []
 
     descriptions = list(unclassified_txns.values_list('description', flat=True))
-    ai_results = classify_with_ai(descriptions)
+    ai_results = classify_with_ai(descriptions, user=user)
 
-    # Build category lookup
-    categories = {c.name: c for c in Category.objects.all()}
+    # Build category lookup — scoped to the requesting user
+    categories = {c.name: c for c in Category.objects.filter(user=user)}
 
     classified = 0
     skipped = 0

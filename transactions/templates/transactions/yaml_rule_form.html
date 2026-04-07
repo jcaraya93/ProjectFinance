@@ -1,4 +1,5 @@
 {% extends "transactions/base.html" %}
+{% load finance_filters %}
 {% block title %}{{ title }} — Project Finance{% endblock %}
 
 {% block content %}
@@ -109,7 +110,7 @@
 {% block extra_js %}
 <script>
 (function() {
-  const groupCats = {{ form.get_group_categories_json|safe }};
+  const groupCats = {{ form.get_group_categories_json|escapejson }};
   const groupSelect = document.getElementById('id_group');
   const catSelect = document.getElementById('id_category');
   const currentCat = catSelect.value;

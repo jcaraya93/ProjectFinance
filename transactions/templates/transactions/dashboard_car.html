@@ -231,9 +231,9 @@
   </div><!-- col-md-10 -->
 </div><!-- row -->
 
-<script id="trendData" type="application/json">{{ trend_data|safe }}</script>
-<script id="breakdownData" type="application/json">{{ breakdown_data|safe }}</script>
-<script id="runningData" type="application/json">{{ running_data|safe }}</script>
+<script id="trendData" type="application/json">{{ trend_data|escapejson }}</script>
+<script id="breakdownData" type="application/json">{{ breakdown_data|escapejson }}</script>
+<script id="runningData" type="application/json">{{ running_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

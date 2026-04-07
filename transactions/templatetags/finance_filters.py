@@ -1,6 +1,22 @@
 from django import template
+from django.utils.safestring import mark_safe
 
 register = template.Library()
+
+
+@register.filter(is_safe=True)
+def escapejson(value):
+    """Escape a JSON string for safe embedding in HTML <script> tags.
+
+    Prevents XSS by encoding characters that could break out of a
+    <script type="application/json"> block (e.g. ``</script>``).
+    """
+    s = str(value)
+    return mark_safe(
+        s.replace('&', '\\u0026')
+         .replace('<', '\\u003C')
+         .replace('>', '\\u003E')
+    )
 
 
 @register.filter

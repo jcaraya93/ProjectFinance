@@ -121,6 +121,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# ── Upload limits ─────────────────────────────────────────────
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024    # 10 MB
+
 AUTH_USER_MODEL = 'transactions.User'
 
 # ── Security hardening (active when DEBUG is off) ─────────────

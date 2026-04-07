@@ -152,7 +152,7 @@
   </div><!-- col-md-10 -->
 </div><!-- row -->
 
-<script id="gasData" type="application/json">{{ gas_data|safe }}</script>
+<script id="gasData" type="application/json">{{ gas_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

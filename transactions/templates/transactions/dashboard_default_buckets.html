@@ -115,8 +115,8 @@
 </div><!-- row -->
 
 <!-- Chart data -->
-<script id="groupDoughnutData" type="application/json">{{ group_doughnut_data|safe }}</script>
-<script id="monthlyTrendData" type="application/json">{{ monthly_trend_data|safe }}</script>
+<script id="groupDoughnutData" type="application/json">{{ group_doughnut_data|escapejson }}</script>
+<script id="monthlyTrendData" type="application/json">{{ monthly_trend_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

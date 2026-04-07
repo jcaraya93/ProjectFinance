@@ -141,9 +141,9 @@
 </div><!-- row -->
 
 <!-- Chart data -->
-<script id="classificationData" type="application/json">{{ classification_data|safe }}</script>
-<script id="monthlyTrendData" type="application/json">{{ monthly_trend_data|safe }}</script>
-<script id="categoryCoverageData" type="application/json">{{ category_coverage_data|safe }}</script>
+<script id="classificationData" type="application/json">{{ classification_data|escapejson }}</script>
+<script id="monthlyTrendData" type="application/json">{{ monthly_trend_data|escapejson }}</script>
+<script id="categoryCoverageData" type="application/json">{{ category_coverage_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

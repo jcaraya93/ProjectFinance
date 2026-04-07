@@ -76,10 +76,10 @@
   </div><!-- col-md-10 -->
 </div><!-- row -->
 
-<script id="expenseCategoryData" type="application/json">{{ expense_category_data|safe }}</script>
-<script id="incomeCategoryData" type="application/json">{{ income_category_data|safe }}</script>
-<script id="topCategoriesData" type="application/json">{{ top_categories_data|safe }}</script>
-<script id="topIncomeData" type="application/json">{{ top_income_data|safe }}</script>
+<script id="expenseCategoryData" type="application/json">{{ expense_category_data|escapejson }}</script>
+<script id="incomeCategoryData" type="application/json">{{ income_category_data|escapejson }}</script>
+<script id="topCategoriesData" type="application/json">{{ top_categories_data|escapejson }}</script>
+<script id="topIncomeData" type="application/json">{{ top_income_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

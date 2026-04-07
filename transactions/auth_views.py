@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_POST
 
 from .models import User
+from .ratelimit import ratelimit
 
 
 class LoginForm(forms.Form):
@@ -36,6 +37,7 @@ class RegisterForm(forms.Form):
         return cleaned
 
 
+@ratelimit(key='login', rate='10/m', method='POST')
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('transactions:dashboard')
@@ -51,6 +53,7 @@ def login_view(request):
     return render(request, 'transactions/auth/login.html', {'form': form})
 
 
+@ratelimit(key='register', rate='5/h', method='POST')
 def register_view(request):
     if request.user.is_authenticated:
         return redirect('transactions:dashboard')

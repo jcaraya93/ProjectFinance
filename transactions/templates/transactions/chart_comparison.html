@@ -55,7 +55,7 @@
 
 </div>
 
-<script id="catTimelineData" type="application/json">{{ cat_timeline_data|safe }}</script>
+<script id="catTimelineData" type="application/json">{{ cat_timeline_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

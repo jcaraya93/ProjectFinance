@@ -137,8 +137,8 @@
 </div>
 
 <!-- Chart data blocks -->
-<script id="monthlyData" type="application/json">{{ monthly_data|safe }}</script>
-<script id="trendData" type="application/json">{{ trend_data|safe }}</script>
+<script id="monthlyData" type="application/json">{{ monthly_data|escapejson }}</script>
+<script id="trendData" type="application/json">{{ trend_data|escapejson }}</script>
   </div><!-- col-md-10 -->
 </div><!-- row -->
 {% endblock %}

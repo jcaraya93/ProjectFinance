@@ -144,7 +144,7 @@
   </div>
 </div>
 
-<script id="parkingData" type="application/json">{{ parking_data|safe }}</script>
+<script id="parkingData" type="application/json">{{ parking_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

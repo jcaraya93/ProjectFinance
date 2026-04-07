@@ -145,8 +145,8 @@
   </div><!-- col-md-10 -->
 </div><!-- row -->
 
-<script id="groupDoughnutData" type="application/json">{{ rules_by_group_data|safe }}</script>
-<script id="ruleActivityData" type="application/json">{{ rule_activity_data|safe }}</script>
+<script id="groupDoughnutData" type="application/json">{{ rules_by_group_data|escapejson }}</script>
+<script id="ruleActivityData" type="application/json">{{ rule_activity_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}

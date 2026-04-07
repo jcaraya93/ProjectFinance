@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 from datetime import date
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -19,6 +21,11 @@ from .parsers.debit_card import DebitCardParser
 from .services.stats import get_dashboard_stats
 from .services.classifier import classify_transaction
 from .services.exchange_rates import fetch_rates, convert_transaction
+from .ratelimit import ratelimit
+
+logger = logging.getLogger(__name__)
+
+ALLOWED_UPLOAD_EXTENSIONS = {'.csv'}
 
 
 @login_required
@@ -1216,6 +1223,7 @@ def _detect_card_type(content):
 
 
 @login_required
+@ratelimit(key='upload', rate='20/h', method='POST')
 def upload(request):
     if request.method == 'POST':
         uploaded_files = request.FILES.getlist('files')
@@ -1227,6 +1235,13 @@ def upload(request):
         if not uploaded_files:
             messages.error(request, 'Please select at least one file.')
             return render(request, 'transactions/upload.html', {'form': UploadForm()})
+
+        # Validate file extensions
+        for f in uploaded_files:
+            ext = os.path.splitext(f.name)[1].lower()
+            if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+                messages.error(request, f'"{f.name}" is not a supported file type. Only CSV files are allowed.')
+                return render(request, 'transactions/upload.html', {'form': UploadForm()})
 
         total_files = 0
         total_txns = 0
@@ -1322,7 +1337,8 @@ def upload(request):
                 messages.info(request, f'"{uploaded_file.name}" ({card_type}): {file_txn_count} transactions.')
 
             except Exception as e:
-                messages.error(request, f'Error importing "{uploaded_file.name}": {e}')
+                logger.exception('Error importing "%s"', uploaded_file.name)
+                messages.error(request, f'Error importing "{uploaded_file.name}". The file may be corrupted or in an unsupported format.')
 
         if total_files:
             messages.success(request, f'Total: {total_txns} transactions from {total_files} file{"s" if total_files > 1 else ""}.')
