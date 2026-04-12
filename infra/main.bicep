@@ -197,7 +197,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'POSTGRES_PASSWORD', secretRef: 'db-password' }
             { name: 'POSTGRES_HOST', value: dbServer.properties.fullyQualifiedDomainName }
             { name: 'POSTGRES_PORT', value: '5432' }
-            { name: 'OTEL_SERVICE_NAME', value: 'project-finance' }
+            { name: 'OTEL_SERVICE_NAME', value: 'project-finance-azure-complex' }
             { name: 'OTEL_EXPORTER', value: empty(otelEndpoint) ? 'console' : 'otlp-http' }
             { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: otelEndpoint }
             { name: 'OTEL_EXPORTER_OTLP_HEADERS', secretRef: 'otel-headers' }
