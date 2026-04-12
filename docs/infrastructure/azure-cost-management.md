@@ -1,4 +1,4 @@
-# Azure Cost Management
+# Complex Solution: Azure Cost Management
 
 ## Stop billing (keep infrastructure and data)
 

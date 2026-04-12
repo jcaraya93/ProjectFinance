@@ -1,0 +1,69 @@
+@startuml azure-deployment-simple
+!theme plain
+title Azure Deployment — Single VM with Docker Compose
+
+skinparam rectangle {
+  RoundCorner 10
+}
+
+actor "User" as user
+actor "Developer" as dev
+
+cloud "Internet" as internet
+
+package "GitHub" {
+  rectangle "**Repository**\n(main branch)" as repo #LightGray
+  rectangle "**Actions**\nCI/CD Pipeline" as actions #LightGray
+}
+
+package "Azure — Resource Group: projectfinance-rg" {
+
+  package "Virtual Machine — B1s ($4-8/mo)" as vm {
+
+    package "Docker Compose" {
+      rectangle "**nginx**\nReverse Proxy\nPorts 80, 443\nLet's Encrypt TLS" as nginx #LightCoral
+
+      rectangle "**web**\nDjango + Gunicorn\nPort 8000" as webapp #LightBlue
+
+      database "**db**\nPostgreSQL 17\nPort 5432" as db #LightGreen
+
+      rectangle "**otel-collector**\nOpenTelemetry Collector\nPorts 4317, 4318" as otel #LightYellow
+
+      package "Observability" {
+        rectangle "**Grafana**\nPort 3000" as grafana #Orange
+        rectangle "**Loki**" as loki #Orchid
+        rectangle "**Tempo**" as tempo #Salmon
+        database "**Prometheus**" as prom #Coral
+      }
+    }
+  }
+
+  note left of vm
+    - Ubuntu 22.04 LTS
+    - 1 vCPU, 1 GiB RAM
+    - 30 GB SSD (managed disk)
+    - Docker + Docker Compose
+    - Data on persistent volume
+  end note
+}
+
+user --> internet
+internet ---> nginx : "HTTPS :443"
+
+dev --> repo : "git push"
+repo --> actions : "workflow_dispatch"
+actions -right-> webapp : "SSH: docker compose\npull && restart"
+
+nginx --> webapp : "HTTP :8000"
+webapp --> db : "TCP :5432"
+webapp --> otel : "gRPC :4317\n(OTLP)"
+
+otel --> loki : "logs"
+otel --> tempo : "traces"
+otel ..> prom : "scrape\nmetrics"
+
+grafana -up-> loki
+grafana -up-> tempo
+grafana -up-> prom
+
+@enduml

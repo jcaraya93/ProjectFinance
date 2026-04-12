@@ -1,0 +1,71 @@
+@startuml azure-deployment
+!theme plain
+title Azure Deployment — Container Apps + PostgreSQL
+
+skinparam rectangle {
+  RoundCorner 10
+}
+
+actor "User" as user
+actor "Developer" as dev
+
+cloud "Internet" as internet
+
+package "GitHub" {
+  rectangle "**Repository**\n(main branch)" as repo #LightGray
+  rectangle "**Actions**\nCI/CD Pipeline" as actions #LightGray
+}
+
+package "Azure — Resource Group: projectfinance-rg" {
+
+  package "Virtual Network (10.0.0.0/16)" as vnet {
+
+    package "app-subnet (10.0.0.0/23)" {
+      package "Container Apps Environment" {
+        rectangle "**projectfinance-web**\nDjango + Gunicorn\nPort 8000\n0.5 vCPU, 1 GiB\nScale: 0–1 replicas" as webapp #LightBlue
+
+        note bottom of webapp
+          Environment variables:
+          - DJANGO_SECRET_KEY (secret)
+          - POSTGRES_PASSWORD (secret)
+          - POSTGRES_HOST (from Bicep)
+          - OTEL_EXPORTER=console
+        end note
+      }
+    }
+
+    package "db-subnet (10.0.2.0/24)" {
+      database "**projectfinance-db**\nPostgreSQL 17\nBurstable B1ms\n1 vCore, 2 GiB RAM\n32 GB storage" as azdb #LightGreen
+      
+
+      note bottom of azdb
+        - Automated backups (7 days)
+        - No public access
+        - VNet-only connectivity
+      end note
+    }
+  }
+
+  rectangle "**projectfinancecr**\nAzure Container Registry\n(Basic SKU)" as acr #LightYellow
+
+  rectangle "**Private DNS Zone**\n*.private.postgres.database.azure.com" as dns #WhiteSmoke
+
+  note bottom of acr
+    Stores Docker images
+    Tagged by commit SHA
+  end note
+}
+
+user --> internet
+internet ---> webapp : "HTTPS\n(managed TLS)"
+
+dev --> repo : "git push"
+repo --> actions : "workflow_dispatch"
+actions -right-> acr : "docker build\n& push"
+actions -right-> webapp : "az containerapp\nupdate"
+
+webapp -> azdb : "Private VNet\n(TCP :5432)"
+dns --> azdb : "DNS resolution"
+webapp --> acr : "Pull image\non deploy"
+
+@enduml
