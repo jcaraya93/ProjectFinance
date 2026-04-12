@@ -69,7 +69,7 @@
           <div class="col-sm-6 col-lg-3 mb-2">
             {% if selected_account.account_type == 'credit_account' and typed_account %}
             <div class="text-muted small">Card Number</div>
-            <div class="fw-bold">{{ typed_account.card_number }}</div>
+            <div class="fw-bold">****{{ typed_account.card_number_last4 }}</div>
             {% elif selected_account.account_type == 'debit_account' and typed_account %}
             <div class="text-muted small">IBAN</div>
             <div class="fw-bold">{{ typed_account.iban }}</div>
