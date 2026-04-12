@@ -10,7 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
-from django.utils.http import urlencode
+from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 
 from .models import Transaction, LogicalTransaction, RawTransaction, Category, CategoryGroup, StatementImport, CurrencyLedger, Account, CreditAccount, DebitAccount, ClassificationRule, UserPreference
 from django.db import models as db_models
@@ -26,6 +26,14 @@ from .ratelimit import ratelimit
 logger = logging.getLogger(__name__)
 
 ALLOWED_UPLOAD_EXTENSIONS = {'.csv'}
+
+
+def _safe_next_url(request, default=''):
+    """Return the 'next' param only if it points to this site."""
+    next_url = request.GET.get('next', request.POST.get('next', default))
+    if next_url and not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        return default
+    return next_url
 
 
 @login_required
@@ -1566,7 +1574,7 @@ def bulk_update_category(request):
     """Bulk assign a category to multiple transactions (same logic as manual single update)."""
     txn_ids = request.POST.getlist('txn_ids')
     category_id = request.POST.get('category_id')
-    next_url = request.POST.get('next', '')
+    next_url = _safe_next_url(request)
 
     if not txn_ids or not category_id:
         messages.error(request, 'No transactions or category selected.')
@@ -1593,7 +1601,7 @@ def edit_transaction(request, raw_id):
     logical_txns = list(raw.logical_transactions.select_related('category__group').order_by('pk'))
     category_groups = CategoryGroup.objects.prefetch_related(Prefetch('categories', queryset=Category.objects.filter(user=request.user))).all()
     is_split = len(logical_txns) > 1
-    next_url = request.GET.get('next', request.POST.get('next', ''))
+    next_url = _safe_next_url(request)
 
     if request.method == 'POST':
         action = request.POST.get('action', 'save')
@@ -2094,7 +2102,7 @@ def yaml_rule_add(request):
 def yaml_rule_edit(request, idx):
     """Edit a classification rule by pk."""
     rule_obj = get_object_or_404(ClassificationRule.objects.filter(user=request.user).select_related('category__group'), pk=idx)
-    next_url = request.GET.get('next', request.POST.get('next', ''))
+    next_url = _safe_next_url(request)
     filter_group = rule_obj.category.group.slug
     filter_category = rule_obj.category.name
 
@@ -2190,7 +2198,7 @@ def yaml_rule_edit(request, idx):
 @require_POST
 def yaml_rule_delete(request, idx):
     """Delete a classification rule by pk. Resets affected transactions."""
-    next_url = request.POST.get('next', '')
+    next_url = _safe_next_url(request)
     rule = get_object_or_404(ClassificationRule, pk=idx, user=request.user)
     # Reset transactions that were classified by this rule
     unclassified = Category.get_unclassified(request.user)
