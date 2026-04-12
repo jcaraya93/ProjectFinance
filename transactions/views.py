@@ -1580,6 +1580,7 @@ def save_transaction_columns(request):
 
 @login_required
 @require_POST
+@ratelimit(key='bulk_category', rate='30/m', method='POST')
 def bulk_update_category(request):
     """Bulk assign a category to multiple transactions (same logic as manual single update)."""
     txn_ids = request.POST.getlist('txn_ids')
@@ -2262,6 +2263,7 @@ def classify_unclassified(request):
 
 @login_required
 @require_POST
+@ratelimit(key='category_add', rate='20/h', method='POST')
 def yaml_category_add(request):
     """Add a new category to YAML and DB."""
     group_slug = request.POST.get('group', '')
