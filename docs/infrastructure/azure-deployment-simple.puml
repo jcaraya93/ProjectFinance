@@ -33,7 +33,7 @@ package "Azure — Resource Group: projectfinance-vm-rg" {
     }
   }
 
-  note left of vm
+  note right of vm
     - Ubuntu 22.04 LTS
     - 1 vCPU, 1 GiB RAM
     - 30 GB SSD (managed disk)
@@ -43,15 +43,15 @@ package "Azure — Resource Group: projectfinance-vm-rg" {
 }
 
 user --> internet
-internet ---> nginx : "HTTPS :443"
+internet --> nginx : "HTTPS :443"
 
-dev --> repo : "git push"
-repo --> actions : "workflow_dispatch"
-actions -right-> webapp : "SSH: docker compose\npull && restart"
+dev -> repo : "git push"
+repo -> actions : "workflow_dispatch"
+actions -> webapp : "SSH: docker compose\npull && restart"
 
 nginx --> webapp : "HTTP :8000"
 webapp --> db : "TCP :5432\n(Docker internal)"
-webapp --> grafana : "OTLP\n(traces, metrics, logs)"
+webapp -up-> grafana : "OTLP\n(traces, metrics, logs)"
 
 dev --> grafana : "View dashboards"
 
