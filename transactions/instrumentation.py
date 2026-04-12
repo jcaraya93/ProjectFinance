@@ -70,6 +70,12 @@ exchange_rate_api_duration = meter.create_histogram(
     description="Frankfurter API response time",
 )
 
+login_attempts = meter.create_counter(
+    "auth.login_attempts",
+    unit="{attempt}",
+    description="Login attempts by outcome (success, failure)",
+)
+
 upload_duration = meter.create_histogram(
     "upload.duration",
     unit="ms",

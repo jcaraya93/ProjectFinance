@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 
 from .models import User
 from .ratelimit import ratelimit
+from .instrumentation import login_attempts
 
 
 class LoginForm(forms.Form):
@@ -47,11 +48,13 @@ def login_view(request):
         user = authenticate(request, username=form.cleaned_data['email'], password=form.cleaned_data['password'])
         if user:
             login(request, user)
+            login_attempts.add(1, {"outcome": "success"})
             next_url = request.GET.get('next', '/')
             if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 next_url = '/'
             return redirect(next_url)
         else:
+            login_attempts.add(1, {"outcome": "failure"})
             messages.error(request, 'Invalid email or password.')
     return render(request, 'transactions/auth/login.html', {'form': form})
 
