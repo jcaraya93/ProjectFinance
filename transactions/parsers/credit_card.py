@@ -1,10 +1,12 @@
 import csv
 import io
 import re
+import time
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from .base import BaseParser, ParsedLedger, ParsedStatement, ParsedTransaction
+from transactions.instrumentation import tracer, parser_files_processed, parser_duration
 
 FOOTER_KEYWORDS = [
     "REVERSION INTERES",
@@ -63,90 +65,105 @@ def _parse_points(description: str) -> tuple:
 class CreditCardParser(BaseParser):
 
     def parse(self, file_content: str) -> ParsedStatement:
-        reader = csv.reader(io.StringIO(file_content.lstrip('\ufeff')))
-        rows = list(reader)
+        with tracer.start_as_current_span("parser.credit_card.parse") as span:
+            t0 = time.monotonic()
+            span.set_attribute("parser.type", "credit_card")
+            span.set_attribute("parser.content_length", len(file_content))
 
-        statement = ParsedStatement()
-        crc_ledger = ParsedLedger(currency='CRC')
-        usd_ledger = ParsedLedger(currency='USD')
+            reader = csv.reader(io.StringIO(file_content.lstrip('\ufeff')))
+            rows = list(reader)
 
-        # Row 2 (index 1): account values
-        if len(rows) > 1:
-            acct = rows[1]
-            statement.card_number = acct[0].strip() if len(acct) > 0 else ''
-            statement.card_holder = acct[1].strip() if len(acct) > 1 else ''
-            if len(acct) > 2:
-                statement.statement_date = _parse_date(acct[2])
+            statement = ParsedStatement()
+            crc_ledger = ParsedLedger(currency='CRC')
+            usd_ledger = ParsedLedger(currency='USD')
 
-        # Row 4 (index 3): previous balance
-        if len(rows) > 3:
-            pb = rows[3]
-            crc_ledger.previous_balance = _parse_decimal(pb[-2]) if len(pb) >= 2 else Decimal(0)
-            usd_ledger.previous_balance = _parse_decimal(pb[-1]) if len(pb) >= 1 else Decimal(0)
+            # Row 2 (index 1): account values
+            if len(rows) > 1:
+                acct = rows[1]
+                statement.card_number = acct[0].strip() if len(acct) > 0 else ''
+                statement.card_holder = acct[1].strip() if len(acct) > 1 else ''
+                if len(acct) > 2:
+                    statement.statement_date = _parse_date(acct[2])
 
-        # Track sums for validation
-        sum_local = Decimal(0)
-        sum_dollars = Decimal(0)
-        last_date = statement.statement_date
+            # Row 4 (index 3): previous balance
+            if len(rows) > 3:
+                pb = rows[3]
+                crc_ledger.previous_balance = _parse_decimal(pb[-2]) if len(pb) >= 2 else Decimal(0)
+                usd_ledger.previous_balance = _parse_decimal(pb[-1]) if len(pb) >= 1 else Decimal(0)
 
-        for i in range(5, len(rows)):
-            row = rows[i]
-            if not row or all(c.strip() == '' for c in row):
-                continue
+            # Track sums for validation
+            sum_local = Decimal(0)
+            sum_dollars = Decimal(0)
+            last_date = statement.statement_date
 
-            desc_raw = row[1].strip() if len(row) > 1 else ''
-            description = _clean_description(desc_raw)
+            for i in range(5, len(rows)):
+                row = rows[i]
+                if not row or all(c.strip() == '' for c in row):
+                    continue
 
-            local_amt = _parse_decimal(row[-2]) if len(row) >= 2 else Decimal(0)
-            dollar_amt = _parse_decimal(row[-1]) if len(row) >= 1 else Decimal(0)
+                desc_raw = row[1].strip() if len(row) > 1 else ''
+                description = _clean_description(desc_raw)
 
-            # Footer/metadata rows — now treated as transactions except points/rates
-            if _is_footer_row(description):
-                self._handle_footer(
-                    statement, crc_ledger, usd_ledger,
-                    description, local_amt, dollar_amt, last_date
-                )
-                sum_local += local_amt
-                sum_dollars += dollar_amt
-                continue
+                local_amt = _parse_decimal(row[-2]) if len(row) >= 2 else Decimal(0)
+                dollar_amt = _parse_decimal(row[-1]) if len(row) >= 1 else Decimal(0)
 
-            if local_amt == 0 and dollar_amt == 0 and not description:
-                continue
+                # Footer/metadata rows — now treated as transactions except points/rates
+                if _is_footer_row(description):
+                    self._handle_footer(
+                        statement, crc_ledger, usd_ledger,
+                        description, local_amt, dollar_amt, last_date
+                    )
+                    sum_local += local_amt
+                    sum_dollars += dollar_amt
+                    continue
 
-            # Final summary line (interest + balance at cutoff)
-            final_result = self._try_parse_final_line(row, crc_ledger, usd_ledger, last_date)
-            if final_result:
-                sum_local += final_result[0]
-                sum_dollars += final_result[1]
-                continue
+                if local_amt == 0 and dollar_amt == 0 and not description:
+                    continue
 
-            # Parse date
-            row_date = _parse_date(row[0]) if row else None
-            if row_date:
-                last_date = row_date
-            txn_date = row_date or last_date
-            if txn_date is None:
-                continue
+                # Final summary line (interest + balance at cutoff)
+                final_result = self._try_parse_final_line(row, crc_ledger, usd_ledger, last_date)
+                if final_result:
+                    sum_local += final_result[0]
+                    sum_dollars += final_result[1]
+                    continue
 
-            if local_amt != 0:
-                crc_ledger.transactions.append(ParsedTransaction(
-                    date=txn_date, description=description,
-                    amount=local_amt,
-                ))
-                sum_local += local_amt
+                # Parse date
+                row_date = _parse_date(row[0]) if row else None
+                if row_date:
+                    last_date = row_date
+                txn_date = row_date or last_date
+                if txn_date is None:
+                    continue
 
-            if dollar_amt != 0:
-                usd_ledger.transactions.append(ParsedTransaction(
-                    date=txn_date, description=description,
-                    amount=dollar_amt,
-                ))
-                sum_dollars += dollar_amt
+                if local_amt != 0:
+                    crc_ledger.transactions.append(ParsedTransaction(
+                        date=txn_date, description=description,
+                        amount=local_amt,
+                    ))
+                    sum_local += local_amt
 
-        statement.ledgers = [crc_ledger, usd_ledger]
-        self._validate(statement, crc_ledger, sum_local, 'CRC')
-        self._validate(statement, usd_ledger, sum_dollars, 'USD')
+                if dollar_amt != 0:
+                    usd_ledger.transactions.append(ParsedTransaction(
+                        date=txn_date, description=description,
+                        amount=dollar_amt,
+                    ))
+                    sum_dollars += dollar_amt
 
-        return statement
+            statement.ledgers = [crc_ledger, usd_ledger]
+            self._validate(statement, crc_ledger, sum_local, 'CRC')
+            self._validate(statement, usd_ledger, sum_dollars, 'USD')
+
+            txn_count = len(crc_ledger.transactions) + len(usd_ledger.transactions)
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            span.set_attribute("parser.transaction_count", txn_count)
+            span.set_attribute("parser.crc_count", len(crc_ledger.transactions))
+            span.set_attribute("parser.usd_count", len(usd_ledger.transactions))
+            span.set_attribute("parser.warning_count", len(statement.warnings))
+            parser_duration.record(elapsed_ms, {"parser": "credit_card"})
+            status = "warning" if statement.warnings else "success"
+            parser_files_processed.add(1, {"parser": "credit_card", "status": status})
+
+            return statement
 
     def _handle_footer(self, statement, crc_ledger, usd_ledger,
                        description, local_amt, dollar_amt, last_date):

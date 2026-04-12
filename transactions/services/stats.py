@@ -1,10 +1,12 @@
 import json
+import time
 from decimal import Decimal
 
 from django.db.models import Sum
 from django.db.models.functions import TruncMonth, TruncWeek, TruncDay, TruncQuarter, Abs
 
 from transactions.models import Transaction
+from transactions.instrumentation import tracer, dashboard_duration
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -16,7 +18,17 @@ class DecimalEncoder(json.JSONEncoder):
 
 def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='CRC', wallet_filter=None, groups=None, categories=None, time_group='monthly'):
     """Return all dashboard statistics."""
-    qs = Transaction.objects.filter(user=user)
+    with tracer.start_as_current_span("stats.get_dashboard_stats") as span:
+        t0 = time.monotonic()
+        span.set_attribute("dashboard.user_id", user.id)
+        span.set_attribute("dashboard.display_currency", display_currency)
+        span.set_attribute("dashboard.time_group", time_group)
+        if start_date:
+            span.set_attribute("dashboard.start_date", str(start_date))
+        if end_date:
+            span.set_attribute("dashboard.end_date", str(end_date))
+
+        qs = Transaction.objects.filter(user=user)
 
     if start_date:
         qs = qs.filter(date__gte=start_date)
@@ -319,6 +331,10 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
         'income': monthly_data['income'],
         'expenses': monthly_data['expenses'],
     }
+
+    elapsed_ms = (time.monotonic() - t0) * 1000
+    dashboard_duration.record(elapsed_ms, {"dashboard": "overview"})
+    span.set_attribute("dashboard.duration_ms", elapsed_ms)
 
     return {
         'summary': summary,

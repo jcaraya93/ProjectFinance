@@ -1,4 +1,5 @@
 import os
+import time
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from transactions.models import StatementImport, CurrencyLedger, RawTransaction, LogicalTransaction, Transaction, Account, CreditAccount, DebitAccount, Category, User
@@ -6,6 +7,7 @@ from transactions.parsers.credit_card import CreditCardParser
 from transactions.parsers.debit_card import DebitCardParser
 from transactions.services.classifier import classify_transaction
 from transactions.services.exchange_rates import fetch_rates, convert_transaction
+from transactions.instrumentation import tracer, transactions_imported, bulk_import_duration
 
 
 class Command(BaseCommand):
@@ -20,8 +22,10 @@ class Command(BaseCommand):
         parser.add_argument('--user', type=str, help='User email to assign imports to')
 
     def handle(self, *args, **options):
-        data_dir = options['data_dir']
-        user_email = options.get('user')
+        with tracer.start_as_current_span("bulk_import.handle") as span:
+            t0 = time.monotonic()
+            data_dir = options['data_dir']
+            user_email = options.get('user')
         if user_email:
             user = User.objects.get(email=user_email)
         else:
@@ -163,3 +167,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'{len(all_warnings)} warning(s):'))
             for w in all_warnings:
                 self.stdout.write(f'  - {w}')
+
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        span.set_attribute("import.total_imported", total_imported)
+        span.set_attribute("import.total_skipped", total_skipped)
+        span.set_attribute("import.warning_count", len(all_warnings))
+        bulk_import_duration.record(elapsed_ms)
+        transactions_imported.add(total_imported)

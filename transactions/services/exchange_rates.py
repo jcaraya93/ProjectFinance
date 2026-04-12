@@ -1,10 +1,12 @@
 import json
+import time
 from datetime import date, timedelta
 from decimal import Decimal
 from urllib.request import urlopen
 from urllib.error import URLError
 
 from transactions.models import ExchangeRate
+from transactions.instrumentation import tracer, exchange_rate_fetches, exchange_rate_api_duration
 
 
 FRANKFURTER_URL = 'https://api.frankfurter.dev/v2/rates'
@@ -12,42 +14,58 @@ FRANKFURTER_URL = 'https://api.frankfurter.dev/v2/rates'
 
 def fetch_rates(start_date, end_date):
     """Fetch USD→CRC exchange rates from Frankfurter API and cache them."""
-    # Check which dates we're missing
-    existing = set(
-        ExchangeRate.objects.filter(
-            date__gte=start_date, date__lte=end_date
-        ).values_list('date', flat=True)
-    )
+    with tracer.start_as_current_span("exchange_rates.fetch") as span:
+        span.set_attribute("rates.start_date", str(start_date))
+        span.set_attribute("rates.end_date", str(end_date))
 
-    # Generate all dates in range
-    all_dates = set()
-    d = start_date
-    while d <= end_date:
-        all_dates.add(d)
-        d += timedelta(days=1)
+        existing = set(
+            ExchangeRate.objects.filter(
+                date__gte=start_date, date__lte=end_date
+            ).values_list('date', flat=True)
+        )
 
-    missing = all_dates - existing
-    if not missing:
-        return  # All cached
+        all_dates = set()
+        d = start_date
+        while d <= end_date:
+            all_dates.add(d)
+            d += timedelta(days=1)
 
-    # Fetch from API
-    url = f'{FRANKFURTER_URL}?from={start_date}&to={end_date}&base=USD&quotes=CRC'
-    try:
-        from urllib.request import Request
-        req = Request(url, headers={'User-Agent': 'ProjectFinance/1.0'})
-        with urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
-    except (URLError, json.JSONDecodeError) as e:
-        raise RuntimeError(f'Failed to fetch exchange rates: {e}')
+        missing = all_dates - existing
+        span.set_attribute("rates.missing_count", len(missing))
 
-    # Store rates
-    for entry in data:
-        rate_date = date.fromisoformat(entry['date'])
-        if rate_date not in existing:
-            ExchangeRate.objects.update_or_create(
-                date=rate_date,
-                defaults={'usd_to_crc': Decimal(str(entry['rate']))}
-            )
+        if not missing:
+            span.set_attribute("rates.cache_hit", True)
+            return
+
+        url = f'{FRANKFURTER_URL}?from={start_date}&to={end_date}&base=USD&quotes=CRC'
+        t0 = time.monotonic()
+        try:
+            from urllib.request import Request
+            req = Request(url, headers={'User-Agent': 'ProjectFinance/1.0'})
+            with urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+        except (URLError, json.JSONDecodeError) as e:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            exchange_rate_api_duration.record(elapsed_ms)
+            exchange_rate_fetches.add(1, {"outcome": "error"})
+            span.set_attribute("rates.error", str(e))
+            raise RuntimeError(f'Failed to fetch exchange rates: {e}')
+
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        exchange_rate_api_duration.record(elapsed_ms)
+        exchange_rate_fetches.add(1, {"outcome": "success"})
+        span.set_attribute("rates.api_duration_ms", elapsed_ms)
+
+        cached_count = 0
+        for entry in data:
+            rate_date = date.fromisoformat(entry['date'])
+            if rate_date not in existing:
+                ExchangeRate.objects.update_or_create(
+                    date=rate_date,
+                    defaults={'usd_to_crc': Decimal(str(entry['rate']))}
+                )
+                cached_count += 1
+        span.set_attribute("rates.cached_count", cached_count)
 
 
 def get_rate(txn_date):

@@ -7,6 +7,7 @@ account_type). All conditions must match (AND). Most specific rule wins, with
 ties broken by longest description keyword.
 """
 import logging
+import time
 from decimal import Decimal
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import yaml
 from django.conf import settings
 
 from transactions.models import Category
+from transactions.instrumentation import tracer, classification_result, classification_duration
 
 logger = logging.getLogger(__name__)
 
@@ -188,42 +190,55 @@ def classify_transaction_yaml(transaction):
     Phase 0: transfer rules, Phase 1: specific categories, Phase 2: Default.
     Returns (Category, ClassificationRule_or_None).
     """
-    rule_objects = load_rules()
-    desc_upper = transaction.description.upper()
-    metadata = transaction.account_metadata or {}
-    amount = transaction.amount
+    with tracer.start_as_current_span("classifier.classify_single") as span:
+        span.set_attribute("transaction.id", transaction.id)
+        span.set_attribute("transaction.description", transaction.description[:100])
 
-    try:
-        account_type = transaction.ledger.statement_import.account.account_type
-    except AttributeError:
-        account_type = ''
+        rule_objects = load_rules()
+        desc_upper = transaction.description.upper()
+        metadata = transaction.account_metadata or {}
+        amount = transaction.amount
 
-    # Try each phase in order; return the first match
-    for phase in (0, 1, 2):
-        best_rule_obj = None
-        best_specificity = 0
+        try:
+            account_type = transaction.ledger.statement_import.account.account_type
+        except AttributeError:
+            account_type = ''
 
-        for rule_obj in rule_objects:
-            if _rule_phase(rule_obj) != phase:
-                continue
+        rules_evaluated = 0
+        for phase in (0, 1, 2):
+            best_rule_obj = None
+            best_specificity = 0
 
-            flat = rule_obj.to_flat_dict()
-            score = _match_rule(flat, desc_upper, metadata, amount, account_type)
-            if score == 0:
-                continue
+            for rule_obj in rule_objects:
+                if _rule_phase(rule_obj) != phase:
+                    continue
 
-            desc_len = len(flat.get('description', ''))
-            non_desc_conditions = score - (1 if 'description' in flat else 0)
-            specificity = (desc_len * 10) + non_desc_conditions
+                rules_evaluated += 1
+                flat = rule_obj.to_flat_dict()
+                score = _match_rule(flat, desc_upper, metadata, amount, account_type)
+                if score == 0:
+                    continue
 
-            if specificity > best_specificity:
-                best_rule_obj = rule_obj
-                best_specificity = specificity
+                desc_len = len(flat.get('description', ''))
+                non_desc_conditions = score - (1 if 'description' in flat else 0)
+                specificity = (desc_len * 10) + non_desc_conditions
 
-        if best_rule_obj:
-            return best_rule_obj.category, best_rule_obj
+                if specificity > best_specificity:
+                    best_rule_obj = rule_obj
+                    best_specificity = specificity
 
-    return Category.get_unclassified(transaction.user), None
+            if best_rule_obj:
+                span.set_attribute("classification.phase", phase)
+                span.set_attribute("classification.rule_id", best_rule_obj.id)
+                span.set_attribute("classification.category", best_rule_obj.category.name)
+                span.set_attribute("classification.rules_evaluated", rules_evaluated)
+                classification_result.add(1, {"method": "rule"})
+                return best_rule_obj.category, best_rule_obj
+
+        span.set_attribute("classification.phase", -1)
+        span.set_attribute("classification.rules_evaluated", rules_evaluated)
+        classification_result.add(1, {"method": "unclassified"})
+        return Category.get_unclassified(transaction.user), None
 
 
 def classify_transactions_yaml(queryset=None):
@@ -233,24 +248,34 @@ def classify_transactions_yaml(queryset=None):
     """
     from transactions.models import LogicalTransaction
 
-    if queryset is None:
-        queryset = LogicalTransaction.objects.exclude(
-            classification_method='manual'
-        ).select_related(
-            'category', 'raw_transaction__ledger__statement_import__account'
-        )
-    else:
-        queryset = queryset.exclude(classification_method='manual')
+    with tracer.start_as_current_span("classifier.classify_batch") as span:
+        if queryset is None:
+            queryset = LogicalTransaction.objects.exclude(
+                classification_method='manual'
+            ).select_related(
+                'category', 'raw_transaction__ledger__statement_import__account'
+            )
+        else:
+            queryset = queryset.exclude(classification_method='manual')
 
-    reload_rules()
+        reload_rules()
 
-    count = 0
-    for txn in queryset:
-        category, rule_obj = classify_transaction_yaml(txn)
-        if rule_obj and category != txn.category:
-            txn.category = category
-            txn.matched_rule = rule_obj
-            txn.classification_method = 'rule'
-            txn.save(update_fields=['category', 'matched_rule', 'classification_method'])
-            count += 1
-    return count
+        t0 = time.monotonic()
+        total = 0
+        count = 0
+        for txn in queryset:
+            total += 1
+            category, rule_obj = classify_transaction_yaml(txn)
+            if rule_obj and category != txn.category:
+                txn.category = category
+                txn.matched_rule = rule_obj
+                txn.classification_method = 'rule'
+                txn.save(update_fields=['category', 'matched_rule', 'classification_method'])
+                count += 1
+
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        span.set_attribute("classification.total", total)
+        span.set_attribute("classification.classified_count", count)
+        span.set_attribute("classification.unclassified_count", total - count)
+        classification_duration.record(elapsed_ms, {"operation": "batch"})
+        return count

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from datetime import date
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -22,6 +23,7 @@ from .services.stats import get_dashboard_stats
 from .services.classifier import classify_transaction
 from .services.exchange_rates import fetch_rates, convert_transaction
 from .ratelimit import ratelimit
+from .instrumentation import tracer, dashboard_duration, upload_duration, transactions_imported
 
 logger = logging.getLogger(__name__)
 
@@ -156,23 +158,29 @@ def purge_all_data(request):
 @login_required
 def dashboard(request):
     """Overview dashboard — last 12 months, no user filters."""
-    from datetime import timedelta
-    display_currency = request.GET.get('display_currency', 'CRC')
-    time_group = request.GET.get('time_group', 'biweekly')
+    with tracer.start_as_current_span("view.dashboard") as span:
+        t0 = time.monotonic()
+        from datetime import timedelta
+        display_currency = request.GET.get('display_currency', 'CRC')
+        time_group = request.GET.get('time_group', 'biweekly')
 
-    today = date.today()
-    start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1).isoformat()
+        today = date.today()
+        start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1).isoformat()
 
-    context = get_dashboard_stats(request.user, 
-        start_date=start_12m,
-        display_currency=display_currency,
-        time_group=time_group,
-    )
+        context = get_dashboard_stats(request.user, 
+            start_date=start_12m,
+            display_currency=display_currency,
+            time_group=time_group,
+        )
 
-    context['display_currency'] = display_currency
-    context['time_group'] = time_group
-    context['privacy'] = request.GET.get('privacy', '1') != '0'
-    return render(request, 'transactions/dashboard.html', context)
+        context['display_currency'] = display_currency
+        context['time_group'] = time_group
+        context['privacy'] = request.GET.get('privacy', '1') != '0'
+
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        span.set_attribute("dashboard.type", "overview")
+        dashboard_duration.record(elapsed_ms, {"dashboard": "overview"})
+        return render(request, 'transactions/dashboard.html', context)
 
 
 @login_required
@@ -1257,11 +1265,14 @@ def upload(request):
     MAX_FILES_PER_UPLOAD = 12
 
     if request.method == 'POST':
-        uploaded_files = request.FILES.getlist('files')
-        if not uploaded_files:
-            uploaded_files = request.FILES.getlist('files[]')
-        
-        messages.info(request, f'Processing {len(uploaded_files)} file(s)...')
+        with tracer.start_as_current_span("view.upload") as span:
+            t0 = time.monotonic()
+            uploaded_files = request.FILES.getlist('files')
+            if not uploaded_files:
+                uploaded_files = request.FILES.getlist('files[]')
+            
+            span.set_attribute("upload.file_count", len(uploaded_files))
+            messages.info(request, f'Processing {len(uploaded_files)} file(s)...')
         
         if not uploaded_files:
             messages.error(request, 'Please select at least one file.')
@@ -1381,6 +1392,11 @@ def upload(request):
 
         if total_files:
             messages.success(request, f'Total: {total_txns} transactions from {total_files} file{"s" if total_files > 1 else ""}.')
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            span.set_attribute("upload.total_files", total_files)
+            span.set_attribute("upload.total_transactions", total_txns)
+            upload_duration.record(elapsed_ms)
+            transactions_imported.add(total_txns)
         return redirect('transactions:statement_list')
 
     return render(request, 'transactions/upload.html', {'form': UploadForm()})
