@@ -16,25 +16,20 @@ package "GitHub" {
   rectangle "**Actions**\nCI/CD Pipeline" as actions #LightGray
 }
 
-package "Azure — Resource Group: projectfinance-rg" {
+cloud "Grafana Cloud (Free Tier)" {
+  rectangle "**Grafana**\nDashboards\nLogs · Traces · Metrics" as grafana #Orange
+}
 
-  package "Virtual Machine — B1s ($4-8/mo)" as vm {
+package "Azure — Resource Group: projectfinance-vm-rg" {
+
+  package "Virtual Machine — B1s (~$4-8/mo)" as vm {
 
     package "Docker Compose" {
       rectangle "**nginx**\nReverse Proxy\nPorts 80, 443\nLet's Encrypt TLS" as nginx #LightCoral
 
       rectangle "**web**\nDjango + Gunicorn\nPort 8000" as webapp #LightBlue
 
-      database "**db**\nPostgreSQL 17\nPort 5432" as db #LightGreen
-
-      rectangle "**otel-collector**\nOpenTelemetry Collector\nPorts 4317, 4318" as otel #LightYellow
-
-      package "Observability" {
-        rectangle "**Grafana**\nPort 3000" as grafana #Orange
-        rectangle "**Loki**" as loki #Orchid
-        rectangle "**Tempo**" as tempo #Salmon
-        database "**Prometheus**" as prom #Coral
-      }
+      database "**db**\nPostgreSQL 17\n(no public access)" as db #LightGreen
     }
   }
 
@@ -43,7 +38,7 @@ package "Azure — Resource Group: projectfinance-rg" {
     - 1 vCPU, 1 GiB RAM
     - 30 GB SSD (managed disk)
     - Docker + Docker Compose
-    - Data on persistent volume
+    - Ports open: 80, 443, 22 only
   end note
 }
 
@@ -55,15 +50,9 @@ repo --> actions : "workflow_dispatch"
 actions -right-> webapp : "SSH: docker compose\npull && restart"
 
 nginx --> webapp : "HTTP :8000"
-webapp --> db : "TCP :5432"
-webapp --> otel : "gRPC :4317\n(OTLP)"
+webapp --> db : "TCP :5432\n(Docker internal)"
+webapp --> grafana : "OTLP\n(traces, metrics, logs)"
 
-otel --> loki : "logs"
-otel --> tempo : "traces"
-otel ..> prom : "scrape\nmetrics"
-
-grafana -up-> loki
-grafana -up-> tempo
-grafana -up-> prom
+dev --> grafana : "View dashboards"
 
 @enduml

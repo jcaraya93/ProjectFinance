@@ -11,3 +11,4 @@ Thumbs.db
 staticfiles/
 infra/*.parameters.json
 infra/*.json
+.env.prod
