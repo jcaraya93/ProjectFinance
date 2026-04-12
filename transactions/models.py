@@ -125,17 +125,23 @@ class Account(models.Model):
 
 
 class CreditAccount(Account):
-    card_number = models.CharField(max_length=30, unique=True)
+    card_number_hash = models.CharField(max_length=64, unique=True, help_text='SHA-256 hash of full card number')
+    card_number_last4 = models.CharField(max_length=4, blank=True, help_text='Last 4 digits for display')
 
     def save(self, *args, **kwargs):
         if not self.account_type:
             self.account_type = 'credit_account'
-        if not self.nickname and self.card_number:
-            self.nickname = f"Credit {self.card_number[-4:]}"
+        if not self.nickname and self.card_number_last4:
+            self.nickname = f"Credit {self.card_number_last4}"
         super().save(*args, **kwargs)
 
+    @classmethod
+    def hash_card_number(cls, card_number):
+        import hashlib
+        return hashlib.sha256(card_number.encode()).hexdigest()
+
     def __str__(self):
-        return self.nickname or f"Credit ****{self.card_number[-4:]}"
+        return self.nickname or f"Credit ****{self.card_number_last4}"
 
 
 class DebitAccount(Account):

@@ -19,8 +19,8 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(CreditAccount)
 class CreditAccountAdmin(admin.ModelAdmin):
-    list_display = ['card_number', 'card_holder', 'nickname']
-    search_fields = ['card_number', 'card_holder', 'nickname']
+    list_display = ['card_number_last4', 'card_holder', 'nickname']
+    search_fields = ['card_holder', 'nickname']
 
 
 @admin.register(DebitAccount)

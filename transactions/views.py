@@ -136,6 +136,24 @@ def statement_list(request):
 
 
 @login_required
+@require_POST
+@ratelimit(key='purge', rate='3/h', method='POST')
+def purge_all_data(request):
+    """Delete all transactions, statements, and accounts for the current user."""
+    confirm = request.POST.get('confirm', '')
+    if confirm != 'DELETE ALL':
+        messages.error(request, 'Purge cancelled — confirmation text did not match.')
+        return redirect('transactions:statement_list')
+
+    deleted_accounts = Account.objects.filter(user=request.user).delete()
+    deleted_exchange = LogicalTransaction.objects.filter(user=request.user).delete()
+    deleted_raw = RawTransaction.objects.filter(user=request.user).delete()
+
+    messages.success(request, 'All transactions, statements, and accounts have been deleted.')
+    return redirect('transactions:statement_list')
+
+
+@login_required
 def dashboard(request):
     """Overview dashboard — last 12 months, no user filters."""
     from datetime import timedelta
@@ -1293,7 +1311,8 @@ def upload(request):
 
                 if card_type == 'credit':
                     account, _ = CreditAccount.objects.get_or_create(user=request.user, 
-                        card_number=parsed.card_number, defaults={'card_holder': parsed.card_holder})
+                        card_number_hash=CreditAccount.hash_card_number(parsed.card_number),
+                        defaults={'card_holder': parsed.card_holder, 'card_number_last4': parsed.card_number[-4:]})
                 else:
                     account, _ = DebitAccount.objects.get_or_create(user=request.user, 
                         iban=parsed.card_number, defaults={'card_holder': parsed.card_holder, 'client_number': getattr(parsed, 'client_number', '')})

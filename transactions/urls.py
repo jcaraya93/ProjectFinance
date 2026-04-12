@@ -16,6 +16,7 @@ urlpatterns = [
     path('default-buckets/', views.default_buckets_dashboard, name='default_buckets_dashboard'),
     path('upload/', views.upload, name='upload'),
     path('statements/', views.statement_list, name='statement_list'),
+    path('statements/purge/', views.purge_all_data, name='purge_all_data'),
     path('transactions/', views.transaction_list, name='transaction_list'),
     path('transactions/bulk-update-category/', views.bulk_update_category, name='bulk_update_category'),
     path('transactions/<int:raw_id>/edit/', views.edit_transaction, name='edit_transaction'),

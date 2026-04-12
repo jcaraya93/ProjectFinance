@@ -87,8 +87,8 @@ class Command(BaseCommand):
                 # Auto-create or get Account
                 if card_type == 'credit':
                     account, _ = CreditAccount.objects.get_or_create(
-                        user=user, card_number=parsed.card_number,
-                        defaults={'card_holder': parsed.card_holder},
+                        user=user, card_number_hash=CreditAccount.hash_card_number(parsed.card_number),
+                        defaults={'card_holder': parsed.card_holder, 'card_number_last4': parsed.card_number[-4:]},
                     )
                 else:
                     account, _ = DebitAccount.objects.get_or_create(
