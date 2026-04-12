@@ -13,6 +13,25 @@ param sshPublicKey string
 @description('VM size')
 param vmSize string = 'Standard_B1s'
 
+@description('GitHub repo URL')
+param repoUrl string = 'https://github.com/jcaraya93/ProjectFinance.git'
+
+@description('Django secret key')
+@secure()
+param djangoSecretKey string
+
+@description('PostgreSQL password')
+@secure()
+@minLength(8)
+param dbPassword string
+
+@description('Grafana Cloud OTLP endpoint')
+param otelEndpoint string = ''
+
+@description('Grafana Cloud OTLP auth header')
+@secure()
+param otelHeaders string = ''
+
 // ── Variables ────────────────────────────────────────────────
 
 var prefix = 'projectfinance'
@@ -65,6 +84,19 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '443'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Django'
+        properties: {
+          priority: 1003
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '8000'
           sourceAddressPrefix: '*'
           destinationAddressPrefix: '*'
         }
@@ -163,34 +195,23 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   }
 }
 
-// ── Cloud-init: Install Docker ───────────────────────────────
+// ── Cloud-init: Install Docker + Deploy App ──────────────────
+
+var envFileContent = 'DJANGO_SECRET_KEY=${djangoSecretKey}\nDJANGO_DEBUG=False\nDJANGO_ALLOWED_HOSTS=*\nPOSTGRES_DB=projectfinance\nPOSTGRES_USER=projectfinance\nPOSTGRES_PASSWORD=${dbPassword}\nOTEL_SERVICE_NAME=project-finance-azure-simple\nOTEL_EXPORTER=${empty(otelEndpoint) ? 'console' : 'otlp-http'}\nOTEL_EXPORTER_OTLP_ENDPOINT=${otelEndpoint}\nOTEL_EXPORTER_OTLP_HEADERS=${otelHeaders}'
+
+var setupScript = '#!/bin/bash\nset -e\nexec > /var/log/cloud-init-app.log 2>&1\n\necho "=== Installing Docker ==="\ncurl -fsSL https://get.docker.com | sh\nusermod -aG docker ${adminUsername}\napt-get install -y docker-compose-plugin git\n\necho "=== Cloning repository ==="\ngit clone ${repoUrl} /opt/projectfinance\nchown -R ${adminUsername}:${adminUsername} /opt/projectfinance\n\necho "=== Writing .env.prod ==="\nprintf \'%b\' \'${envFileContent}\' > /opt/projectfinance/.env.prod\nchmod 600 /opt/projectfinance/.env.prod\nchown ${adminUsername}:${adminUsername} /opt/projectfinance/.env.prod\n\necho "=== Starting application ==="\ncd /opt/projectfinance\ndocker compose -f docker-compose.prod.yml up -d web db\n\necho "=== Setup complete ==="'
 
 resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2024-03-01' = {
   parent: vm
-  name: 'install-docker'
+  name: 'setup-app'
   location: location
   properties: {
     publisher: 'Microsoft.Azure.Extensions'
     type: 'CustomScript'
     typeHandlerVersion: '2.1'
     autoUpgradeMinorVersion: true
-    settings: {
-      script: base64('''#!/bin/bash
-set -e
-
-# Install Docker
-curl -fsSL https://get.docker.com | sh
-usermod -aG docker azureuser
-
-# Install Docker Compose plugin
-apt-get install -y docker-compose-plugin
-
-# Create app directory
-mkdir -p /opt/projectfinance
-chown azureuser:azureuser /opt/projectfinance
-
-echo "Docker setup complete"
-''')
+    protectedSettings: {
+      script: base64(setupScript)
     }
   }
 }
@@ -199,3 +220,4 @@ echo "Docker setup complete"
 
 output vmPublicIp string = publicIp.properties.ipAddress
 output sshCommand string = 'ssh ${adminUsername}@${publicIp.properties.ipAddress}'
+output appUrl string = 'http://${publicIp.properties.ipAddress}:8000'
