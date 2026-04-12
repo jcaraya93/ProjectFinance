@@ -32,6 +32,12 @@ param otelEndpoint string = ''
 @secure()
 param otelHeaders string = ''
 
+@description('Domain name for HTTPS (e.g. project-finance.cc). Leave empty to skip SSL setup.')
+param domain string = ''
+
+@description('Email for Let\'s Encrypt certificate notifications')
+param certEmail string = ''
+
 // ── Variables ────────────────────────────────────────────────
 
 var prefix = 'projectfinance'
@@ -197,9 +203,13 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
 
 // ── Cloud-init: Install Docker + Deploy App ──────────────────
 
-var envFileContent = 'DJANGO_SECRET_KEY=${djangoSecretKey}\nDJANGO_DEBUG=False\nDJANGO_ALLOWED_HOSTS=*\nPOSTGRES_DB=projectfinance\nPOSTGRES_USER=projectfinance\nPOSTGRES_PASSWORD=${dbPassword}\nOTEL_SERVICE_NAME=project-finance-azure-simple\nOTEL_EXPORTER=${empty(otelEndpoint) ? 'console' : 'otlp-http'}\nOTEL_EXPORTER_OTLP_ENDPOINT=${otelEndpoint}\nOTEL_EXPORTER_OTLP_HEADERS=${otelHeaders}'
+var allowedHosts = empty(domain) ? '*' : domain
 
-var setupScript = '#!/bin/bash\nset -e\nexec > /var/log/cloud-init-app.log 2>&1\n\necho "=== Installing Docker ==="\ncurl -fsSL https://get.docker.com | sh\nusermod -aG docker ${adminUsername}\napt-get install -y docker-compose-plugin git\n\necho "=== Cloning repository ==="\ngit clone ${repoUrl} /opt/projectfinance\nchown -R ${adminUsername}:${adminUsername} /opt/projectfinance\n\necho "=== Writing .env.prod ==="\nprintf \'%b\' \'${envFileContent}\' > /opt/projectfinance/.env.prod\nchmod 600 /opt/projectfinance/.env.prod\nchown ${adminUsername}:${adminUsername} /opt/projectfinance/.env.prod\n\necho "=== Starting application ==="\ncd /opt/projectfinance\ndocker compose -f docker-compose.prod.yml up -d web db\n\necho "=== Setup complete ==="'
+var envFileContent = 'DJANGO_SECRET_KEY=${djangoSecretKey}\nDJANGO_DEBUG=False\nDJANGO_ALLOWED_HOSTS=${allowedHosts}\nPOSTGRES_DB=projectfinance\nPOSTGRES_USER=projectfinance\nPOSTGRES_PASSWORD=${dbPassword}\nOTEL_SERVICE_NAME=project-finance-azure-simple\nOTEL_EXPORTER=${empty(otelEndpoint) ? 'console' : 'otlp-http'}\nOTEL_EXPORTER_OTLP_ENDPOINT=${otelEndpoint}\nOTEL_EXPORTER_OTLP_HEADERS=${otelHeaders}\nSECURE_SSL_REDIRECT=${empty(domain) ? 'False' : 'True'}'
+
+var sslSetupScript = empty(domain) ? '' : '\n\necho "=== Obtaining SSL certificate ==="\ndocker run -d --name certbot-http -v projectfinance_certbot-www:/var/www/certbot -v projectfinance_certbot-certs:/etc/letsencrypt -p 80:80 nginx:1.27 sh -c \'mkdir -p /var/www/certbot && echo "server { listen 80; location /.well-known/acme-challenge/ { root /var/www/certbot; } location / { return 200 ok; } }" > /etc/nginx/conf.d/default.conf && nginx -g "daemon off;"\'\nsleep 5\ndocker run --rm -v projectfinance_certbot-www:/var/www/certbot -v projectfinance_certbot-certs:/etc/letsencrypt certbot/certbot certonly --webroot --webroot-path=/var/www/certbot --email ${certEmail} --agree-tos --no-eff-email -d ${domain}\ndocker stop certbot-http && docker rm certbot-http\n\necho "=== Starting full stack with HTTPS ==="\ncd /opt/projectfinance\ndocker compose -f docker-compose.prod.yml up -d'
+
+var setupScript = '#!/bin/bash\nset -e\nexec > /var/log/cloud-init-app.log 2>&1\n\necho "=== Installing Docker ==="\ncurl -fsSL https://get.docker.com | sh\nusermod -aG docker ${adminUsername}\napt-get install -y docker-compose-plugin git\n\necho "=== Cloning repository ==="\ngit clone ${repoUrl} /opt/projectfinance\nchown -R ${adminUsername}:${adminUsername} /opt/projectfinance\n\necho "=== Writing .env.prod ==="\nprintf \'%b\' \'${envFileContent}\' > /opt/projectfinance/.env.prod\nchmod 600 /opt/projectfinance/.env.prod\nchown ${adminUsername}:${adminUsername} /opt/projectfinance/.env.prod\n\necho "=== Starting application ==="\ncd /opt/projectfinance\ndocker compose -f docker-compose.prod.yml up -d web db${sslSetupScript}\n\necho "=== Setup complete ==="'
 
 resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2024-03-01' = {
   parent: vm
@@ -220,4 +230,4 @@ resource vmExtension 'Microsoft.Compute/virtualMachines/extensions@2024-03-01' =
 
 output vmPublicIp string = publicIp.properties.ipAddress
 output sshCommand string = 'ssh ${adminUsername}@${publicIp.properties.ipAddress}'
-output appUrl string = 'http://${publicIp.properties.ipAddress}:8000'
+output appUrl string = empty(domain) ? 'http://${publicIp.properties.ipAddress}:8000' : 'https://${domain}'
