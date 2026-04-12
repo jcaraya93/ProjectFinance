@@ -8,8 +8,9 @@ param location string = resourceGroup().location
 @secure()
 param djangoSecretKey string
 
-@description('PostgreSQL admin password')
+@description('PostgreSQL admin password (min 8 chars, must include uppercase, lowercase, number)')
 @secure()
+@minLength(8)
 param dbPassword string
 
 // ── Variables ────────────────────────────────────────────────
@@ -21,7 +22,7 @@ var dbName = 'projectfinance'
 var dbUser = 'projectfinance'
 var containerEnvName = '${prefix}-env'
 var containerAppName = '${prefix}-web'
-var imageName = '${acrName}.azurecr.io/projectfinance:latest'
+var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 var vnetName = '${prefix}-vnet'
 var appSubnetName = 'app-subnet'
 var dbSubnetName = 'db-subnet'
@@ -168,7 +169,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'web'
-          image: imageName
+          image: placeholderImage
           resources: {
             cpu: json('0.5')
             memory: '1Gi'

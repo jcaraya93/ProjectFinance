@@ -9,3 +9,5 @@ build/
 .DS_Store
 Thumbs.db
 staticfiles/
+infra/*.parameters.json
+infra/*.json
