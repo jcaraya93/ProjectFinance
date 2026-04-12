@@ -15,12 +15,19 @@
     <!-- Currency toggle -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Overview — Last 12 Months</h4>
-      <div class="btn-group btn-group-sm">
-        <a href="?display_currency=CRC" class="btn {% if display_currency == 'CRC' %}btn-primary{% else %}btn-outline-primary{% endif %}">₡ CRC</a>
-        <a href="?display_currency=USD" class="btn {% if display_currency == 'USD' %}btn-primary{% else %}btn-outline-primary{% endif %}">$ USD</a>
+      <div class="d-flex align-items-center gap-2">
+        {% if privacy %}
+        <a href="?display_currency={{ display_currency }}&time_group={{ time_group }}&privacy=0" class="btn btn-sm btn-secondary" title="Show values"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg></a>
+        {% else %}
+        <a href="?display_currency={{ display_currency }}&time_group={{ time_group }}" class="btn btn-sm btn-outline-secondary" title="Hide values"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg></a>
+        {% endif %}
+        <div class="btn-group btn-group-sm">
+          <a href="?display_currency=CRC&time_group={{ time_group }}{% if privacy %}&privacy=1{% endif %}" class="btn {% if display_currency == 'CRC' %}btn-primary{% else %}btn-outline-primary{% endif %}">₡ CRC</a>
+          <a href="?display_currency=USD&time_group={{ time_group }}{% if privacy %}&privacy=1{% endif %}" class="btn {% if display_currency == 'USD' %}btn-primary{% else %}btn-outline-primary{% endif %}">$ USD</a>
+        </div>
       </div>
     </div>
-
+
 <!-- ═══ LAST MONTH ═══ -->
 <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Last Month — {{ summary.last_month_name }}</h5>
 
@@ -29,9 +36,9 @@
     <div class="card summary-card border-start-success">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Recurring Income</h6>
-        <h3 class="card-title mb-1 text-success">{{ summary.currency_symbol }}{{ summary.last_month_income|format_number }}</h3>
+        <h3 class="card-title mb-1 text-success" data-sensitive>{{ summary.currency_symbol }}{{ summary.last_month_income|format_number }}</h3>
         <div class="small text-muted">
-          Median: {{ summary.currency_symbol }}{{ summary.median_income|format_number }}
+          Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_income|format_number }}</span>
           {% if summary.income_pct > 0 %}<span class="text-success ms-1">▲ {{ summary.income_pct|floatformat:0 }}%</span>
           {% elif summary.income_pct < 0 %}<span class="text-danger ms-1">▼ {{ summary.income_pct|floatformat:0 }}%</span>
           {% endif %}
@@ -43,9 +50,9 @@
     <div class="card summary-card border-start-danger">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Expenses</h6>
-        <h3 class="card-title mb-1 text-danger">{{ summary.currency_symbol }}{{ summary.last_month_expenses|format_number }}</h3>
+        <h3 class="card-title mb-1 text-danger" data-sensitive>{{ summary.currency_symbol }}{{ summary.last_month_expenses|format_number }}</h3>
         <div class="small text-muted">
-          Median: {{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}
+          Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</span>
           {% if summary.expenses_pct > 0 %}<span class="text-danger ms-1">▲ {{ summary.expenses_pct|floatformat:0 }}%</span>
           {% elif summary.expenses_pct < 0 %}<span class="text-success ms-1">▼ {{ summary.expenses_pct|floatformat:0 }}%</span>
           {% endif %}
@@ -57,9 +64,9 @@
     <div class="card summary-card border-start-primary">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Cash Flow</h6>
-        <h3 class="card-title mb-1 {% if summary.last_month_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}">{{ summary.currency_symbol }}{{ summary.last_month_cashflow|format_number }}</h3>
+        <h3 class="card-title mb-1 {% if summary.last_month_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}" data-sensitive>{{ summary.currency_symbol }}{{ summary.last_month_cashflow|format_number }}</h3>
         <div class="small text-muted">
-          Median: {{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}
+          Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</span>
           {% if summary.cashflow_pct > 0 %}<span class="text-success ms-1">▲ {{ summary.cashflow_pct|floatformat:0 }}%</span>
           {% elif summary.cashflow_pct < 0 %}<span class="text-danger ms-1">▼ {{ summary.cashflow_pct|floatformat:0 }}%</span>
           {% endif %}
@@ -77,8 +84,8 @@
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Avg. Recurring Income</h6>
-        <h3 class="card-title mb-1 text-success">{{ summary.currency_symbol }}{{ summary.avg_income|format_number }}</h3>
-        <div class="small text-muted">Median: {{ summary.currency_symbol }}{{ summary.median_income|format_number }}</div>
+        <h3 class="card-title mb-1 text-success" data-sensitive>{{ summary.currency_symbol }}{{ summary.avg_income|format_number }}</h3>
+        <div class="small text-muted">Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_income|format_number }}</span></div>
       </div>
     </div>
   </div>
@@ -86,8 +93,8 @@
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Avg. Expenses</h6>
-        <h3 class="card-title mb-1 text-danger">{{ summary.currency_symbol }}{{ summary.avg_expenses|format_number }}</h3>
-        <div class="small text-muted">Median: {{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</div>
+        <h3 class="card-title mb-1 text-danger" data-sensitive>{{ summary.currency_symbol }}{{ summary.avg_expenses|format_number }}</h3>
+        <div class="small text-muted">Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</span></div>
       </div>
     </div>
   </div>
@@ -95,8 +102,8 @@
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Avg. Cash Flow</h6>
-        <h3 class="card-title mb-1 {% if summary.avg_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}">{{ summary.currency_symbol }}{{ summary.avg_cashflow|format_number }}</h3>
-        <div class="small text-muted">Median: {{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</div>
+        <h3 class="card-title mb-1 {% if summary.avg_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}" data-sensitive>{{ summary.currency_symbol }}{{ summary.avg_cashflow|format_number }}</h3>
+        <div class="small text-muted">Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</span></div>
       </div>
     </div>
   </div>
@@ -109,10 +116,10 @@
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h5 class="card-title mb-0">Recurring Income vs Expenses</h5>
           <div class="btn-group btn-group-sm" role="group">
-            <a href="?display_currency={{ display_currency }}&time_group=weekly" class="btn {% if time_group == 'weekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Weekly</a>
-            <a href="?display_currency={{ display_currency }}&time_group=biweekly" class="btn {% if time_group == 'biweekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Bi-weekly</a>
-            <a href="?display_currency={{ display_currency }}&time_group=monthly" class="btn {% if time_group == 'monthly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Monthly</a>
-            <a href="?display_currency={{ display_currency }}&time_group=quarterly" class="btn {% if time_group == 'quarterly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Quarterly</a>
+            <a href="?display_currency={{ display_currency }}&time_group=weekly{% if privacy %}&privacy=1{% endif %}" class="btn {% if time_group == 'weekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Weekly</a>
+            <a href="?display_currency={{ display_currency }}&time_group=biweekly{% if privacy %}&privacy=1{% endif %}" class="btn {% if time_group == 'biweekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Bi-weekly</a>
+            <a href="?display_currency={{ display_currency }}&time_group=monthly{% if privacy %}&privacy=1{% endif %}" class="btn {% if time_group == 'monthly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Monthly</a>
+            <a href="?display_currency={{ display_currency }}&time_group=quarterly{% if privacy %}&privacy=1{% endif %}" class="btn {% if time_group == 'quarterly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Quarterly</a>
           </div>
         </div>
         <div class="chart-container">
@@ -147,44 +154,19 @@
 <script>
 (function () {
   function parseJSON(id) {
-    const el = document.getElementById(id);
+    var el = document.getElementById(id);
     if (!el || !el.textContent.trim()) return null;
     try { return JSON.parse(el.textContent); } catch (e) { return null; }
   }
 
-  // 1. Recurring Income vs Expenses (bar chart, side by side)
-  const monthlyRaw = parseJSON('monthlyData');
-  if (monthlyRaw) {
-    new Chart(document.getElementById('cashflowChart'), {
-      type: 'bar',
-      data: {
-        labels: monthlyRaw.labels || [],
-        datasets: [
-          {
-            label: 'Recurring Income',
-            data: monthlyRaw.income || [],
-            backgroundColor: 'rgba(25, 135, 84, 0.8)',
-          },
-          {
-            label: 'Expenses',
-            data: monthlyRaw.expenses || [],
-            backgroundColor: 'rgba(220, 53, 69, 0.8)',
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true } },
-        plugins: { legend: { position: 'bottom' } },
-      },
-    });
-  }
+  var trendRaw = parseJSON('trendData');
+  var dashCharts = [];
+  var isPrivacy = new URLSearchParams(window.location.search).get('privacy') !== '0';
+  var privacyTicks = isPrivacy ? { callback: function () { return ''; } } : {};
 
-  // 6. Monthly Trend (dual line)
-  const trendRaw = parseJSON('trendData');
+  // Recurring Income vs Expenses (line chart)
   if (trendRaw) {
-    new Chart(document.getElementById('trendChart'), {
+    dashCharts.push(new Chart(document.getElementById('trendChart'), {
       type: 'line',
       data: {
         labels: trendRaw.labels || [],
@@ -213,19 +195,19 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true } },
-        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true, ticks: privacyTicks } },
+        plugins: { legend: { position: 'bottom' }, tooltip: { enabled: !isPrivacy } },
       },
-    });
+    }));
   }
 
-  // 7. Net Cash Flow (bar)
+  // Net Cash Flow (bar chart)
   if (trendRaw) {
-    const netData = (trendRaw.income || []).map(function (inc, i) {
+    var netData = (trendRaw.income || []).map(function (inc, i) {
       return inc - (trendRaw.expenses || [])[i] || 0;
     });
-    const barColors = netData.map(function (v) { return v >= 0 ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)'; });
-    new Chart(document.getElementById('netCashflowBarChart'), {
+    var barColors = netData.map(function (v) { return v >= 0 ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)'; });
+    dashCharts.push(new Chart(document.getElementById('netCashflowBarChart'), {
       type: 'bar',
       data: {
         labels: trendRaw.labels || [],
@@ -239,9 +221,16 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        scales: { y: { beginAtZero: false } },
-        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: false, ticks: privacyTicks } },
+        plugins: { legend: { display: false }, tooltip: { enabled: !isPrivacy } },
       },
+    }));
+  }
+
+  // Privacy mode — mask card values if ?privacy=1
+  if (isPrivacy) {
+    document.querySelectorAll('[data-sensitive]').forEach(function (el) {
+      el.textContent = '•••••';
     });
   }
 })();

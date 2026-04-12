@@ -2,8 +2,8 @@
       <div class="card-header fw-bold small text-uppercase text-muted">Financial</div>
       <div class="list-group list-group-flush">
         <a href="{% url 'transactions:dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'overview' %} active{% endif %}">Overview</a>
-        <a href="{% url 'transactions:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Spending & Income</a>
         <a href="{% url 'transactions:income_salary_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_salary' %} active{% endif %}">Income Salary</a>
+        <a href="{% url 'transactions:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Spending & Income</a>
       </div>
     </div>
     <div class="card mb-3">
