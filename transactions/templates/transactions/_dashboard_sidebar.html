@@ -1,12 +1,4 @@
     <div class="card mb-3">
-      <div class="card-header fw-bold small text-uppercase text-muted">Data Quality</div>
-      <div class="list-group list-group-flush">
-        <a href="{% url 'transactions:transaction_health_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transaction_health' %} active{% endif %}">Classification Method</a>
-        <a href="{% url 'transactions:rule_matching_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'rule_matching' %} active{% endif %}">Rule Matching</a>
-        <a href="{% url 'transactions:default_buckets_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'default_buckets' %} active{% endif %}">Default Buckets</a>
-      </div>
-    </div>
-    <div class="card mb-3">
       <div class="card-header fw-bold small text-uppercase text-muted">Financial</div>
       <div class="list-group list-group-flush">
         <a href="{% url 'transactions:dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'overview' %} active{% endif %}">Overview</a>
@@ -20,5 +12,13 @@
         <a href="{% url 'transactions:car_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car' %} active{% endif %}">Car</a>
         <a href="{% url 'transactions:car_gas_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car_gas' %} active{% endif %}">Car Gas</a>
         <a href="{% url 'transactions:car_parking_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car_parking' %} active{% endif %}">Car Parking</a>
+      </div>
+    </div>
+    <div class="card mb-3">
+      <div class="card-header fw-bold small text-uppercase text-muted">Data Quality</div>
+      <div class="list-group list-group-flush">
+        <a href="{% url 'transactions:transaction_health_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transaction_health' %} active{% endif %}">Classification Method</a>
+        <a href="{% url 'transactions:rule_matching_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'rule_matching' %} active{% endif %}">Rule Matching</a>
+        <a href="{% url 'transactions:default_buckets_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'default_buckets' %} active{% endif %}">Default Buckets</a>
       </div>
     </div>
