@@ -1562,27 +1562,6 @@ def save_transaction_columns(request):
 
 @login_required
 @require_POST
-def update_category(request, pk):
-    txn = get_object_or_404(Transaction, pk=pk, user=request.user)
-    category_id = request.POST.get('category_id')
-    if category_id:
-        txn.category_id = int(category_id)
-        # Check if assigning to unclassified/Default
-        cat = Category.objects.filter(user=request.user).select_related('group').get(pk=category_id)
-        if cat.group.slug == 'unclassified' and cat.name == 'Default':
-            txn.classification_method = 'unclassified'
-        else:
-            txn.classification_method = 'manual'
-    else:
-        txn.category = None
-        txn.classification_method = 'unclassified'
-    txn.matched_rule = None
-    txn.save(update_fields=['category', 'classification_method', 'matched_rule'])
-    return JsonResponse({'status': 'ok'})
-
-
-@login_required
-@require_POST
 def bulk_update_category(request):
     """Bulk assign a category to multiple transactions (same logic as manual single update)."""
     txn_ids = request.POST.getlist('txn_ids')

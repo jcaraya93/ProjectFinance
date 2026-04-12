@@ -233,25 +233,12 @@
             {% endif %}
           </td>
           <td>
-            <div class="category-cell" data-txn-id="{{ txn.id }}">
-              <span class="category-label" role="button" title="Click to edit">
-                {% if txn.category %}
-                <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ txn.category.color }};"></span>
-                <span class="category-name">{{ txn.category.name }}</span>
-                {% else %}
-                <span class="text-muted">—</span>
-                {% endif %}
-              </span>
-              <select class="form-select form-select-sm category-select d-none" style="min-width: 160px;">
-                {% for grp in category_groups %}
-                <optgroup label="{{ grp.name }}">
-                  {% for cat in grp.categories.all %}
-                  <option value="{{ cat.id }}" data-color="{{ cat.color }}" data-group-name="{{ grp.name }}" data-group-slug="{{ grp.slug }}" {% if txn.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
-                  {% endfor %}
-                </optgroup>
-                {% endfor %}
-              </select>
-            </div>
+            {% if txn.category %}
+            <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ txn.category.color }};"></span>
+            {{ txn.category.name }}
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
           </td>
           <td>{{ txn.description }}</td>
           <td class="small text-muted text-nowrap">
@@ -451,103 +438,7 @@
     return match ? decodeURIComponent(match[2]) : null;
   }
 
-  function showSelect(cell) {
-    cell.querySelector('.category-label').classList.add('d-none');
-    const select = cell.querySelector('.category-select');
-    select.classList.remove('d-none');
-    select.focus();
-  }
 
-  function showLabel(cell, newName, newColor) {
-    const select = cell.querySelector('.category-select');
-    select.classList.add('d-none');
-    const label = cell.querySelector('.category-label');
-    if (newName !== undefined) {
-      const dot = label.querySelector('.rounded-circle');
-      const nameEl = label.querySelector('.category-name');
-      if (dot) dot.style.backgroundColor = newColor || '#6c757d';
-      if (nameEl) nameEl.textContent = newName;
-      if (!dot && newColor) {
-        const newDot = document.createElement('span');
-        newDot.className = 'd-inline-block rounded-circle me-1';
-        newDot.style.cssText = 'width:10px;height:10px;background-color:' + newColor;
-        label.insertBefore(newDot, label.firstChild);
-      }
-      if (!nameEl && newName) {
-        label.innerHTML = '';
-        const d = document.createElement('span');
-        d.className = 'd-inline-block rounded-circle me-1';
-        d.style.cssText = 'width:10px;height:10px;background-color:' + (newColor || '#6c757d');
-        const n = document.createElement('span');
-        n.className = 'category-name';
-        n.textContent = newName;
-        label.appendChild(d);
-        label.appendChild(n);
-      }
-    }
-    label.classList.remove('d-none');
-  }
-
-  document.querySelectorAll('.category-cell').forEach(function (cell) {
-    const label = cell.querySelector('.category-label');
-    const select = cell.querySelector('.category-select');
-    const txnId = cell.dataset.txnId;
-
-    label.addEventListener('click', function () {
-      showSelect(cell);
-    });
-
-    select.addEventListener('blur', function () {
-      setTimeout(function () { showLabel(cell); }, 150);
-    });
-
-    select.addEventListener('change', function () {
-      const categoryId = this.value;
-      const opt = this.options[this.selectedIndex];
-      const newName = opt.textContent;
-      const newColor = opt.dataset.color;
-      const groupName = opt.dataset.groupName;
-      const groupSlug = opt.dataset.groupSlug;
-      const row = cell.closest('tr');
-
-      fetch('/transactions/' + txnId + '/update-category/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-CSRFToken': getCookie('csrftoken'),
-        },
-        body: 'category_id=' + encodeURIComponent(categoryId),
-      })
-        .then(function (resp) {
-          if (resp.ok) {
-            showLabel(cell, newName, newColor);
-            // Update group badge
-            var groupCell = row.children[3]; // Group column
-            var badgeClass = groupSlug === 'expense' ? 'bg-danger' : groupSlug === 'income' ? 'bg-success' : groupSlug === 'transaction' ? 'bg-info' : 'bg-secondary';
-            groupCell.innerHTML = '<span class="badge ' + badgeClass + '">' + groupName + '</span>';
-            // Update method badge
-            var methodCell = row.children[2]; // Method column
-            if (groupSlug === 'unclassified') {
-              methodCell.innerHTML = '<span class="badge bg-secondary">Unclassified</span>';
-            } else {
-              methodCell.innerHTML = '<span class="badge bg-warning text-dark">Manual</span>';
-            }
-            row.style.transition = 'background-color 0.3s';
-            row.style.backgroundColor = '#d1e7dd';
-            setTimeout(function () { row.style.backgroundColor = ''; }, 800);
-          } else {
-            showLabel(cell);
-            row.style.backgroundColor = '#f8d7da';
-            setTimeout(function () { row.style.backgroundColor = ''; }, 800);
-          }
-        })
-        .catch(function () {
-          showLabel(cell);
-          row.style.backgroundColor = '#f8d7da';
-          setTimeout(function () { row.style.backgroundColor = ''; }, 800);
-        });
-    });
-  });
 })();
 
 // Track advanced search open state

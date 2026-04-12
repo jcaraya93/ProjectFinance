@@ -17,7 +17,6 @@ urlpatterns = [
     path('upload/', views.upload, name='upload'),
     path('statements/', views.statement_list, name='statement_list'),
     path('transactions/', views.transaction_list, name='transaction_list'),
-    path('transactions/<int:pk>/update-category/', views.update_category, name='update_category'),
     path('transactions/bulk-update-category/', views.bulk_update_category, name='bulk_update_category'),
     path('transactions/<int:raw_id>/edit/', views.edit_transaction, name='edit_transaction'),
     path('transactions/<int:raw_id>/split/', views.split_transaction, name='split_transaction'),
