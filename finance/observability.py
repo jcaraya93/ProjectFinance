@@ -2,12 +2,13 @@
 OpenTelemetry observability bootstrap for the finance project.
 
 Configures tracing, metrics, and log-export with console exporters (dev)
-or OTLP exporters (production).  Call ``init_observability()`` once at
-process startup — typically from wsgi.py / asgi.py.
+or OTLP exporters (production / Grafana Cloud).  Call ``init_observability()``
+once at process startup - typically from wsgi.py / asgi.py.
 
 Toggle exporter back-end via the OTEL_EXPORTER env-var:
-    "console"  → stdout (default, useful for local development)
-    "otlp"     → OTLP/gRPC (requires opentelemetry-exporter-otlp)
+    "console"   - stdout (default, useful for local development)
+    "otlp"      - OTLP/gRPC to a local collector (e.g. Docker otel-collector)
+    "otlp-http" - OTLP/HTTP to a cloud endpoint (e.g. Grafana Cloud)
 """
 
 import logging
@@ -38,22 +39,45 @@ def _get_exporter_type() -> str:
     return os.environ.get("OTEL_EXPORTER", "console").lower()
 
 
+def _get_otlp_headers():
+    """Parse OTEL_EXPORTER_OTLP_HEADERS env var into a dict."""
+    raw = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "")
+    if not raw:
+        return None
+    headers = {}
+    for pair in raw.split(","):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            headers[k.strip()] = v.strip()
+    return headers or None
+
+
 def _setup_tracing(resource: Resource, exporter_type: str) -> None:
     provider = TracerProvider(resource=resource)
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    headers = _get_otlp_headers()
+
     if exporter_type == "otlp":
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, headers=headers)))
+    elif exporter_type == "otlp-http":
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces", headers=headers)))
     else:
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
     trace.set_tracer_provider(provider)
 
 
 def _setup_metrics(resource: Resource, exporter_type: str) -> None:
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    headers = _get_otlp_headers()
+
     if exporter_type == "otlp":
         from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-        reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=endpoint), export_interval_millis=30_000)
+        reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=endpoint, headers=headers), export_interval_millis=30_000)
+    elif exporter_type == "otlp-http":
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+        reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=f"{endpoint}/v1/metrics", headers=headers), export_interval_millis=30_000)
     else:
         reader = PeriodicExportingMetricReader(ConsoleMetricExporter(), export_interval_millis=30_000)
     provider = MeterProvider(resource=resource, metric_readers=[reader])
@@ -62,23 +86,25 @@ def _setup_metrics(resource: Resource, exporter_type: str) -> None:
 
 def _setup_logging(resource: Resource, exporter_type: str) -> None:
     log_provider = LoggerProvider(resource=resource)
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    headers = _get_otlp_headers()
+
     if exporter_type == "otlp":
         from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-        log_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=endpoint)))
+        log_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=endpoint, headers=headers)))
+    elif exporter_type == "otlp-http":
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+        log_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{endpoint}/v1/logs", headers=headers)))
     else:
         log_provider.add_log_record_processor(BatchLogRecordProcessor(ConsoleLogExporter()))
 
-    # Register globally so the LoggingHandler created by Django's LOGGING
-    # dictConfig (which cannot receive constructor args) picks it up via
-    # get_logger_provider().
     _logs.set_logger_provider(log_provider)
 
 
 def init_observability() -> None:
     """Initialise OpenTelemetry tracing, metrics, and logging.
 
-    Safe to call more than once — subsequent calls are no-ops.
+    Safe to call more than once - subsequent calls are no-ops.
     """
     global _initialised
     if _initialised:
