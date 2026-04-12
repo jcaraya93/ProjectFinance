@@ -34,30 +34,33 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
   location: location
   properties: {
     addressSpace: { addressPrefixes: ['10.0.0.0/16'] }
-    subnets: [
+  }
+}
+
+resource appSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
+  parent: vnet
+  name: appSubnetName
+  properties: {
+    addressPrefix: '10.0.0.0/23'
+    delegations: [
       {
-        name: appSubnetName
-        properties: {
-          addressPrefix: '10.0.0.0/23'
-          delegations: [
-            {
-              name: 'containerApps'
-              properties: { serviceName: 'Microsoft.App/environments' }
-            }
-          ]
-        }
+        name: 'containerApps'
+        properties: { serviceName: 'Microsoft.App/environments' }
       }
+    ]
+  }
+}
+
+resource dbSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
+  parent: vnet
+  name: dbSubnetName
+  dependsOn: [appSubnet]
+  properties: {
+    addressPrefix: '10.0.2.0/24'
+    delegations: [
       {
-        name: dbSubnetName
-        properties: {
-          addressPrefix: '10.0.2.0/24'
-          delegations: [
-            {
-              name: 'postgresql'
-              properties: { serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers' }
-            }
-          ]
-        }
+        name: 'postgresql'
+        properties: { serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers' }
       }
     ]
   }
@@ -91,7 +94,7 @@ resource dbServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview'
       geoRedundantBackup: 'Disabled'
     }
     network: {
-      delegatedSubnetResourceId: vnet.properties.subnets[1].id
+      delegatedSubnetResourceId: dbSubnet.id
       privateDnsZoneArmResourceId: privateDnsZone.id
     }
   }
@@ -125,7 +128,7 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   properties: {
     vnetConfiguration: {
-      infrastructureSubnetId: vnet.properties.subnets[0].id
+      infrastructureSubnetId: appSubnet.id
       internal: false
     }
   }
