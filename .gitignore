@@ -8,5 +8,4 @@ dist/
 build/
 .DS_Store
 Thumbs.db
-docker/signoz/
 staticfiles/

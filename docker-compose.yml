@@ -6,13 +6,9 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: db
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-otel-collector:4317
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - default
-      - signoz-net
 
   db:
     image: postgres:17
@@ -32,7 +28,3 @@ services:
 
 volumes:
   pgdata:
-
-networks:
-  signoz-net:
-    external: true
