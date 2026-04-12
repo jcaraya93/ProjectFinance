@@ -6,13 +6,9 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: db
-      OTEL_EXPORTER: otlp
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       db:
         condition: service_healthy
-      otel-collector:
-        condition: service_started
 
   db:
     image: postgres:17

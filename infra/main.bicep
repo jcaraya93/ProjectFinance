@@ -13,6 +13,13 @@ param djangoSecretKey string
 @minLength(8)
 param dbPassword string
 
+@description('Grafana Cloud OTLP endpoint (e.g. https://otlp-gateway-prod-us-east-0.grafana.net/otlp)')
+param otelEndpoint string = ''
+
+@description('Grafana Cloud OTLP auth header (e.g. Authorization=Basic <base64>)')
+@secure()
+param otelHeaders string = ''
+
 // ── Variables ────────────────────────────────────────────────
 
 var prefix = 'projectfinance'
@@ -166,6 +173,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'db-password'
           value: dbPassword
         }
+        {
+          name: 'otel-headers'
+          value: otelHeaders
+        }
       ]
     }
     template: {
@@ -187,7 +198,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'POSTGRES_HOST', value: dbServer.properties.fullyQualifiedDomainName }
             { name: 'POSTGRES_PORT', value: '5432' }
             { name: 'OTEL_SERVICE_NAME', value: 'project-finance' }
-            { name: 'OTEL_EXPORTER', value: 'console' }
+            { name: 'OTEL_EXPORTER', value: empty(otelEndpoint) ? 'console' : 'otlp-http' }
+            { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: otelEndpoint }
+            { name: 'OTEL_EXPORTER_OTLP_HEADERS', secretRef: 'otel-headers' }
           ]
         }
       ]
