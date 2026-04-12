@@ -33,7 +33,7 @@ Copy `infra/main.parameters.json.example` and fill in real values:
 ### 3. Deploy infrastructure
 
 ```
-az deployment group create -g projectfinance-rg --template-file infra/main.bicep --parameters infra/main.parameters.json
+az deployment group create -g projectfinance-rg --template-file infra/main-complex.bicep --parameters infra/main.parameters.json
 ```
 
 This creates: VNet, Container Registry, PostgreSQL, Container Apps (~15 min).
@@ -59,7 +59,7 @@ Trigger the GitHub Actions workflow — it builds and deploys automatically.
 ### Infrastructure changes (env vars, scaling, secrets)
 
 ```
-az deployment group create -g projectfinance-rg --template-file infra/main.bicep --parameters infra/main.parameters.json
+az deployment group create -g projectfinance-rg --template-file infra/main-complex.bicep --parameters infra/main.parameters.json
 ```
 
 ## Stop / Resume / Delete
