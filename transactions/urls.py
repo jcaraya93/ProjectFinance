@@ -15,6 +15,7 @@ urlpatterns = [
     path('rule-matching/', views.rule_matching_dashboard, name='rule_matching_dashboard'),
     path('default-buckets/', views.default_buckets_dashboard, name='default_buckets_dashboard'),
     path('upload/', views.upload, name='upload'),
+    path('upload/file/', views.upload_file_api, name='upload_file_api'),
     path('statements/', views.statement_list, name='statement_list'),
     path('statements/purge/', views.purge_all_data, name='purge_all_data'),
     path('transactions/', views.transaction_list, name='transaction_list'),

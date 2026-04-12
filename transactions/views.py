@@ -16,12 +16,9 @@ from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 from .models import Transaction, LogicalTransaction, RawTransaction, Category, CategoryGroup, StatementImport, CurrencyLedger, Account, CreditAccount, DebitAccount, ClassificationRule, UserPreference
 from django.db import models as db_models
 from django.db.models import Prefetch
-from .forms import UploadForm, YamlRuleForm
-from .parsers.credit_card import CreditCardParser
-from .parsers.debit_card import DebitCardParser
+from .forms import YamlRuleForm
 from .services.stats import get_dashboard_stats
 from .services.classifier import classify_transaction
-from .services.exchange_rates import fetch_rates, convert_transaction
 from .ratelimit import ratelimit
 from .instrumentation import tracer, dashboard_duration, upload_duration, transactions_imported
 
@@ -1250,156 +1247,66 @@ def income_salary_dashboard(request):
     return render(request, 'transactions/dashboard_income_salary.html', context)
 
 
-def _detect_card_type(content):
-    """Auto-detect whether a CSV is a credit card or debit card statement."""
-    first_line = content.split('\n', 1)[0].strip()
-    if first_line.startswith('Pro') or '5466-' in content[:500]:
-        return 'credit'
-    return 'debit'
-
 
 @login_required
 @ratelimit(key='upload', rate='20/h', method='POST')
 def upload(request):
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB per file
-    MAX_FILES_PER_UPLOAD = 12
+    """Render the upload page. File processing is handled by upload_file_api."""
+    return render(request, 'transactions/upload.html')
 
-    if request.method == 'POST':
-        with tracer.start_as_current_span("view.upload") as span:
-            t0 = time.monotonic()
-            uploaded_files = request.FILES.getlist('files')
-            if not uploaded_files:
-                uploaded_files = request.FILES.getlist('files[]')
-            
-            span.set_attribute("upload.file_count", len(uploaded_files))
-            messages.info(request, f'Processing {len(uploaded_files)} file(s)...')
-        
-        if not uploaded_files:
-            messages.error(request, 'Please select at least one file.')
-            return render(request, 'transactions/upload.html', {'form': UploadForm()})
 
-        if len(uploaded_files) > MAX_FILES_PER_UPLOAD:
-            messages.error(request, f'Too many files. Maximum {MAX_FILES_PER_UPLOAD} files per upload.')
-            return render(request, 'transactions/upload.html', {'form': UploadForm()})
+@login_required
+@require_POST
+def upload_file_api(request):
+    """JSON API: import a single CSV file. Called by the upload page JS."""
+    MAX_FILE_SIZE = 10 * 1024 * 1024
 
-        # Validate file extensions and sizes
-        for f in uploaded_files:
-            ext = os.path.splitext(f.name)[1].lower()
-            if ext not in ALLOWED_UPLOAD_EXTENSIONS:
-                messages.error(request, f'"{f.name}" is not a supported file type. Only CSV files are allowed.')
-                return render(request, 'transactions/upload.html', {'form': UploadForm()})
-            if f.size > MAX_FILE_SIZE:
-                messages.error(request, f'"{f.name}" exceeds the {MAX_FILE_SIZE // (1024 * 1024)} MB size limit.')
-                return render(request, 'transactions/upload.html', {'form': UploadForm()})
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'error': 'No file provided.'}, status=400)
 
-        total_files = 0
-        total_txns = 0
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        return JsonResponse({'error': f'Unsupported file type: {ext}'}, status=400)
+    if uploaded_file.size > MAX_FILE_SIZE:
+        return JsonResponse({'error': f'File exceeds {MAX_FILE_SIZE // (1024*1024)} MB limit.'}, status=400)
 
-        for uploaded_file in uploaded_files:
-            try:
-                raw = uploaded_file.read()
-                import hashlib
-                file_hash = hashlib.sha256(raw).hexdigest()
+    import hashlib
+    from .services.import_service import import_statement
 
-                try:
-                    content = raw.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    content = raw.decode('latin-1')
+    raw = uploaded_file.read()
+    file_hash = hashlib.sha256(raw).hexdigest()
 
-                card_type = _detect_card_type(content)
-                parser = CreditCardParser() if card_type == 'credit' else DebitCardParser()
-                parsed = parser.parse(content)
+    try:
+        content = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        content = raw.decode('latin-1')
 
-                # Skip files with no transactions
-                txn_count = sum(len(led.transactions) for led in parsed.ledgers)
-                if txn_count == 0:
-                    messages.info(request, f'"{uploaded_file.name}" has no transactions. Skipped.')
-                    continue
+    try:
+        t0 = time.monotonic()
+        result = import_statement(content, uploaded_file.name, file_hash, request.user)
+        elapsed_ms = round((time.monotonic() - t0) * 1000)
+    except Exception as e:
+        logger.exception('Error importing "%s"', uploaded_file.name)
+        return JsonResponse({'error': 'Import failed. File may be corrupted or unsupported.'}, status=500)
 
-                if StatementImport.objects.filter(user=request.user).filter(file_hash=file_hash).exists():
-                    messages.warning(request, f'"{uploaded_file.name}" already imported. Skipped.')
-                    continue
+    if result.skipped:
+        return JsonResponse({
+            'status': 'skipped',
+            'reason': result.skip_reason,
+            'filename': result.filename,
+        })
 
-                if card_type == 'credit':
-                    account, _ = CreditAccount.objects.get_or_create(user=request.user, 
-                        card_number_hash=CreditAccount.hash_card_number(parsed.card_number),
-                        defaults={'card_holder': parsed.card_holder, 'card_number_last4': parsed.card_number[-4:]})
-                else:
-                    account, _ = DebitAccount.objects.get_or_create(user=request.user, 
-                        iban=parsed.card_number, defaults={'card_holder': parsed.card_holder, 'client_number': getattr(parsed, 'client_number', '')})
-
-                stmt_import = StatementImport.objects.create(
-                    account=account, user=request.user, filename=uploaded_file.name, file_hash=file_hash,
-                    statement_date=parsed.statement_date,
-                    points_assigned=parsed.points_assigned, points_redeemable=parsed.points_redeemable)
-
-                file_txn_count = 0
-                unclassified = Category.get_unclassified(request.user)
-                for pl in parsed.ledgers:
-                    ledger = CurrencyLedger.objects.create(
-                        statement_import=stmt_import, user=request.user, currency=pl.currency,
-                        previous_balance=pl.previous_balance, balance_at_cutoff=pl.balance_at_cutoff)
-                    for pt in pl.transactions:
-                        raw_txn = RawTransaction.objects.create(
-                            date=pt.date, description=pt.description, amount=pt.amount,
-                            ledger=ledger, user=request.user, account_metadata=pt.account_metadata)
-                        txn = LogicalTransaction.objects.create(
-                            raw_transaction=raw_txn, user=request.user, date=pt.date, description=pt.description,
-                            amount=pt.amount, category=unclassified)
-                        cat, rule_obj = classify_transaction(txn)
-                        if rule_obj:
-                            txn.category = cat
-                            txn.matched_rule = rule_obj
-                            txn.classification_method = 'rule'
-                            txn.save(update_fields=['category', 'matched_rule', 'classification_method'])
-                    file_txn_count += len(pl.transactions)
-
-                all_dates = [t.date for pl in parsed.ledgers for t in pl.transactions]
-                if all_dates:
-                    try:
-                        fetch_rates(min(all_dates), max(all_dates))
-                    except Exception:
-                        pass
-
-                for ledger in stmt_import.ledgers.all():
-                    for raw_obj in ledger.raw_transactions.all():
-                        for txn in raw_obj.logical_transactions.all():
-                            if convert_transaction(txn):
-                                txn.save(update_fields=['amount_crc', 'amount_usd'])
-
-                if stmt_import.statement_date:
-                    prev_stmt = StatementImport.objects.filter(user=request.user).filter(
-                        account=account, statement_date__lt=stmt_import.statement_date
-                    ).order_by('-statement_date').first()
-                    if prev_stmt:
-                        for ledger in stmt_import.ledgers.all():
-                            prev_ledger = CurrencyLedger.objects.filter(
-                                statement_import=prev_stmt, currency=ledger.currency).first()
-                            if prev_ledger and abs(prev_ledger.balance_at_cutoff - ledger.previous_balance) > 0.01:
-                                messages.warning(request,
-                                    f'{uploaded_file.name}: Continuity gap ({ledger.currency})')
-
-                for w in parsed.warnings:
-                    messages.warning(request, f'{uploaded_file.name}: {w}')
-
-                total_files += 1
-                total_txns += file_txn_count
-                messages.info(request, f'"{uploaded_file.name}" ({card_type}): {file_txn_count} transactions.')
-
-            except Exception as e:
-                logger.exception('Error importing "%s"', uploaded_file.name)
-                messages.error(request, f'Error importing "{uploaded_file.name}". The file may be corrupted or in an unsupported format.')
-
-        if total_files:
-            messages.success(request, f'Total: {total_txns} transactions from {total_files} file{"s" if total_files > 1 else ""}.')
-            elapsed_ms = (time.monotonic() - t0) * 1000
-            span.set_attribute("upload.total_files", total_files)
-            span.set_attribute("upload.total_transactions", total_txns)
-            upload_duration.record(elapsed_ms)
-            transactions_imported.add(total_txns)
-        return redirect('transactions:statement_list')
-
-    return render(request, 'transactions/upload.html', {'form': UploadForm()})
+    return JsonResponse({
+        'status': 'ok',
+        'filename': result.filename,
+        'card_type': result.card_type,
+        'transaction_count': result.transaction_count,
+        'classified_count': result.classified_count,
+        'converted_count': result.converted_count,
+        'warnings': result.warnings,
+        'elapsed_ms': elapsed_ms,
+    })
 
 
 @login_required
