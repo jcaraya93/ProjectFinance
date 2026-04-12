@@ -1233,6 +1233,9 @@ def _detect_card_type(content):
 @login_required
 @ratelimit(key='upload', rate='20/h', method='POST')
 def upload(request):
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB per file
+    MAX_FILES_PER_UPLOAD = 12
+
     if request.method == 'POST':
         uploaded_files = request.FILES.getlist('files')
         if not uploaded_files:
@@ -1244,11 +1247,18 @@ def upload(request):
             messages.error(request, 'Please select at least one file.')
             return render(request, 'transactions/upload.html', {'form': UploadForm()})
 
-        # Validate file extensions
+        if len(uploaded_files) > MAX_FILES_PER_UPLOAD:
+            messages.error(request, f'Too many files. Maximum {MAX_FILES_PER_UPLOAD} files per upload.')
+            return render(request, 'transactions/upload.html', {'form': UploadForm()})
+
+        # Validate file extensions and sizes
         for f in uploaded_files:
             ext = os.path.splitext(f.name)[1].lower()
             if ext not in ALLOWED_UPLOAD_EXTENSIONS:
                 messages.error(request, f'"{f.name}" is not a supported file type. Only CSV files are allowed.')
+                return render(request, 'transactions/upload.html', {'form': UploadForm()})
+            if f.size > MAX_FILE_SIZE:
+                messages.error(request, f'"{f.name}" exceeds the {MAX_FILE_SIZE // (1024 * 1024)} MB size limit.')
                 return render(request, 'transactions/upload.html', {'form': UploadForm()})
 
         total_files = 0
