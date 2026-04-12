@@ -7,6 +7,18 @@ import sys
 def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'finance.settings')
+
+    # Load .env before OTel bootstrap so OTEL_EXPORTER and other env vars
+    # are available when the observability module reads them.
+    from pathlib import Path
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent / '.env')
+
+    # Bootstrap OpenTelemetry early so management commands (including
+    # runserver's autoreloader) benefit from instrumentation.
+    from finance.observability import init_observability
+    init_observability()
+
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

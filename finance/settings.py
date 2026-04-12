@@ -140,6 +140,36 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# ── Logging (with OpenTelemetry trace context) ────────────────
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'otel': {
+            '()': 'finance.logging_fmt.OTelFormatter',
+            'format': (
+                '%(asctime)s %(levelname)s [%(name)s] '
+                '[trace=%(otelTraceID)s span=%(otelSpanID)s service=%(otelServiceName)s] '
+                '%(message)s'
+            ),
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'otel',
+        },
+        'otel': {
+            'class': 'opentelemetry.sdk._logs.LoggingHandler',
+            'level': 'NOTSET',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'otel'],
+        'level': 'INFO',
+    },
+}
+
 AUTHENTICATION_BACKENDS = ['transactions.backends.EmailBackend']
 LOGIN_URL = '/auth/login/'
 LOGIN_REDIRECT_URL = '/'
