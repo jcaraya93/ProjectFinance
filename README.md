@@ -46,7 +46,6 @@ ProjectFinance/
 │   │   └── stats.py                  # Dashboard aggregation queries
 │   ├── management/commands/
 │   │   ├── seed_categories.py        # Import categories & rules from YAML
-│   │   ├── bulk_import.py            # Batch import all Data/ CSV files
 │   │   └── export_rules.py           # Export DB rules back to YAML
 │   ├── templates/transactions/       # 16 HTML templates
 │   ├── static/transactions/          # CSS and JS assets
@@ -148,28 +147,7 @@ The app will be available at `http://127.0.0.1:8000/`.
 
 ### Importing Data
 
-**Via the web UI:**
 Navigate to Statements → Import Statement, then upload one or more CSV files. The parser is auto-detected.
-
-**Via management command:**
-```bash
-# Import all CSV files from Data/ directory
-python manage.py bulk_import
-
-# Import from a custom directory
-python manage.py bulk_import --data-dir /path/to/csvs
-```
-
-The `Data/` directory should be organized as:
-```
-Data/
-├── Credit-XXXX/          # Credit card statements
-│   ├── statement1.csv
-│   └── statement2.csv
-└── Debit-XXXX/           # Debit card statements
-    ├── statement1.csv
-    └── statement2.csv
-```
 
 ## CSV Formats
 
@@ -197,7 +175,6 @@ Metadata fields `transaction_code` and `reference_number` are extracted per tran
 | Command | Description |
 |---------|-------------|
 | `python manage.py seed_categories` | Import categories, groups, and rules from `classification_rules.yaml` into the database. Only imports rules if the DB has none. |
-| `python manage.py bulk_import` | Import all CSV files from `Data/` directory. Skips already-imported files. |
 | `python manage.py export_rules` | Export current DB rules back to `classification_rules.yaml`. |
 
 ## URL Routes

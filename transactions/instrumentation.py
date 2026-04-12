@@ -75,9 +75,3 @@ upload_duration = meter.create_histogram(
     unit="ms",
     description="Total statement upload processing time",
 )
-
-bulk_import_duration = meter.create_histogram(
-    "bulk_import.duration",
-    unit="ms",
-    description="Bulk import command total duration",
-)
