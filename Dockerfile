@@ -7,7 +7,8 @@ WORKDIR /app
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libpq5 && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    addgroup --system app && adduser --system --ingroup app app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -16,6 +17,8 @@ COPY . .
 
 RUN chmod +x docker/entrypoint.sh && \
     python manage.py collectstatic --noinput 2>/dev/null || true
+
+USER app
 
 EXPOSE 8000
 

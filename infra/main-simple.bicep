@@ -38,6 +38,9 @@ param domain string = ''
 @description('Email for Let\'s Encrypt certificate notifications')
 param certEmail string = ''
 
+@description('IP address allowed for SSH access (e.g. 203.0.113.1). Use * for any.')
+param sshSourceIp string = '*'
+
 // ── Variables ────────────────────────────────────────────────
 
 var prefix = 'projectfinance'
@@ -64,7 +67,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '22'
-          sourceAddressPrefix: '*'
+          sourceAddressPrefix: sshSourceIp
           destinationAddressPrefix: '*'
         }
       }
@@ -90,19 +93,6 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '443'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-        }
-      }
-      {
-        name: 'Django'
-        properties: {
-          priority: 1003
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Tcp'
-          sourcePortRange: '*'
-          destinationPortRange: '8000'
           sourceAddressPrefix: '*'
           destinationAddressPrefix: '*'
         }
