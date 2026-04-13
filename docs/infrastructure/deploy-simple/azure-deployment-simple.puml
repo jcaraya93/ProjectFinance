@@ -20,39 +20,53 @@ cloud "Grafana Cloud (Free Tier)" {
   rectangle "**Grafana**\nDashboards\nLogs · Traces · Metrics" as grafana #Orange
 }
 
-package "Azure — Resource Group: projectfinance-vm-rg" {
+cloud "Cloudflare" {
+  rectangle "**DNS**\nproject-finance.cc\n→ VM public IP" as dns #LightGray
+}
+
+cloud "Let's Encrypt" as letsencrypt
+
+package "Azure — Resource Group: projectfinance-simple-rg" {
+
+  rectangle "**NSG (Firewall)**\nAllow: 80, 443, 22 only" as nsg #WhiteSmoke
 
   package "Virtual Machine — B1s (~$4-8/mo)" as vm {
 
     package "Docker Compose" {
-      rectangle "**nginx**\nReverse Proxy\nPorts 80, 443\nLet's Encrypt TLS" as nginx #LightCoral
+      rectangle "**nginx**\nReverse Proxy\nPorts 80, 443\nTLS 1.2+" as nginx #LightCoral
 
-      rectangle "**web**\nDjango + Gunicorn\nPort 8000" as webapp #LightBlue
+      rectangle "**certbot**\nSSL Auto-Renewal\nEvery 12 hours" as certbot #Wheat
+
+      rectangle "**web**\nDjango + Gunicorn\nPort 8000 (internal)" as webapp #LightBlue
 
       database "**db**\nPostgreSQL 17\n(no public access)" as db #LightGreen
     }
-  }
 
-  note right of vm
-    - Ubuntu 22.04 LTS
-    - 1 vCPU, 1 GiB RAM
-    - 30 GB SSD (managed disk)
-    - Docker + Docker Compose
-    - Ports open: 80, 443, 22 only
-  end note
+    note right of vm
+      - Ubuntu 22.04 LTS
+      - 1 vCPU, 1 GiB RAM
+      - 30 GB SSD
+      - SSH key-only auth
+    end note
+  }
 }
 
-user --> internet
-internet --> nginx : "HTTPS :443"
+user --> dns
+dns --> internet
+internet --> nsg
+nsg --> nginx : "HTTPS :443"
 
-dev -> repo : "git push"
-repo -> actions : "workflow_dispatch"
-actions -> webapp : "SSH: docker compose\npull && restart"
+dev ---> repo : "git push"
+dev ----> grafana : "View dashboards"
+
+repo --> actions : "workflow_dispatch"
+actions --> webapp : "SSH: docker compose\npull && restart"
 
 nginx --> webapp : "HTTP :8000"
 webapp --> db : "TCP :5432\n(Docker internal)"
 webapp -up-> grafana : "OTLP\n(traces, metrics, logs)"
+certbot -up---> letsencrypt : "Renew cert\nevery 12h"
+certbot .right.> nginx : "Writes certs"
 
-dev --> grafana : "View dashboards"
 
 @enduml
