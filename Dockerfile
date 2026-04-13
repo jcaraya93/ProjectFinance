@@ -16,7 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN chmod +x docker/entrypoint.sh && \
-    python manage.py collectstatic --noinput 2>/dev/null || true
+    mkdir -p /app/staticfiles && \
+    python manage.py collectstatic --noinput 2>/dev/null || true && \
+    chown -R app:app /app/staticfiles
 
 USER app
 
