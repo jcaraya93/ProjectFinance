@@ -1,0 +1,138 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}{{ title }} — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <h2 class="mb-4">{{ title }}</h2>
+
+    <div class="card">
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {% for error in form.non_field_errors %}
+              <div>{{ error }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if idx %}
+          <div class="mb-3">
+            <label class="form-label text-muted">Rule ID</label>
+            <input type="text" class="form-control form-control-sm" value="{{ idx }}" disabled style="max-width: 100px; background-color: #e9ecef;">
+          </div>
+          {% endif %}
+
+          <fieldset class="mb-4">
+            <legend class="fs-6 fw-bold text-muted">Conditions <small class="fw-normal">(at least one required, all must match)</small></legend>
+
+            <div class="row mb-3">
+              <div class="col-md-8">
+                <label class="form-label">Description keyword</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors.0 }}</div>{% endif %}
+                <div class="form-text">Case-insensitive substring match against transaction description</div>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label class="form-label">Metadata key</label>
+                {{ form.metadata_key }}
+                {% if form.metadata_key.errors %}<div class="text-danger small">{{ form.metadata_key.errors.0 }}</div>{% endif %}
+                <div class="form-text">e.g. transaction_code</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Metadata value</label>
+                {{ form.metadata_value }}
+                {% if form.metadata_value.errors %}<div class="text-danger small">{{ form.metadata_value.errors.0 }}</div>{% endif %}
+                <div class="form-text">e.g. PT, MC</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Account type</label>
+                {{ form.account_type }}
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label class="form-label">Amount min (≥)</label>
+                {{ form.amount_min }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Amount max (≤)</label>
+                {{ form.amount_max }}
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="mb-4">
+            <legend class="fs-6 fw-bold text-muted">Target</legend>
+
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label class="form-label">Group</label>
+                {{ form.group }}
+                {% if form.group.errors %}<div class="text-danger small">{{ form.group.errors.0 }}</div>{% endif %}
+              </div>
+              <div class="col-md-8">
+                <label class="form-label">Category</label>
+                {{ form.category }}
+                {% if form.category.errors %}<div class="text-danger small">{{ form.category.errors.0 }}</div>{% endif %}
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="mb-4">
+            <legend class="fs-6 fw-bold text-muted">Documentation <small class="fw-normal">(optional)</small></legend>
+            <div class="mb-3">
+              {{ form.detail }}
+              {% if form.detail.errors %}<div class="text-danger small">{{ form.detail.errors.0 }}</div>{% endif %}
+            </div>
+          </fieldset>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Save Rule</button>
+            <a href="{{ next_url|default:'/rules/' }}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  const groupCats = {{ form.get_group_categories_json|escapejson }};
+  const groupSelect = document.getElementById('id_group');
+  const catSelect = document.getElementById('id_category');
+  const currentCat = catSelect.value;
+
+  function filterCategories() {
+    const group = groupSelect.value;
+    const allowed = groupCats[group] || [];
+    const prev = catSelect.value;
+    catSelect.innerHTML = '';
+    allowed.forEach(function(key) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = key.split(':').slice(1).join(':');
+      if (key === prev) opt.selected = true;
+      catSelect.appendChild(opt);
+    });
+  }
+
+  groupSelect.addEventListener('change', filterCategories);
+  filterCategories();
+  // Restore initial value after filtering
+  if (currentCat) catSelect.value = currentCat;
+})();
+</script>
+{% endblock %}

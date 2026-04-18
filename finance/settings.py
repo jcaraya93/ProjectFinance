@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'transactions',
+    'core',
 ]
 
 MIDDLEWARE = [
@@ -139,7 +139,7 @@ STORAGES = {
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024    # 10 MB
 
-AUTH_USER_MODEL = 'transactions.User'
+AUTH_USER_MODEL = 'core.User'
 
 # ── Security hardening (active when DEBUG is off) ─────────────
 if not DEBUG:
@@ -181,6 +181,6 @@ LOGGING = {
     },
 }
 
-AUTHENTICATION_BACKENDS = ['transactions.backends.EmailBackend']
+AUTHENTICATION_BACKENDS = ['core.backends.EmailBackend']
 LOGIN_URL = '/auth/login/'
 LOGIN_REDIRECT_URL = '/'

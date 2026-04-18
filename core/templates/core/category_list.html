@@ -1,0 +1,145 @@
+{% extends "core/base.html" %}
+{% block title %}Categories — Project Finance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">Categories</h2>
+  <div class="d-flex gap-2">
+    <a href="{% url 'core:export_categories' %}" class="btn btn-sm btn-outline-secondary">Export YAML</a>
+    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal">Import YAML</button>
+  </div>
+</div>
+
+<!-- Import modal -->
+<div class="modal fade" id="importModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'core:import_categories' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h6 class="modal-title">Import Categories &amp; Rules</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="file" name="file" accept=".yaml,.yml" class="form-control form-control-sm" required>
+          <div class="small text-muted mt-2">Imports categories and rules. Existing items won't be duplicated.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-sm btn-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% for grp_slug, grp_info in groups.items %}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-bold">
+      {% if grp_slug == 'expense' %}<span class="badge bg-danger">{{ grp_info.name }}</span>
+      {% elif grp_slug == 'income' %}<span class="badge bg-success">{{ grp_info.name }}</span>
+      {% elif grp_slug == 'transaction' %}<span class="badge bg-info">{{ grp_info.name }}</span>
+      {% else %}<span class="badge bg-secondary">{{ grp_info.name }}</span>{% endif %}
+    </span>
+    {% if grp_slug != 'unclassified' %}
+    <button type="button" class="btn btn-sm btn-outline-primary add-category-btn" data-group="{{ grp_slug }}">+ Add Category</button>
+    {% endif %}
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="table-layout: fixed;">
+      <colgroup>
+        <col>
+        <col style="width: 80px;">
+        <col style="width: 120px;">
+        <col style="width: 140px;">
+        <col style="width: 180px;">
+      </colgroup>
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Color</th>
+          <th class="text-center">Rules</th>
+          <th class="text-center">Transactions</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cat in grp_info.categories %}
+        <tr>
+          <td class="fw-bold">{{ cat.name }}</td>
+          <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ cat.color }};"></span></td>
+          <td class="text-center">
+            <a href="{% url 'core:yaml_rule_list' %}?group={{ grp_slug }}&category={{ cat.name|urlencode }}" class="badge bg-secondary text-decoration-none">{{ cat.rule_count }}</a>
+          </td>
+          <td class="text-center">
+            <a href="{% url 'core:transaction_list' %}?group={{ grp_slug }}&category={{ cat.id }}" class="badge bg-secondary text-decoration-none">{{ cat.txn_count }}</a>
+          </td>
+          <td class="text-end text-nowrap">
+            {% if cat.name != 'Default' %}
+            <button type="button" class="btn btn-sm btn-outline-primary rename-category-btn" data-group="{{ grp_slug }}" data-name="{{ cat.name }}">Rename</button>
+            <form method="post" action="{% url 'core:yaml_category_delete' %}" class="d-inline"
+                  onsubmit="return confirm('Delete &quot;{{ cat.name }}&quot; and all its rules? Transactions will become unclassified.')">
+              {% csrf_token %}
+              <input type="hidden" name="group" value="{{ grp_slug }}">
+              <input type="hidden" name="category" value="{{ cat.name }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-3">No categories in this group.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Hidden form for adding a category -->
+<form id="addCategoryForm" method="post" action="{% url 'core:yaml_category_add' %}" class="d-none">
+  {% csrf_token %}
+  <input type="hidden" name="group" id="addCatGroup">
+  <input type="hidden" name="category" id="addCatName">
+</form>
+
+<!-- Hidden form for renaming a category -->
+<form id="renameCategoryForm" method="post" action="{% url 'core:yaml_category_rename' %}" class="d-none">
+  {% csrf_token %}
+  <input type="hidden" name="group" id="renameCatGroup">
+  <input type="hidden" name="old_name" id="renameCatOldName">
+  <input type="hidden" name="new_name" id="renameCatNewName">
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.add-category-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var group = this.dataset.group;
+    var name = prompt('New category name:');
+    if (name && name.trim()) {
+      document.getElementById('addCatGroup').value = group;
+      document.getElementById('addCatName').value = name.trim();
+      document.getElementById('addCategoryForm').submit();
+    }
+  });
+});
+
+document.querySelectorAll('.rename-category-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var group = this.dataset.group;
+    var oldName = this.dataset.name;
+    var newName = prompt('Rename "' + oldName + '" to:', oldName);
+    if (newName && newName.trim() && newName.trim() !== oldName) {
+      document.getElementById('renameCatGroup').value = group;
+      document.getElementById('renameCatOldName').value = oldName;
+      document.getElementById('renameCatNewName').value = newName.trim();
+      document.getElementById('renameCategoryForm').submit();
+    }
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}Car Parking & Tolls — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="car_parking" %}
+  </div>
+
+  <div class="col-md-10">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Car Parking & Tolls</h4>
+      <div class="btn-group btn-group-sm">
+        <a href="?display_currency=CRC" class="btn {% if display_currency == 'CRC' %}btn-primary{% else %}btn-outline-primary{% endif %}">₡ CRC</a>
+        <a href="?display_currency=USD" class="btn {% if display_currency == 'USD' %}btn-primary{% else %}btn-outline-primary{% endif %}">$ USD</a>
+      </div>
+    </div>
+
+    <!-- Cost -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Cost</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ park_last_month|format_number }}</h3>
+            <div class="small">
+              {% if park_median_pct > 0 %}<span class="text-danger">▲ {{ park_median_pct|floatformat:0 }}% above median</span>
+              {% elif park_median_pct < 0 %}<span class="text-success">▼ {{ park_median_pct|floatformat:0 }}% below median</span>
+              {% else %}<span class="text-muted">At median</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Monthly Average</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ park_avg_monthly|format_number }}</h3>
+            <div class="small text-muted">Median: {{ currency_symbol }}{{ park_median_monthly|format_number }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ park_last_year|format_number }}</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title">Monthly Parking Spend</h6>
+            <canvas id="parkingSpendChart" height="125"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Events -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Events</h5>
+
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h3 class="card-title mb-1">{{ park_last_month_count }} events</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Monthly Average</h6>
+            <h3 class="card-title mb-1">{{ park_avg_count_monthly|floatformat:1 }} events</h3>
+            <div class="small text-muted">Median: {{ park_median_count_monthly }} events</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h3 class="card-title mb-1">{{ park_count_last_year }} events</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title">Parking Frequency</h6>
+            <canvas id="parkingFreqChart" height="125"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if park_locations %}
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-bold">Top Locations by Visits (Last 12 Months)</div>
+          <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Location</th>
+                  <th class="text-center">Visits</th>
+                  <th class="text-end">Avg per Visit</th>
+                  <th class="text-end">Yearly Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for loc in park_locations %}
+                <tr>
+                  <td>{{ loc.description }}</td>
+                  <td class="text-center">{{ loc.count }}</td>
+                  <td class="text-end">{{ currency_symbol }}{{ loc.avg|format_number }}</td>
+                  <td class="text-end">{{ currency_symbol }}{{ loc.total|format_number }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script id="parkingData" type="application/json">{{ parking_data|escapejson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var park = JSON.parse(document.getElementById('parkingData').textContent);
+
+  new Chart(document.getElementById('parkingSpendChart'), {
+    type: 'bar',
+    data: { labels: park.labels, datasets: park.spend_datasets },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+  });
+
+  new Chart(document.getElementById('parkingFreqChart'), {
+    type: 'bar',
+    data: { labels: park.labels, datasets: park.count_datasets },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+})();
+</script>
+{% endblock %}
