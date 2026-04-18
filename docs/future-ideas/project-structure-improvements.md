@@ -109,15 +109,10 @@ dashboards/        ← Views + templates only
 
 **Not recommended now** — Django apps add import complexity and migration coordination. The views split (item 1) gives 80% of the maintainability benefit at 20% of the effort.
 
-## Recommended Order
+## Remaining Items
 
-| # | Improvement | Effort | Impact | Status |
-|---|---|---|---|---|
-| 1 | ~~Split views.py into modules~~ | Low | Immediate maintainability | ✅ Done |
-| 2 | ~~Add tests for parsers + classifier~~ | Medium | Protects core logic correctness | ✅ Done |
-| 3 | Extract inline JS to static files | Low | Cleaner templates, easier HTMX migration | |
-| 4 | Dashboard view boilerplate reduction | Low | Less repetition across 10 views | |
-| 5 | Fix rate limiter process isolation | Low | Correct enforcement under multi-worker | |
-| 6 | Split into multiple Django apps | High | Only if project grows significantly | |
+| # | Improvement | Effort | Impact |
+|---|---|---|---|
+| 6 | Split into multiple Django apps | High | Only if project grows significantly |
 
-Items 1–2 completed. Items 3–5 are independent and set the foundation for HTMX adoption.
+Items 1–5 completed. Item 6 is not recommended unless the project grows significantly.
