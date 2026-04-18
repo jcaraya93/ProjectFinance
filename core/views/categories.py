@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.contrib import messages
@@ -16,38 +17,41 @@ __all__ = [
 @login_required
 def category_list(request):
     """List all categories grouped by group, with rule and transaction counts."""
-    from django.db.models import Count
+    annotated_cats = (
+        Category.objects.filter(user=request.user)
+        .select_related('group')
+        .annotate(
+            txn_count=Count('logical_transactions', distinct=True),
+            rule_count=Count('classification_rules', distinct=True),
+        )
+        .order_by('name')
+    )
 
-    category_groups = CategoryGroup.objects.exclude(slug='unclassified').order_by('name')
+    # Build a lookup: group_slug -> [cat_dicts]
+    cats_by_group = {}
+    for cat in annotated_cats:
+        cats_by_group.setdefault(cat.group.slug, []).append({
+            'id': cat.pk,
+            'name': cat.name,
+            'color': cat.color,
+            'rule_count': cat.rule_count,
+            'txn_count': cat.txn_count,
+        })
+
     groups = {}
-    for grp in category_groups:
-        cats = []
-        for cat in Category.objects.filter(user=request.user, group=grp).order_by('name'):
-            txn_count = Transaction.objects.filter(user=request.user, category=cat).count()
-            rule_count = ClassificationRule.objects.filter(user=request.user, category=cat).count()
-            cats.append({
-                'id': cat.pk,
-                'name': cat.name,
-                'color': cat.color,
-                'rule_count': rule_count,
-                'txn_count': txn_count,
-            })
-        groups[grp.slug] = {'name': grp.name, 'categories': cats}
+    for grp in CategoryGroup.objects.exclude(slug='unclassified').order_by('name'):
+        groups[grp.slug] = {
+            'name': grp.name,
+            'categories': cats_by_group.get(grp.slug, []),
+        }
 
     # Add unclassified group last
     unclassified_grp = CategoryGroup.objects.filter(slug='unclassified').first()
     if unclassified_grp:
-        cats = []
-        for cat in Category.objects.filter(user=request.user, group=unclassified_grp).order_by('name'):
-            txn_count = Transaction.objects.filter(user=request.user, category=cat).count()
-            cats.append({
-                'id': cat.pk,
-                'name': cat.name,
-                'color': cat.color,
-                'rule_count': 0,
-                'txn_count': txn_count,
-            })
-        groups['unclassified'] = {'name': unclassified_grp.name, 'categories': cats}
+        groups['unclassified'] = {
+            'name': unclassified_grp.name,
+            'categories': cats_by_group.get('unclassified', []),
+        }
 
     return render(request, 'core/category_list.html', {'groups': groups})
 

@@ -2,6 +2,8 @@ import logging
 import os
 import time
 
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import Abs
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.contrib import messages
@@ -93,21 +95,34 @@ def statement_list(request):
         qs = CurrencyLedger.objects.filter(user=request.user).filter(
             currency=selected_currency,
             statement_import__account=selected_account,
-        ).select_related('statement_import').prefetch_related(
-            'raw_transactions__logical_transactions__category__group'
+        ).select_related('statement_import').annotate(
+            raw_count=Count('raw_transactions', distinct=True),
+            txn_count=Count('raw_transactions__logical_transactions', distinct=True),
+            total_spent=Sum(
+                'raw_transactions__logical_transactions__amount',
+                filter=Q(raw_transactions__logical_transactions__category__group__slug='expense'),
+            ),
+            total_payments=Abs(Sum(
+                'raw_transactions__logical_transactions__amount',
+                filter=Q(raw_transactions__logical_transactions__category__group__slug='transaction'),
+            )),
+            total_income=Sum(
+                'raw_transactions__logical_transactions__amount',
+                filter=Q(raw_transactions__logical_transactions__category__group__slug='income'),
+            ),
+            total_expenses=Abs(Sum(
+                'raw_transactions__logical_transactions__amount',
+                filter=Q(raw_transactions__logical_transactions__category__group__slug='expense'),
+            )),
         ).order_by(
             '-statement_import__statement_date'
         )
 
         for lg in qs:
-            raw_count = RawTransaction.objects.filter(user=request.user).filter(ledger=lg).count()
-            txns = LogicalTransaction.objects.filter(user=request.user).filter(raw_transaction__ledger=lg).select_related('category__group')
-            lg.raw_count = raw_count
-            lg.txn_count = txns.count()
-            lg.total_spent = sum(t.amount for t in txns if t.category and t.category.group.slug == 'expense')
-            lg.total_payments = abs(sum(t.amount for t in txns if t.category and t.category.group.slug == 'transaction'))
-            lg.total_income = sum(t.amount for t in txns if t.category and t.category.group.slug == 'income')
-            lg.total_expenses = abs(sum(t.amount for t in txns if t.category and t.category.group.slug == 'expense'))
+            lg.total_spent = lg.total_spent or Decimal(0)
+            lg.total_payments = lg.total_payments or Decimal(0)
+            lg.total_income = lg.total_income or Decimal(0)
+            lg.total_expenses = lg.total_expenses or Decimal(0)
             lg.points = lg.statement_import.points_assigned
             lg.currency_symbol = currency_symbol
             lg.decimals = decimals
