@@ -107,43 +107,50 @@ Each `LogicalTransaction` has a `classification_method` field:
 
 ### Prerequisites
 
-- Python 3.10+
-- pip
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose plugin)
+- A `.env` file in the project root (see [Environment Variables](docs/infrastructure/deploy-local/README.md#environment-variables))
 
-### Installation
+### Quick Start
 
 ```bash
 # Clone the repository
 git clone <repo-url>
 cd ProjectFinance
 
-# Create virtual environment
-python -m venv venv
+# Start the full stack (builds on first run)
+docker compose up -d --build
 
-# Activate virtual environment
-# Windows:
-venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
+# Verify both services are running
+docker compose ps
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Create .env file (optional — for secret key, debug settings)
-echo "SECRET_KEY=your-secret-key" > .env
-echo "DEBUG=True" >> .env
-
-# Run migrations
-python manage.py migrate
-
-# Seed categories and rules from YAML
-python manage.py seed_categories
-
-# Start the development server
-python manage.py runserver
+# (Optional) Seed categories and classification rules
+docker compose exec web python manage.py seed_categories
 ```
 
-The app will be available at `http://127.0.0.1:8000/`.
+The entrypoint script automatically waits for PostgreSQL, runs migrations, collects static files, and starts Gunicorn.
+
+The app will be available at `http://localhost:8000/`.
+
+### Common Commands
+
+```bash
+# View logs
+docker compose logs -f web
+
+# Create a superuser
+docker compose exec web python manage.py createsuperuser
+
+# Run any management command
+docker compose exec web python manage.py <command>
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# Reset the database
+docker compose down -v && docker compose up -d
+```
+
+For full local deployment details see [docs/infrastructure/deploy-local/README.md](docs/infrastructure/deploy-local/README.md).
 
 ### Importing Data
 
