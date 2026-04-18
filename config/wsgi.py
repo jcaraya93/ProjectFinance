@@ -1,5 +1,5 @@
 """
-WSGI config for finance project.
+WSGI config for config project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -9,9 +9,9 @@ https://docs.djangoproject.com/en/6.0/howto/deployment/wsgi/
 
 import os
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'finance.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
-from finance.observability import init_observability  # noqa: E402
+from config.observability import init_observability  # noqa: E402
 init_observability()
 
 from django.core.wsgi import get_wsgi_application  # noqa: E402

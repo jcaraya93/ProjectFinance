@@ -6,7 +6,7 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'finance.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
     # Load .env before OTel bootstrap so OTEL_EXPORTER and other env vars
     # are available when the observability module reads them.
@@ -16,7 +16,7 @@ def main():
 
     # Bootstrap OpenTelemetry early so management commands (including
     # runserver's autoreloader) benefit from instrumentation.
-    from finance.observability import init_observability
+    from config.observability import init_observability
     init_observability()
 
     try:

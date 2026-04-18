@@ -55,7 +55,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'finance.urls'
+ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {
@@ -72,7 +72,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'finance.wsgi.application'
+WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # Database
@@ -157,7 +157,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'otel': {
-            '()': 'finance.logging_fmt.OTelFormatter',
+            '()': 'config.logging_fmt.OTelFormatter',
             'format': (
                 '%(asctime)s %(levelname)s [%(name)s] '
                 '[trace=%(otelTraceID)s span=%(otelSpanID)s service=%(otelServiceName)s] '
