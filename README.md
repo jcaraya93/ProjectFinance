@@ -1,6 +1,6 @@
 # Project Finance
 
-A personal finance web application for importing bank statements, classifying transactions, and visualizing spending patterns. Built with Django, SQLite, Bootstrap 5, and Chart.js.
+A personal finance web application for importing bank statements, classifying transactions, and visualizing spending patterns. Built with Django, PostgreSQL, Bootstrap 5, and Chart.js.
 
 ## Features
 
@@ -16,7 +16,7 @@ A personal finance web application for importing bank statements, classifying tr
 | Component | Technology |
 |-----------|-----------|
 | Backend | Django 6+ / Python 3 |
-| Database | SQLite |
+| Database | PostgreSQL 17 |
 | Frontend | Bootstrap 5 (Flatly theme) + Chart.js 4 |
 | CSS | Custom stylesheet + Bootswatch |
 
@@ -24,16 +24,29 @@ A personal finance web application for importing bank statements, classifying tr
 
 ```
 ProjectFinance/
-├── finance/                          # Django project configuration
+├── config/                           # Django project configuration
 │   ├── settings.py
+│   ├── settings_test.py
 │   ├── urls.py
-│   └── wsgi.py
-├── transactions/                     # Main Django app
-│   ├── models.py                     # 10 data models
-│   ├── views.py                      # All view logic (~1,600 lines)
+│   ├── wsgi.py
+│   ├── asgi.py
+│   ├── observability.py              # OpenTelemetry bootstrap
+│   └── logging_fmt.py
+├── core/                             # Main Django app
+│   ├── models.py                     # 13 data models
+│   ├── views/                        # View modules (~2,130 lines total)
+│   │   ├── dashboards.py             # Dashboard views
+│   │   ├── transactions.py           # Transaction CRUD views
+│   │   ├── rules.py                  # Classification rule views
+│   │   ├── categories.py             # Category management views
+│   │   ├── statements.py             # Statement import/list views
+│   │   └── _helpers.py               # Shared view utilities
 │   ├── forms.py                      # Upload, category, rule forms
-│   ├── urls.py                       # 32 URL routes
+│   ├── urls.py                       # 33 URL routes
 │   ├── admin.py                      # Django admin registration
+│   ├── auth_views.py                 # Login, register, logout views
+│   ├── auth_urls.py                  # Authentication URL routing
+│   ├── backends.py                   # Authentication backends
 │   ├── parsers/
 │   │   ├── base.py                   # Base parser interface & data classes
 │   │   ├── credit_card.py            # Credit-2918 CSV parser
@@ -42,18 +55,21 @@ ProjectFinance/
 │   │   ├── classifier.py             # Classification entry point
 │   │   ├── yaml_classifier.py        # Rule matching engine (reads from DB)
 │   │   ├── ai_classifier.py          # AI-assisted classification
+│   │   ├── import_service.py         # Statement import orchestration
 │   │   ├── exchange_rates.py         # CRC↔USD rate fetching & conversion
 │   │   └── stats.py                  # Dashboard aggregation queries
 │   ├── management/commands/
 │   │   ├── seed_categories.py        # Import categories & rules from YAML
-│   │   └── export_rules.py           # Export DB rules back to YAML
-│   ├── templates/transactions/       # 16 HTML templates
-│   ├── static/transactions/          # CSS and JS assets
+│   │   ├── export_rules.py           # Export DB rules back to YAML
+│   │   ├── ai_classify.py            # AI-assisted bulk classification
+│   │   └── rename_app_prep.py        # Migration helper (transactions → core)
+│   ├── templates/core/               # 22 HTML templates (+ 2 auth templates)
+│   ├── static/core/                  # CSS and JS assets
 │   └── templatetags/
 │       └── finance_filters.py        # Custom template filters
-├── Data/                             # Raw CSV statement files (not in git)
-├── classification_rules.yaml         # Rule definitions (synced with DB)
-├── db.sqlite3                        # SQLite database (not in git)
+├── docker/                           # Docker entrypoint and scripts
+├── docs/                             # Architecture and deployment docs
+├── infra/                            # Infrastructure configuration
 ├── requirements.txt
 ├── manage.py
 └── .gitignore
@@ -62,18 +78,23 @@ ProjectFinance/
 ## Data Model
 
 ```
-CategoryGroup                         Account
-├── slug: expense|income|             ├── CreditAccount (card_number)
-│         transfer|unclassified       └── DebitAccount (iban)
-└── Category                               └── StatementImport
-    ├── name, color                            └── CurrencyLedger (CRC|USD)
-    └── ClassificationRule                         └── RawTransaction (immutable)
-        ├── description (keyword match)                └── LogicalTransaction (1:N)
-        ├── account_type                                   ├── description
-        ├── metadata (JSON conditions)                     ├── amount, amount_crc, amount_usd
-        ├── amount_min/max                                 ├── category → Category
-        └── detail                                         ├── classification_method
-                                                           └── matched_rule → ClassificationRule
+User (custom, email-based)            Account (base)
+├── email                             ├── CreditAccount (card_number)
+└── UserPreference                    └── DebitAccount (iban)
+    └── transaction_columns                └── StatementImport
+                                               └── CurrencyLedger (CRC|USD)
+CategoryGroup                                      └── RawTransaction (immutable)
+├── slug: expense|income|                              └── LogicalTransaction (1:N)
+│         transfer|unclassified                            ├── description
+└── Category                                               ├── amount, amount_crc, amount_usd
+    ├── name, color                                        ├── category → Category
+    └── ClassificationRule                                 ├── classification_method
+        ├── description (keyword match)                    └── matched_rule → ClassificationRule
+        ├── account_type
+        ├── metadata (JSON conditions)
+        ├── amount_min/max
+        └── detail
+
 ExchangeRate
 ├── date
 └── usd_to_crc
@@ -183,6 +204,8 @@ Metadata fields `transaction_code` and `reference_number` are extracted per tran
 |---------|-------------|
 | `python manage.py seed_categories` | Import categories, groups, and rules from `classification_rules.yaml` into the database. Only imports rules if the DB has none. |
 | `python manage.py export_rules` | Export current DB rules back to `classification_rules.yaml`. |
+| `python manage.py ai_classify` | Classify unclassified transactions using Google Gemini AI. Supports `--dry-run`. |
+| `python manage.py rename_app_prep` | Migration helper to update `django_migrations` table after the app rename from `transactions` to `core`. |
 
 ## URL Routes
 
@@ -196,30 +219,54 @@ Metadata fields `transaction_code` and `reference_number` are extracted per tran
 | `/car/gas/` | Gas expenses dashboard |
 | `/car/parking/` | Parking expenses dashboard |
 | `/income/salary/` | Salary income dashboard |
+| `/transaction-health/` | Transaction health dashboard |
+| `/rule-matching/` | Rule matching dashboard |
+| `/default-buckets/` | Default buckets dashboard |
 
 ### Transactions
 | URL | Description |
 |-----|-------------|
 | `/transactions/` | Transaction list with filters, sorting, bulk actions |
 | `/transactions/<id>/edit/` | Edit a transaction (description, category, split) |
-| `/transactions/<id>/update-category/` | AJAX inline category update |
+| `/transactions/<id>/split/` | Split a transaction into sub-transactions |
+| `/transactions/<id>/unsplit/` | Unsplit a previously split transaction |
 | `/transactions/bulk-update-category/` | Bulk category assignment |
 
 ### Statements
 | URL | Description |
 |-----|-------------|
 | `/upload/` | Upload CSV files |
+| `/upload/file/` | File upload API endpoint |
 | `/statements/` | List imported statements |
+| `/statements/purge/` | Purge all imported data |
 
 ### Categories & Rules
 | URL | Description |
 |-----|-------------|
 | `/categories/` | Category management |
+| `/categories/add/` | Add a new category |
+| `/categories/delete/` | Delete a category |
+| `/categories/rename/` | Rename a category |
+| `/categories/export/` | Export categories |
+| `/categories/import/` | Import categories |
 | `/rules/` | Classification rules list |
 | `/rules/add/` | Add a new rule |
 | `/rules/<id>/edit/` | Edit a rule |
+| `/rules/<id>/delete/` | Delete a rule |
 | `/rules/reclassify/` | Re-run all rules on non-manual transactions |
 | `/rules/classify-unclassified/` | Run rules only on unclassified transactions |
+
+### User Preferences
+| URL | Description |
+|-----|-------------|
+| `/preferences/transaction-columns/` | Save transaction column visibility |
+
+### Authentication
+| URL | Description |
+|-----|-------------|
+| `/auth/login/` | User login |
+| `/auth/register/` | User registration |
+| `/auth/logout/` | User logout |
 
 ## Transaction List Features
 
