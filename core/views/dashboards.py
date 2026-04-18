@@ -1,3 +1,4 @@
+import functools
 import json
 import time
 from datetime import date
@@ -23,32 +24,48 @@ __all__ = [
 ]
 
 
-@login_required
-def dashboard(request):
+def dashboard_view(name, template, default_time_group='monthly'):
+    """Decorator that handles common dashboard boilerplate:
+    - login_required
+    - OpenTelemetry span + duration metric
+    - display_currency and time_group query params
+    """
+    def decorator(view_func):
+        @login_required
+        @functools.wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            with tracer.start_as_current_span(f"view.{name}") as span:
+                t0 = time.monotonic()
+                display_currency = request.GET.get('display_currency', 'CRC')
+                time_group = request.GET.get('time_group', default_time_group)
+
+                context = view_func(request, display_currency=display_currency, time_group=time_group, *args, **kwargs)
+
+                context.setdefault('display_currency', display_currency)
+                context.setdefault('time_group', time_group)
+
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                span.set_attribute("dashboard.type", name)
+                dashboard_duration.record(elapsed_ms, {"dashboard": name})
+                return render(request, template, context)
+        return wrapper
+    return decorator
+
+
+@dashboard_view("overview", "core/dashboard.html", default_time_group="biweekly")
+def dashboard(request, display_currency, time_group):
     """Overview dashboard — last 12 months, no user filters."""
-    with tracer.start_as_current_span("view.dashboard") as span:
-        t0 = time.monotonic()
-        from datetime import timedelta
-        display_currency = request.GET.get('display_currency', 'CRC')
-        time_group = request.GET.get('time_group', 'biweekly')
+    from datetime import timedelta
+    today = date.today()
+    start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1).isoformat()
 
-        today = date.today()
-        start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1).isoformat()
-
-        context = get_dashboard_stats(request.user, 
-            start_date=start_12m,
-            display_currency=display_currency,
-            time_group=time_group,
-        )
-
-        context['display_currency'] = display_currency
-        context['time_group'] = time_group
-        context['privacy'] = request.GET.get('privacy', '1') != '0'
-
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        span.set_attribute("dashboard.type", "overview")
-        dashboard_duration.record(elapsed_ms, {"dashboard": "overview"})
-        return render(request, 'core/dashboard.html', context)
+    context = get_dashboard_stats(request.user,
+        start_date=start_12m,
+        display_currency=display_currency,
+        time_group=time_group,
+    )
+    context['privacy'] = request.GET.get('privacy', '1') != '0'
+    return context
 
 
 @login_required
@@ -352,40 +369,30 @@ def default_buckets_dashboard(request):
     return render(request, 'core/dashboard_default_buckets.html', context)
 
 
-@login_required
-def spending_income_dashboard(request):
+@dashboard_view("spending_income", "core/dashboard_spending_income.html")
+def spending_income_dashboard(request, display_currency, time_group):
     """Spending & Income breakdown dashboard — last 12 months."""
     from datetime import timedelta
-    display_currency = request.GET.get('display_currency', 'CRC')
-
     today = date.today()
     start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1).isoformat()
 
-    context = get_dashboard_stats(request.user, 
+    return get_dashboard_stats(request.user,
         start_date=start_12m,
         display_currency=display_currency,
     )
 
-    context['display_currency'] = display_currency
-    return render(request, 'core/dashboard_spending_income.html', context)
 
-
-@login_required
-def chart_comparison(request):
+@dashboard_view("chart_comparison", "core/chart_comparison.html")
+def chart_comparison(request, display_currency, time_group):
     """Temporary test page to compare chart types for category expenses over time."""
     from datetime import timedelta
-    display_currency = request.GET.get('display_currency', 'CRC')
-
     today = date.today()
     start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1).isoformat()
 
-    context = get_dashboard_stats(request.user, 
+    return get_dashboard_stats(request.user,
         start_date=start_12m,
         display_currency=display_currency,
     )
-
-    context['display_currency'] = display_currency
-    return render(request, 'core/chart_comparison.html', context)
 
 
 @login_required
