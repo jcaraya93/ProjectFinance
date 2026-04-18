@@ -1,0 +1,18 @@
+Número de Clientes, Nombre, Producto, Moneda, Saldo Inicial, Saldo en Libros, Retenidos y Diferidos, Saldo Disponible, Fecha, STBGAV, STBUNC, Mensaje1, Mensaje2, Mensaje3, Mensaje4, Mensaje5, Mensaje6 
+1234567, MARIA FERNANDEZ LOPEZ, CR61010200001234567890, CRC, 100000.00, 250000.00, 0.00, 250000.00, 28/02/2025, 250000.00, 0.00, , , , , ,  
+
+Detalle de Estado Bancario
+Fecha de Transacción, Referencia de Transacción, Código de Transacción, Descripción de Transacción, Débito de Transacción, Crédito de Transacción, Balance de Transacción 
+01/02/2025, 900123456, TF, SINPE MOVIL Pago_Alquiler_____   , 50000.00, 0.00, 50000.00 
+05/02/2025, 900234567, MC, CD SINPE SALARIO EMPRESA XYZ   , 0.00, 300000.00, 350000.00 
+10/02/2025, 900345678, TS, SINPE MOVIL Comida____________   , 15000.00, 0.00, 335000.00 
+15/02/2025, 12345678, PT, PAGO 4000-00**-****-1234         , 80000.00, 0.00, 255000.00 
+20/02/2025, 900456789, TF, TEF A : 950519595             , 5000.00, 0.00, 250000.00 
+
+Resumen de Estado Bancario
+Código Transacción Totales , Cantidad Débitos Totales, Montos Débitos Totales, Cantidad Créditos Totales, Montos Créditos Totales 
+TF, 2, 55000.00, 0, 0.00 
+MC, 0, 0.00, 1, 300000.00 
+TS, 1, 15000.00, 0, 0.00 
+PT, 1, 80000.00, 0, 0.00 
+Total, 4, 150000.00, 1, 300000.00 
