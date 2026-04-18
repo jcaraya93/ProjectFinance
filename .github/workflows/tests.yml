@@ -28,5 +28,6 @@ jobs:
       - name: Run tests
         env:
           DJANGO_SETTINGS_MODULE: config.settings_test
+          DJANGO_SECRET_KEY: test-secret-key-for-ci
           OTEL_EXPORTER: console
         run: pytest core/tests/ -v --tb=short
