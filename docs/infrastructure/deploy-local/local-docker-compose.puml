@@ -8,6 +8,10 @@ skinparam rectangle {
 
 cloud "Browser" as browser
 
+cloud "Grafana Cloud" as grafana #Orange {
+  rectangle "Logs · Traces · Metrics" as telemetry
+}
+
 package "Docker Compose" {
   rectangle "**web**\nDjango + Gunicorn\nPort 8000" as web #LightBlue
 
@@ -24,31 +28,11 @@ package "Docker Compose" {
     Volume: pgdata
     Healthcheck: pg_isready
   end note
-
-  rectangle "**otel-collector**\nOpenTelemetry Collector\nPorts 4317, 4318" as otel #LightYellow
-
-  package "Observability Stack" {
-    rectangle "**Grafana**\nGrafana 12\nPort 3000" as grafana #Orange
-    rectangle "**Loki**\nLoki 3.5\nPort 3100" as loki #Orchid
-    rectangle "**Tempo**\nTempo 2.7\nPort 3200" as tempo #Salmon
-    database "**Prometheus**\nPrometheus 3.4\nPort 9090" as prometheus #Coral
-  }
 }
 
 browser --> web : "HTTP :8000"
-browser ---> grafana : "HTTP :3000"
 
 web ---> db : "TCP :5432\n(PostgreSQL)"
-web ---> otel : "gRPC :4317\n(OTLP traces,\nmetrics, logs)"
-
-otel -up-> loki : "HTTP\n(logs)"
-otel -up-> tempo : "gRPC\n(traces)"
-otel .up.> prometheus : "scrape :8889\n(metrics)"
-
-grafana ---> loki : "query logs"
-grafana ---> tempo : "query traces"
-grafana ---> prometheus : "query metrics"
-
-
+web ---> telemetry : "OTLP/HTTP\n(traces, metrics, logs)"
 
 @enduml
