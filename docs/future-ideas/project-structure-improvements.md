@@ -111,13 +111,13 @@ dashboards/        ← Views + templates only
 
 ## Recommended Order
 
-| # | Improvement | Effort | Impact |
-|---|---|---|---|
-| 1 | Split views.py into modules | Low | Immediate maintainability |
-| 2 | Add tests for parsers + classifier | Medium | Protects core logic correctness |
-| 3 | Extract inline JS to static files | Low | Cleaner templates, easier HTMX migration |
-| 4 | Dashboard view boilerplate reduction | Low | Less repetition across 10 views |
-| 5 | Fix rate limiter process isolation | Low | Correct enforcement under multi-worker |
-| 6 | Split into multiple Django apps | High | Only if project grows significantly |
+| # | Improvement | Effort | Impact | Status |
+|---|---|---|---|---|
+| 1 | ~~Split views.py into modules~~ | Low | Immediate maintainability | ✅ Done |
+| 2 | ~~Add tests for parsers + classifier~~ | Medium | Protects core logic correctness | ✅ Done |
+| 3 | Extract inline JS to static files | Low | Cleaner templates, easier HTMX migration | |
+| 4 | Dashboard view boilerplate reduction | Low | Less repetition across 10 views | |
+| 5 | Fix rate limiter process isolation | Low | Correct enforcement under multi-worker | |
+| 6 | Split into multiple Django apps | High | Only if project grows significantly | |
 
-Items 1–3 are independent and set the foundation for HTMX adoption, API layer, and future features.
+Items 1–2 completed. Items 3–5 are independent and set the foundation for HTMX adoption.
