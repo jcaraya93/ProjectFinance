@@ -38,6 +38,26 @@ TABLES = [
 ]
 
 
+def rename_tables(apps, schema_editor):
+    """Rename tables from transactions_ to core_ prefix (PostgreSQL only)."""
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    for t in TABLES:
+        schema_editor.execute(
+            f'ALTER TABLE IF EXISTS transactions_{t} RENAME TO core_{t};'
+        )
+
+
+def revert_tables(apps, schema_editor):
+    """Revert table renames from core_ to transactions_ prefix (PostgreSQL only)."""
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    for t in TABLES:
+        schema_editor.execute(
+            f'ALTER TABLE IF EXISTS core_{t} RENAME TO transactions_{t};'
+        )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -47,10 +67,5 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(rename_content_types, revert_content_types),
-    ] + [
-        migrations.RunSQL(
-            f'ALTER TABLE IF EXISTS transactions_{t} RENAME TO core_{t};',
-            f'ALTER TABLE IF EXISTS core_{t} RENAME TO transactions_{t};',
-        )
-        for t in TABLES
+        migrations.RunPython(rename_tables, revert_tables),
     ]
