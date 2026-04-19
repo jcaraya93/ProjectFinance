@@ -344,8 +344,12 @@
   <form method="post" action="{% url 'core:bulk_update_category' %}" class="d-flex align-items-center justify-content-center gap-3">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <input type="hidden" name="select_all_matching" id="selectAllMatchingInput" value="">
+    <input type="hidden" name="filter_qs" value="{{ pagination_qs }}">
     <div id="bulkIds"></div>
     <span id="bulkCount" class="fw-bold">0 selected</span>
+    <a href="#" id="selectAllMatching" class="text-light text-decoration-underline small d-none">Select all {{ page_obj.paginator.count }} matching</a>
+    <a href="#" id="clearAllMatching" class="text-light text-decoration-underline small d-none">Clear selection</a>
     <select name="category_id" class="form-select form-select-sm bg-white" style="width: 250px;" required>
       {% for grp in category_groups %}
       <optgroup label="{{ grp.name }}">
@@ -355,7 +359,7 @@
       </optgroup>
       {% endfor %}
     </select>
-    <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+    <button type="submit" class="btn btn-sm btn-primary">Assign Category</button>
     <button type="button" class="btn btn-sm btn-outline-light" id="bulkCancel">Cancel</button>
   </form>
 </div>

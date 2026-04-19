@@ -140,32 +140,73 @@ advPanel.addEventListener('hidden.bs.collapse', function() { advField.value = ''
   var bulkBar = document.getElementById('bulkBar');
   var bulkIds = document.getElementById('bulkIds');
   var bulkCount = document.getElementById('bulkCount');
+  var selectAllMatchingLink = document.getElementById('selectAllMatching');
+  var clearAllMatchingLink = document.getElementById('clearAllMatching');
+  var selectAllMatchingInput = document.getElementById('selectAllMatchingInput');
+  var allMatchingMode = false;
+  var totalCount = parseInt(selectAllMatchingLink.textContent.match(/\d+/)) || 0;
+  var pageCount = checkboxes.length;
 
   function updateBulkBar() {
     var checked = document.querySelectorAll('.txn-select:checked');
-    if (checked.length > 0) {
+    if (checked.length > 0 || allMatchingMode) {
       bulkBar.classList.remove('d-none');
-      bulkCount.textContent = checked.length + ' selected';
-      bulkIds.innerHTML = '';
-      checked.forEach(function(cb) {
-        var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'txn_ids';
-        input.value = cb.value;
-        bulkIds.appendChild(input);
-      });
+
+      if (allMatchingMode) {
+        bulkCount.textContent = 'All ' + totalCount + ' matching selected';
+        selectAllMatchingLink.classList.add('d-none');
+        clearAllMatchingLink.classList.remove('d-none');
+        bulkIds.innerHTML = '';
+        selectAllMatchingInput.value = '1';
+      } else {
+        bulkCount.textContent = checked.length + ' selected';
+        selectAllMatchingInput.value = '';
+        clearAllMatchingLink.classList.add('d-none');
+        // Show "Select all matching" when all on page are checked and there are more pages
+        if (checked.length === pageCount && totalCount > pageCount) {
+          selectAllMatchingLink.classList.remove('d-none');
+        } else {
+          selectAllMatchingLink.classList.add('d-none');
+        }
+        bulkIds.innerHTML = '';
+        checked.forEach(function(cb) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'txn_ids';
+          input.value = cb.value;
+          bulkIds.appendChild(input);
+        });
+      }
     } else {
       bulkBar.classList.add('d-none');
+      selectAllMatchingLink.classList.add('d-none');
+      clearAllMatchingLink.classList.add('d-none');
     }
   }
 
+  selectAllMatchingLink.addEventListener('click', function(e) {
+    e.preventDefault();
+    allMatchingMode = true;
+    updateBulkBar();
+  });
+
+  clearAllMatchingLink.addEventListener('click', function(e) {
+    e.preventDefault();
+    allMatchingMode = false;
+    selectAll.checked = false;
+    checkboxes.forEach(function(cb) { cb.checked = false; });
+    updateBulkBar();
+  });
+
   selectAll.addEventListener('change', function() {
+    allMatchingMode = false;
     checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
     updateBulkBar();
   });
 
   checkboxes.forEach(function(cb) {
     cb.addEventListener('change', function() {
+      allMatchingMode = false;
       if (!cb.checked) selectAll.checked = false;
       else if (document.querySelectorAll('.txn-select:checked').length === checkboxes.length) selectAll.checked = true;
       updateBulkBar();
@@ -173,6 +214,7 @@ advPanel.addEventListener('hidden.bs.collapse', function() { advField.value = ''
   });
 
   document.getElementById('bulkCancel').addEventListener('click', function() {
+    allMatchingMode = false;
     selectAll.checked = false;
     checkboxes.forEach(function(cb) { cb.checked = false; });
     updateBulkBar();

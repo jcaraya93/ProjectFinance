@@ -29,6 +29,78 @@ __all__ = [
 ]
 
 
+def _apply_transaction_filters(qs, params):
+    """Apply transaction list filters from query params to a queryset."""
+    from django.db.models import Q
+
+    start_date = params.get('start_date')
+    end_date = params.get('end_date')
+    categories = params.getlist('category')
+    wallet_ids = params.getlist('wallet')
+    groups = params.getlist('group')
+    search = params.get('search', '').strip()
+    meta_filters = params.getlist('meta')
+    cls_methods = params.getlist('cls_method')
+    rule_ids = [r for r in params.getlist('rule') if r.strip()]
+    statement_ids = [s for s in params.getlist('statement') if s.strip()]
+    amount_min = params.get('amount_min', '').strip()
+    amount_max = params.get('amount_max', '').strip()
+    transaction_code = params.get('transaction_code', '').strip()
+    reference_number = params.get('reference_number', '').strip()
+
+    if start_date:
+        qs = qs.filter(date__gte=start_date)
+    if end_date:
+        qs = qs.filter(date__lte=end_date)
+    if categories:
+        qs = qs.filter(category_id__in=categories)
+    if groups:
+        qs = qs.filter(category__group__slug__in=groups)
+    if wallet_ids:
+        wallet_q = Q()
+        for w in wallet_ids:
+            parts = w.split(':')
+            if len(parts) == 2:
+                wallet_q |= Q(raw_transaction__ledger__statement_import__account_id=parts[0], raw_transaction__ledger__currency=parts[1])
+        if wallet_q:
+            qs = qs.filter(wallet_q)
+    if search:
+        qs = qs.filter(description__icontains=search)
+    if meta_filters:
+        meta_by_key = {}
+        for mf in meta_filters:
+            if ':' in mf:
+                mk, mv = mf.split(':', 1)
+                meta_by_key.setdefault(mk, []).append(mv)
+        for mk, mvs in meta_by_key.items():
+            q = Q()
+            for mv in mvs:
+                q |= Q(**{f'raw_transaction__account_metadata__{mk}': mv})
+            qs = qs.filter(q)
+    if cls_methods:
+        qs = qs.filter(classification_method__in=cls_methods)
+    if rule_ids:
+        qs = qs.filter(matched_rule_id__in=rule_ids)
+    if statement_ids:
+        qs = qs.filter(raw_transaction__ledger__statement_import_id__in=statement_ids)
+    if amount_min:
+        try:
+            qs = qs.filter(amount__gte=amount_min)
+        except (ValueError, Exception):
+            pass
+    if amount_max:
+        try:
+            qs = qs.filter(amount__lte=amount_max)
+        except (ValueError, Exception):
+            pass
+    if transaction_code:
+        qs = qs.filter(raw_transaction__account_metadata__transaction_code=transaction_code)
+    if reference_number:
+        qs = qs.filter(raw_transaction__account_metadata__reference_number=reference_number)
+
+    return qs
+
+
 @login_required
 def transaction_list(request):
     from django.db.models import Count, Subquery, OuterRef
@@ -47,12 +119,11 @@ def transaction_list(request):
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     categories = request.GET.getlist('category')
-    wallet_ids = request.GET.getlist('wallet')  # account_id:currency combos
+    wallet_ids = request.GET.getlist('wallet')
     groups = request.GET.getlist('group')
     search = request.GET.get('search', '').strip()
-    meta_filters = request.GET.getlist('meta')  # format: "key:value" (from dropdown filters)
-    cls_methods = request.GET.getlist('cls_method')  # classification method filter
-    # Advanced metadata search (key-value pairs)
+    meta_filters = request.GET.getlist('meta')
+    cls_methods = request.GET.getlist('cls_method')
     adv_meta_keys = request.GET.getlist('meta_key')
     adv_meta_values = request.GET.getlist('meta_value')
     advanced_meta_filters = []
@@ -60,73 +131,25 @@ def transaction_list(request):
         k, v = k.strip(), v.strip()
         if k and v:
             advanced_meta_filters.append({'key': k, 'value': v})
-    # Rule ID filters
     rule_ids = [r for r in request.GET.getlist('rule') if r.strip()]
     statement_ids = [s for s in request.GET.getlist('statement') if s.strip()]
-    split_filter = request.GET.get('split', '').strip()  # 'yes', 'no', or ''
+    split_filter = request.GET.get('split', '').strip()
     amount_min = request.GET.get('amount_min', '').strip()
     amount_max = request.GET.get('amount_max', '').strip()
     transaction_code = request.GET.get('transaction_code', '').strip()
     reference_number = request.GET.get('reference_number', '').strip()
 
-    if start_date:
-        qs = qs.filter(date__gte=start_date)
-    if end_date:
-        qs = qs.filter(date__lte=end_date)
-    if categories:
-        qs = qs.filter(category_id__in=categories)
-    if groups:
-        qs = qs.filter(category__group__slug__in=groups)
-    if wallet_ids:
-        from django.db.models import Q
-        wallet_q = Q()
-        for w in wallet_ids:
-            parts = w.split(':')
-            if len(parts) == 2:
-                wallet_q |= Q(raw_transaction__ledger__statement_import__account_id=parts[0], raw_transaction__ledger__currency=parts[1])
-        if wallet_q:
-            qs = qs.filter(wallet_q)
-    if search:
-        qs = qs.filter(description__icontains=search)
-    if meta_filters:
-        from django.db.models import Q
-        # Group by key, OR values within same key
-        meta_by_key = {}
-        for mf in meta_filters:
-            if ':' in mf:
-                mk, mv = mf.split(':', 1)
-                meta_by_key.setdefault(mk, []).append(mv)
-        for mk, mvs in meta_by_key.items():
-            q = Q()
-            for mv in mvs:
-                q |= Q(**{f'raw_transaction__account_metadata__{mk}': mv})
-            qs = qs.filter(q)
-    if cls_methods:
-        qs = qs.filter(classification_method__in=cls_methods)
+    qs = _apply_transaction_filters(qs, request.GET)
+
+    # Advanced metadata filters (key-value pairs from advanced search)
     for amf in advanced_meta_filters:
         qs = qs.filter(**{f'raw_transaction__account_metadata__{amf["key"]}': amf['value']})
-    if rule_ids:
-        qs = qs.filter(matched_rule_id__in=rule_ids)
-    if statement_ids:
-        qs = qs.filter(raw_transaction__ledger__statement_import_id__in=statement_ids)
+
+    # Split filter (requires the split_count annotation)
     if split_filter == 'yes':
         qs = qs.filter(split_count__gt=1)
     elif split_filter == 'no':
         qs = qs.filter(split_count=1)
-    if amount_min:
-        try:
-            qs = qs.filter(amount__gte=amount_min)
-        except (ValueError, Exception):
-            pass
-    if amount_max:
-        try:
-            qs = qs.filter(amount__lte=amount_max)
-        except (ValueError, Exception):
-            pass
-    if transaction_code:
-        qs = qs.filter(raw_transaction__account_metadata__transaction_code=transaction_code)
-    if reference_number:
-        qs = qs.filter(raw_transaction__account_metadata__reference_number=reference_number)
 
     # Sorting
     SORT_FIELDS = {
@@ -246,24 +269,47 @@ def save_transaction_columns(request):
 @require_POST
 @ratelimit(key='bulk_category', rate='30/m', method='POST')
 def bulk_update_category(request):
-    """Bulk assign a category to multiple transactions (same logic as manual single update)."""
-    txn_ids = request.POST.getlist('txn_ids')
+    """Bulk assign a category to multiple transactions.
+
+    Supports two modes:
+    - Individual IDs via txn_ids (checkbox selection)
+    - All matching via select_all_matching=1 (re-applies current filters)
+    """
     category_id = request.POST.get('category_id')
     next_url = _safe_next_url(request)
+    select_all_matching = request.POST.get('select_all_matching') == '1'
 
-    if not txn_ids or not category_id:
-        messages.error(request, 'No transactions or category selected.')
+    if not category_id:
+        messages.error(request, 'No category selected.')
         return redirect(next_url or 'core:transaction_list')
 
     cat = get_object_or_404(Category.objects.filter(user=request.user).select_related('group'), pk=category_id)
     is_unclassified = cat.group.slug == 'unclassified' and cat.name == 'Default'
     method = 'unclassified' if is_unclassified else 'manual'
 
-    updated = Transaction.objects.filter(user=request.user).filter(pk__in=txn_ids).update(
-        category=cat,
-        classification_method=method,
-        matched_rule=None,
-    )
+    if select_all_matching:
+        # Re-apply filters from the query string to get all matching transaction IDs
+        from django.http import QueryDict
+        filter_qs = request.POST.get('filter_qs', '')
+        params = QueryDict(filter_qs)
+        qs = Transaction.objects.filter(user=request.user)
+        qs = _apply_transaction_filters(qs, params)
+        updated = qs.update(
+            category=cat,
+            classification_method=method,
+            matched_rule=None,
+        )
+    else:
+        txn_ids = request.POST.getlist('txn_ids')
+        if not txn_ids:
+            messages.error(request, 'No transactions selected.')
+            return redirect(next_url or 'core:transaction_list')
+        updated = Transaction.objects.filter(user=request.user, pk__in=txn_ids).update(
+            category=cat,
+            classification_method=method,
+            matched_rule=None,
+        )
+
     messages.success(request, f'{updated} transaction{"s" if updated != 1 else ""} updated to {cat.name}.')
     return redirect(next_url or 'core:transaction_list')
 
