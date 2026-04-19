@@ -9,14 +9,13 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.utils.http import urlencode
-from django.db.models import Prefetch
 
 from ..models import (
     Transaction, LogicalTransaction, RawTransaction, Category,
     CategoryGroup, CurrencyLedger, ClassificationRule, UserPreference,
 )
 from ..ratelimit import ratelimit
-from ._helpers import _safe_next_url
+from ._helpers import _safe_next_url, get_category_groups
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +153,8 @@ def transaction_list(request):
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    from ..models import CategoryGroup, CurrencyLedger
-    category_groups = CategoryGroup.objects.prefetch_related(Prefetch('categories', queryset=Category.objects.filter(user=request.user))).all()
+    from ..models import CurrencyLedger
+    category_groups = get_category_groups(request.user)
 
     # Build virtual wallet list (account + currency combos)
     wallets = (
@@ -275,7 +274,7 @@ def edit_transaction(request, raw_id):
     from decimal import Decimal, InvalidOperation
     raw = get_object_or_404(RawTransaction, pk=raw_id, user=request.user)
     logical_txns = list(raw.logical_transactions.select_related('category__group').order_by('pk'))
-    category_groups = CategoryGroup.objects.prefetch_related(Prefetch('categories', queryset=Category.objects.filter(user=request.user))).all()
+    category_groups = get_category_groups(request.user)
     is_split = len(logical_txns) > 1
     next_url = _safe_next_url(request)
 

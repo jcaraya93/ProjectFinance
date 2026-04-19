@@ -4,13 +4,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.utils.http import urlencode
-from django.db.models import Prefetch
 
 from ..models import Transaction, Category, CategoryGroup, ClassificationRule
 from ..forms import YamlRuleForm
 from ..ratelimit import ratelimit
 from ..services.yaml_classifier import load_yaml, save_yaml, reload_rules as _reload_yaml
-from ._helpers import _safe_next_url
+from ._helpers import _safe_next_url, get_category_groups
 
 __all__ = [
     'yaml_rule_list',
@@ -62,7 +61,7 @@ def yaml_rule_list(request):
     """List, filter, and search classification rules."""
     # Build group->categories from DB
     group_categories = {}
-    for grp in CategoryGroup.objects.prefetch_related(Prefetch('categories', queryset=Category.objects.filter(user=request.user))).exclude(slug='unclassified').order_by('name'):
+    for grp in get_category_groups(request.user, exclude_unclassified=True):
         cats = sorted(
             [c.name for c in grp.categories.all()],
             key=lambda x: (x == 'Default', x)
