@@ -162,7 +162,58 @@
 
 <div class="d-flex justify-content-between align-items-center mb-2">
   <p class="text-muted small mb-0">{{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }}</p>
-  <div class="dropdown">
+  <div class="d-flex gap-2 align-items-center">
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        Apply Rules
+      </button>
+      <div class="dropdown-menu">
+        <form method="post" action="{% url 'core:classify_unclassified' %}">
+          {% csrf_token %}
+          <button type="submit" class="dropdown-item">Apply to Unclassified</button>
+        </form>
+        <form method="post" action="{% url 'core:reclassify_all' %}">
+          {% csrf_token %}
+          <button type="submit" class="dropdown-item"
+                  onclick="return confirm('This will reset all non-manual classifications and re-apply all rules. Continue?')">
+            Apply to All
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        Reset
+      </button>
+      <div class="dropdown-menu dropdown-menu-end">
+        <form method="post" action="{% url 'core:clear_classifications' %}">
+          {% csrf_token %}
+          <input type="hidden" name="method" value="rule">
+          <button type="submit" class="dropdown-item"
+                  onclick="return confirm('Clear all rule-based classifications? Those transactions will become unclassified.')">
+            Clear Rule Classifications
+          </button>
+        </form>
+        <form method="post" action="{% url 'core:clear_classifications' %}">
+          {% csrf_token %}
+          <input type="hidden" name="method" value="manual">
+          <button type="submit" class="dropdown-item"
+                  onclick="return confirm('Clear all manual classifications? Those transactions will become unclassified.')">
+            Clear Manual Classifications
+          </button>
+        </form>
+        <div class="dropdown-divider"></div>
+        <form method="post" action="{% url 'core:clear_classifications' %}">
+          {% csrf_token %}
+          <input type="hidden" name="method" value="all">
+          <button type="submit" class="dropdown-item text-danger"
+                  onclick="return confirm('Clear ALL classifications (rule + manual)? All transactions will become unclassified.')">
+            Clear All Classifications
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="dropdown">
     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
       Columns
     </button>
@@ -194,11 +245,10 @@
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
         <input type="checkbox" class="form-check-input col-toggle" data-col="9" checked> Actions
       </label>
+      </div>
     </div>
   </div>
 </div>
-
-<!-- Transaction table -->
 <div class="table-responsive">
   <table class="table table-hover align-middle">
     <thead class="table-light">

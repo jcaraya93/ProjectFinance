@@ -77,7 +77,7 @@
             ? '<br><small class="text-warning">' + data.warnings.join('<br>') + '</small>' : '';
           row.innerHTML = '<span class="fw-semibold">' + file.name + '</span>' +
             '<span class="ms-auto text-success small">' +
-              data.transaction_count + ' txns &middot; ' + data.classified_count + ' classified &middot; ' + data.elapsed_ms + 'ms' +
+              data.transaction_count + ' txns &middot; ' + data.elapsed_ms + 'ms' +
             '</span>' + warnings;
           imported++;
           totalTxns += data.transaction_count;

@@ -16,8 +16,10 @@ __all__ = [
     'yaml_rule_add',
     'yaml_rule_edit',
     'yaml_rule_delete',
+    'delete_all_rules',
     'reclassify_all',
     'classify_unclassified',
+    'clear_classifications',
     'yaml_category_add',
     'yaml_category_delete',
     'yaml_category_delete_all',
@@ -286,6 +288,24 @@ def yaml_rule_delete(request, idx):
 
 @login_required
 @require_POST
+def delete_all_rules(request):
+    """Delete all classification rules. Resets rule-classified transactions to unclassified."""
+    unclassified = Category.get_unclassified(request.user)
+    rules = ClassificationRule.objects.filter(user=request.user)
+    rule_count = rules.count()
+
+    Transaction.objects.filter(user=request.user, classification_method='rule').update(
+        category=unclassified, matched_rule=None, classification_method='unclassified'
+    )
+    rules.delete()
+    _reload_yaml()
+
+    messages.success(request, f'Deleted {rule_count} rules. Affected transactions moved to Unclassified.')
+    return redirect('core:yaml_rule_list')
+
+
+@login_required
+@require_POST
 def reclassify_all(request):
     """Reset non-manual transactions to Unclassified, then re-apply all rules."""
     unclassified = Category.get_unclassified(request.user)
@@ -303,8 +323,8 @@ def reclassify_all(request):
     )
     manual_count = Transaction.objects.filter(user=request.user).filter(classification_method='manual').count()
     remaining = total - classified
-    messages.success(request, f'Reclassified {classified} transactions. {remaining} unclassified, {manual_count} manual (untouched).')
-    return redirect('core:yaml_rule_list')
+    messages.success(request, f'Rules applied: {classified} transactions classified. {remaining} unclassified, {manual_count} manual (untouched).')
+    return redirect('core:transaction_list')
 
 
 @login_required
@@ -318,8 +338,36 @@ def classify_unclassified(request):
         )
     )
     remaining = Transaction.objects.filter(user=request.user).filter(classification_method='unclassified').count()
-    messages.success(request, f'Classified {classified} transactions. {remaining} remain unclassified.')
-    return redirect('core:yaml_rule_list')
+    messages.success(request, f'Rules applied: {classified} transactions classified. {remaining} remain unclassified.')
+    return redirect('core:transaction_list')
+
+
+@login_required
+@require_POST
+def clear_classifications(request):
+    """Clear classifications by method (rule, manual, or all)."""
+    method = request.POST.get('method', '')
+    unclassified = Category.get_unclassified(request.user)
+
+    qs = Transaction.objects.filter(user=request.user)
+    if method == 'rule':
+        qs = qs.filter(classification_method='rule')
+        label = 'rule-based'
+    elif method == 'manual':
+        qs = qs.filter(classification_method='manual')
+        label = 'manual'
+    elif method == 'all':
+        qs = qs.exclude(classification_method='unclassified')
+        label = 'all'
+    else:
+        messages.error(request, 'Invalid classification method.')
+        return redirect('core:transaction_list')
+
+    count = qs.update(
+        category=unclassified, matched_rule=None, classification_method='unclassified'
+    )
+    messages.success(request, f'Cleared {count} {label} classifications.')
+    return redirect('core:transaction_list')
 
 
 @login_required

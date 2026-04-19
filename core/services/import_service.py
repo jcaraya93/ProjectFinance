@@ -19,11 +19,9 @@ from core.models import (
 )
 from core.parsers.credit_card import CreditCardParser
 from core.parsers.debit_card import DebitCardParser
-from core.services.yaml_classifier import load_rules, _match_rule, _rule_phase, reload_rules
 from core.services.exchange_rates import fetch_rates, get_rate
 from core.instrumentation import (
     tracer, transactions_imported, upload_duration,
-    classification_result, classification_duration,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,7 +32,6 @@ class ImportResult:
     filename: str
     card_type: str
     transaction_count: int = 0
-    classified_count: int = 0
     converted_count: int = 0
     warnings: list = field(default_factory=list)
     skipped: bool = False
@@ -47,46 +44,6 @@ def detect_card_type(content: str) -> str:
     if first_line.startswith('Pro') or '5466-' in content[:500]:
         return 'credit'
     return 'debit'
-
-
-def _classify_in_memory(txn_obj, rules, unclassified):
-    """Classify a LogicalTransaction object in memory using pre-loaded rules.
-
-    Sets category, matched_rule, and classification_method directly on the
-    object without saving to the database.
-    """
-    desc_upper = txn_obj.description.upper()
-    metadata = txn_obj._import_metadata
-    amount = txn_obj.amount
-    account_type = txn_obj._import_account_type
-
-    for phase in (0, 1, 2):
-        best_rule = None
-        best_specificity = 0
-
-        for rule_obj in rules:
-            if _rule_phase(rule_obj) != phase:
-                continue
-            flat = rule_obj.to_flat_dict()
-            score = _match_rule(flat, desc_upper, metadata, amount, account_type)
-            if score == 0:
-                continue
-            desc_len = len(flat.get('description', ''))
-            non_desc = score - (1 if 'description' in flat else 0)
-            specificity = (desc_len * 10) + non_desc
-            if specificity > best_specificity:
-                best_rule = rule_obj
-                best_specificity = specificity
-
-        if best_rule:
-            txn_obj.category = best_rule.category
-            txn_obj.matched_rule = best_rule
-            txn_obj.classification_method = 'rule'
-            return True
-
-    txn_obj.category = unclassified
-    txn_obj.classification_method = 'unclassified'
-    return False
 
 
 def _convert_in_memory(txn_obj, currency, rates_cache):
@@ -171,11 +128,6 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
 
         result.warnings = list(parsed.warnings)
 
-        # --- Pre-load classification rules ---
-        reload_rules()
-        rules = load_rules()
-        unclassified = Category.get_unclassified(user)
-
         # --- Pre-fetch exchange rates ---
         all_dates = [t.date for pl in parsed.ledgers for t in pl.transactions]
         rates_cache = _build_rates_cache(min(all_dates), max(all_dates))
@@ -210,8 +162,8 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
             )
 
             account_type = account.account_type
-            classified = 0
             converted = 0
+            unclassified = Category.get_unclassified(user)
 
             for pl in parsed.ledgers:
                 ledger = CurrencyLedger.objects.create(
@@ -237,12 +189,6 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
                         date=raw.date, description=raw.description,
                         amount=raw.amount, category=unclassified,
                     )
-                    # Attach temp attributes for in-memory classification
-                    txn._import_metadata = raw.account_metadata or {}
-                    txn._import_account_type = account_type
-
-                    if _classify_in_memory(txn, rules, unclassified):
-                        classified += 1
 
                     if _convert_in_memory(txn, pl.currency, rates_cache):
                         converted += 1
@@ -252,18 +198,14 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
                 LogicalTransaction.objects.bulk_create(logical_objects)
 
             result.transaction_count = txn_count
-            result.classified_count = classified
             result.converted_count = converted
 
         # --- Instrumentation ---
         elapsed_ms = (time.monotonic() - t0) * 1000
         span.set_attribute("import.transaction_count", txn_count)
-        span.set_attribute("import.classified_count", classified)
         span.set_attribute("import.converted_count", converted)
         span.set_attribute("import.duration_ms", elapsed_ms)
         upload_duration.record(elapsed_ms)
         transactions_imported.add(txn_count)
-        classification_result.add(classified, {"method": "rule"})
-        classification_result.add(txn_count - classified, {"method": "unclassified"})
 
         return result

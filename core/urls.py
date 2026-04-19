@@ -36,8 +36,10 @@ urlpatterns = [
     path('rules/add/', views.yaml_rule_add, name='yaml_rule_add'),
     path('rules/<int:idx>/edit/', views.yaml_rule_edit, name='yaml_rule_edit'),
     path('rules/<int:idx>/delete/', views.yaml_rule_delete, name='yaml_rule_delete'),
+    path('rules/delete-all/', views.delete_all_rules, name='delete_all_rules'),
     path('rules/reclassify/', views.reclassify_all, name='reclassify_all'),
     path('rules/classify-unclassified/', views.classify_unclassified, name='classify_unclassified'),
+    path('rules/clear-classifications/', views.clear_classifications, name='clear_classifications'),
     # User preferences
     path('preferences/transaction-columns/', views.save_transaction_columns, name='save_transaction_columns'),
 ]

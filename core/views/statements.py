@@ -213,7 +213,6 @@ def upload_file_api(request):
         'filename': result.filename,
         'card_type': result.card_type,
         'transaction_count': result.transaction_count,
-        'classified_count': result.classified_count,
         'converted_count': result.converted_count,
         'warnings': result.warnings,
         'elapsed_ms': elapsed_ms,

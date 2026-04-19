@@ -193,55 +193,49 @@ def classify_transaction_yaml(transaction):
     Phase 0: transfer rules, Phase 1: specific categories, Phase 2: Default.
     Returns (Category, ClassificationRule_or_None).
     """
-    with tracer.start_as_current_span("classifier.classify_single") as span:
-        span.set_attribute("transaction.id", transaction.id)
-        span.set_attribute("transaction.description", transaction.description[:100])
+    rule_objects = load_rules()
+    desc_upper = transaction.description.upper()
+    metadata = transaction.account_metadata or {}
+    amount = transaction.amount
 
-        rule_objects = load_rules()
-        desc_upper = transaction.description.upper()
-        metadata = transaction.account_metadata or {}
-        amount = transaction.amount
+    try:
+        account_type = transaction.ledger.statement_import.account.account_type
+    except AttributeError:
+        account_type = ''
 
-        try:
-            account_type = transaction.ledger.statement_import.account.account_type
-        except AttributeError:
-            account_type = ''
+    # Pre-compute flat dicts with cache
+    rules_with_flat = []
+    for rule_obj in rule_objects:
+        if not hasattr(rule_obj, '_flat_cache'):
+            rule_obj._flat_cache = rule_obj.to_flat_dict()
+        rules_with_flat.append((rule_obj, rule_obj._flat_cache))
 
-        rules_evaluated = 0
-        for phase in (0, 1, 2):
-            best_rule_obj = None
-            best_specificity = 0
+    for phase in (0, 1, 2):
+        best_rule_obj = None
+        best_specificity = 0
 
-            for rule_obj in rule_objects:
-                if _rule_phase(rule_obj) != phase:
-                    continue
+        for rule_obj, flat in rules_with_flat:
+            if _rule_phase(rule_obj) != phase:
+                continue
 
-                rules_evaluated += 1
-                flat = rule_obj.to_flat_dict()
-                score = _match_rule(flat, desc_upper, metadata, amount, account_type)
-                if score == 0:
-                    continue
+            score = _match_rule(flat, desc_upper, metadata, amount, account_type)
+            if score == 0:
+                continue
 
-                desc_len = len(flat.get('description', ''))
-                non_desc_conditions = score - (1 if 'description' in flat else 0)
-                specificity = (desc_len * 10) + non_desc_conditions
+            desc_len = len(flat.get('description', ''))
+            non_desc_conditions = score - (1 if 'description' in flat else 0)
+            specificity = (desc_len * 10) + non_desc_conditions
 
-                if specificity > best_specificity:
-                    best_rule_obj = rule_obj
-                    best_specificity = specificity
+            if specificity > best_specificity:
+                best_rule_obj = rule_obj
+                best_specificity = specificity
 
-            if best_rule_obj:
-                span.set_attribute("classification.phase", phase)
-                span.set_attribute("classification.rule_id", best_rule_obj.id)
-                span.set_attribute("classification.category", best_rule_obj.category.name)
-                span.set_attribute("classification.rules_evaluated", rules_evaluated)
-                classification_result.add(1, {"method": "rule"})
-                return best_rule_obj.category, best_rule_obj
+        if best_rule_obj:
+            classification_result.add(1, {"method": "rule"})
+            return best_rule_obj.category, best_rule_obj
 
-        span.set_attribute("classification.phase", -1)
-        span.set_attribute("classification.rules_evaluated", rules_evaluated)
-        classification_result.add(1, {"method": "unclassified"})
-        return Category.get_unclassified(transaction.user), None
+    classification_result.add(1, {"method": "unclassified"})
+    return Category.get_unclassified(transaction.user), None
 
 
 def classify_transactions_yaml(queryset=None):
@@ -263,22 +257,37 @@ def classify_transactions_yaml(queryset=None):
 
         reload_rules()
 
+        # Pre-compute flat dicts for all rules once
+        rule_objects = load_rules()
+        for rule_obj in rule_objects:
+            rule_obj._flat_cache = rule_obj.to_flat_dict()
+
         t0 = time.monotonic()
         total = 0
-        count = 0
-        for txn in queryset:
+        to_update = []
+
+        for txn in queryset.iterator(chunk_size=500):
             total += 1
             category, rule_obj = classify_transaction_yaml(txn)
             if rule_obj and category != txn.category:
                 txn.category = category
                 txn.matched_rule = rule_obj
                 txn.classification_method = 'rule'
-                txn.save(update_fields=['category', 'matched_rule', 'classification_method'])
-                count += 1
+                to_update.append(txn)
+
+        # Bulk update in batches
+        if to_update:
+            LogicalTransaction.objects.bulk_update(
+                to_update,
+                ['category', 'matched_rule', 'classification_method'],
+                batch_size=500,
+            )
 
         elapsed_ms = (time.monotonic() - t0) * 1000
+        count = len(to_update)
         span.set_attribute("classification.total", total)
         span.set_attribute("classification.classified_count", count)
         span.set_attribute("classification.unclassified_count", total - count)
+        span.set_attribute("classification.duration_ms", elapsed_ms)
         classification_duration.record(elapsed_ms, {"operation": "batch"})
         return count
