@@ -18,6 +18,10 @@ STORAGES = {
     },
 }
 
+# Disable HTTPS redirect and HSTS in tests
+SECURE_SSL_REDIRECT = False
+SECURE_HSTS_SECONDS = 0
+
 # Disable OpenTelemetry noise in tests
 import os
 os.environ.setdefault('OTEL_EXPORTER', 'console')
