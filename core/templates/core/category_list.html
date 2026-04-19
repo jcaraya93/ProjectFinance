@@ -43,7 +43,15 @@
       {% else %}<span class="badge bg-secondary">{{ grp_info.name }}</span>{% endif %}
     </span>
     {% if grp_slug != 'unclassified' %}
-    <button type="button" class="btn btn-sm btn-outline-primary add-category-btn" data-group="{{ grp_slug }}">+ Add Category</button>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-sm btn-outline-primary add-category-btn" data-group="{{ grp_slug }}">+ Add Category</button>
+      <form method="post" action="{% url 'core:yaml_category_delete_all' %}" class="d-inline"
+            onsubmit="return confirm('Delete ALL categories and their rules? Default categories will be kept. Affected transactions will become unclassified.')">
+        {% csrf_token %}
+        <input type="hidden" name="group" value="{{ grp_slug }}">
+        <button type="submit" class="btn btn-sm btn-outline-danger">Delete All</button>
+      </form>
+    </div>
     {% endif %}
   </div>
   <div class="table-responsive">

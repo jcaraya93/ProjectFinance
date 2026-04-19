@@ -8,7 +8,7 @@ from django.utils.http import urlencode
 from ..models import Transaction, Category, CategoryGroup, ClassificationRule
 from ..forms import YamlRuleForm
 from ..ratelimit import ratelimit
-from ..services.yaml_classifier import load_yaml, save_yaml, reload_rules as _reload_yaml
+from ..services.yaml_classifier import reload_rules as _reload_yaml
 from ._helpers import _safe_next_url, get_category_groups
 
 __all__ = [
@@ -20,40 +20,9 @@ __all__ = [
     'classify_unclassified',
     'yaml_category_add',
     'yaml_category_delete',
+    'yaml_category_delete_all',
     'yaml_category_rename',
 ]
-
-
-def _sync_rules_to_yaml(user):
-    """Export current DB rules to the YAML file (dual-write)."""
-    data = load_yaml()
-    groups = data.get('groups', {})
-    # Clear all existing rules in YAML
-    for grp_info in groups.values():
-        for cat_info in grp_info.get('categories', {}).values():
-            cat_info['rules'] = []
-    # Write DB rules into YAML structure
-    for rule in ClassificationRule.objects.filter(user=user).select_related('category__group').all():
-        grp_slug = rule.category.group.slug
-        cat_name = rule.category.name
-        cat_info = groups.get(grp_slug, {}).get('categories', {}).get(cat_name)
-        if cat_info is None:
-            continue
-        r = {}
-        if rule.description:
-            r['description'] = rule.description
-        if rule.account_type:
-            r['account_type'] = rule.account_type
-        if rule.amount_min is not None:
-            r['amount_min'] = float(rule.amount_min)
-        if rule.amount_max is not None:
-            r['amount_max'] = float(rule.amount_max)
-        for k, v in rule.metadata.items():
-            r[f'metadata.{k}'] = v
-        if rule.detail:
-            r['detail'] = rule.detail
-        cat_info['rules'].append(r)
-    save_yaml(data)
 
 
 @login_required
@@ -183,7 +152,6 @@ def yaml_rule_add(request):
                     metadata=metadata,
                     detail=form.cleaned_data.get('detail', ''),
                 )
-                _sync_rules_to_yaml(request.user)
                 _reload_yaml()
                 desc = rule_dict.get('description', '?')
                 messages.success(request, f'Rule "{desc}" \u2192 {cat_name} added.')
@@ -266,7 +234,6 @@ def yaml_rule_edit(request, idx):
                     ).update(category=new_cat)
                     if updated:
                         messages.info(request, f'{updated} transaction{"s" if updated > 1 else ""} moved to {new_cat.name}.')
-                _sync_rules_to_yaml(request.user)
                 _reload_yaml()
                 messages.success(request, 'Rule updated.')
                 return redirect(next_url or 'core:yaml_rule_list')
@@ -312,7 +279,6 @@ def yaml_rule_delete(request, idx):
         category=unclassified, matched_rule=None, classification_method='unclassified'
     )
     rule.delete()
-    _sync_rules_to_yaml(request.user)
     _reload_yaml()
     messages.success(request, 'Rule deleted.')
     return redirect(next_url or 'core:yaml_rule_list')
@@ -360,7 +326,7 @@ def classify_unclassified(request):
 @require_POST
 @ratelimit(key='category_add', rate='20/h', method='POST')
 def yaml_category_add(request):
-    """Add a new category to YAML and DB."""
+    """Add a new category."""
     group_slug = request.POST.get('group', '')
     cat_name = request.POST.get('category', '').strip()
     if not group_slug or not cat_name:
@@ -378,12 +344,6 @@ def yaml_category_add(request):
 
     Category.objects.create(name=cat_name, group=grp, color='#6c757d', user=request.user)
 
-    # Sync to YAML
-    data = load_yaml()
-    cats = data.get('groups', {}).get(group_slug, {}).get('categories', {})
-    cats[cat_name] = {'color': '#6c757d', 'rules': []}
-    save_yaml(data)
-
     messages.success(request, f'Category "{cat_name}" created.')
     return redirect('core:category_list')
 
@@ -391,7 +351,7 @@ def yaml_category_add(request):
 @login_required
 @require_POST
 def yaml_category_delete(request):
-    """Delete a category from DB and YAML."""
+    """Delete a category and its rules."""
     group_slug = request.POST.get('group', '')
     cat_name = request.POST.get('category', '').strip()
 
@@ -414,20 +374,42 @@ def yaml_category_delete(request):
     Transaction.objects.filter(user=request.user).filter(category=cat).update(category=unclassified)
     cat.delete()  # Cascades to ClassificationRule
 
-    # Sync to YAML
-    data = load_yaml()
-    cats = data.get('groups', {}).get(group_slug, {}).get('categories', {})
-    cats.pop(cat_name, None)
-    save_yaml(data)
-
     messages.success(request, f'Category "{cat_name}" deleted.')
     return redirect('core:category_list')
 
 
 @login_required
 @require_POST
+def yaml_category_delete_all(request):
+    """Delete all non-protected categories and their rules. Transactions become unclassified."""
+    unclassified = Category.get_unclassified(request.user)
+    group_slug = request.POST.get('group', '').strip()
+
+    deletable = Category.objects.filter(user=request.user).exclude(name__in=Category.PROTECTED_NAMES)
+    if group_slug:
+        deletable = deletable.filter(group__slug=group_slug)
+
+    cat_count = deletable.count()
+    rule_count = ClassificationRule.objects.filter(user=request.user, category__in=deletable).count()
+
+    # Move all affected transactions to Unclassified
+    Transaction.objects.filter(user=request.user, category__in=deletable).update(
+        category=unclassified, matched_rule=None, classification_method='unclassified'
+    )
+    deletable.delete()  # Cascades to ClassificationRule
+
+    scope= f'"{dict(CategoryGroup.SLUG_CHOICES).get(group_slug, group_slug)}" ' if group_slug else ''
+    messages.success(
+        request,
+        f'Deleted {cat_count} {scope}categories and {rule_count} rules. Affected transactions moved to Unclassified.'
+    )
+    return redirect('core:category_list')
+
+
+@login_required
+@require_POST
 def yaml_category_rename(request):
-    """Rename a category in DB and YAML."""
+    """Rename a category."""
     group_slug = request.POST.get('group', '')
     old_name = request.POST.get('old_name', '').strip()
     new_name = request.POST.get('new_name', '').strip()
@@ -455,16 +437,6 @@ def yaml_category_rename(request):
 
     cat.name = new_name
     cat.save(update_fields=['name'])
-
-    # Sync to YAML
-    data = load_yaml()
-    cats = data.get('groups', {}).get(group_slug, {}).get('categories', {})
-    if old_name in cats:
-        new_cats = {}
-        for k, v in cats.items():
-            new_cats[new_name if k == old_name else k] = v
-        data['groups'][group_slug]['categories'] = new_cats
-        save_yaml(data)
 
     messages.success(request, f'Category renamed: "{old_name}" \u2192 "{new_name}".')
     return redirect('core:category_list')

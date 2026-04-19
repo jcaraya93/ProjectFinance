@@ -29,6 +29,7 @@ urlpatterns = [
     path('categories/import/', views.import_categories, name='import_categories'),
     path('categories/add/', views.yaml_category_add, name='yaml_category_add'),
     path('categories/delete/', views.yaml_category_delete, name='yaml_category_delete'),
+    path('categories/delete-all/', views.yaml_category_delete_all, name='yaml_category_delete_all'),
     path('categories/rename/', views.yaml_category_rename, name='yaml_category_rename'),
     # Rules management
     path('rules/', views.yaml_rule_list, name='yaml_rule_list'),

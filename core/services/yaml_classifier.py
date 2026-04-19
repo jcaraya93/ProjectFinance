@@ -45,8 +45,11 @@ def save_yaml(data):
         '# Each rule specifies conditions (all must match). Most specific rule wins.\n\n'
     )
     body = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False, width=120)
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(header + body)
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(header + body)
+    except OSError:
+        logger.warning('Cannot write classification rules file: %s (permission denied or read-only)', path)
     reload_rules()
 
 
