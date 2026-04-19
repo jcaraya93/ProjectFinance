@@ -69,7 +69,7 @@ class TestImportCredit:
             assert txn.category is not None
             assert txn.category.name == 'Default'
 
-    def test_classification_during_import(
+    def test_no_classification_during_import(
         self, mock_fetch, user, expense_category, exchange_rates, credit_csv
     ):
         ClassificationRule.objects.create(
@@ -78,10 +78,15 @@ class TestImportCredit:
         result = import_statement(credit_csv, 'credit.csv', 'hash-classify', user)
         assert not result.skipped
 
+        # Transactions should arrive as unclassified — rules are applied separately
         rule_txns = LogicalTransaction.objects.filter(
             user=user, classification_method='rule',
         )
-        assert rule_txns.exists()
+        assert not rule_txns.exists()
+        unclassified_txns = LogicalTransaction.objects.filter(
+            user=user, classification_method='unclassified',
+        )
+        assert unclassified_txns.exists()
 
     def test_currency_conversion_during_import(
         self, mock_fetch, user, exchange_rates, credit_csv
