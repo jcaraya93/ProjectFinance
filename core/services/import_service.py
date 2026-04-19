@@ -149,7 +149,13 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
 
         # --- Parse ---
         parser = CreditCardParser() if card_type == 'credit' else DebitCardParser()
-        parsed = parser.parse(content)
+        try:
+            parsed = parser.parse(content)
+        except Exception as e:
+            logger.error('Parser failed for %s: %s', filename, e)
+            result.skipped = True
+            result.skip_reason = f'parse_error: {type(e).__name__}'
+            return result
 
         txn_count = sum(len(led.transactions) for led in parsed.ledgers)
         if txn_count == 0:

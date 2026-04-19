@@ -57,7 +57,10 @@ Descriptions:
         model = genai.GenerativeModel('gemini-2.5-flash')
         t0 = time.monotonic()
         try:
-            response = model.generate_content(prompt)
+            response = model.generate_content(
+                prompt,
+                request_options={'timeout': 60},
+            )
         except Exception as e:
             elapsed_ms = (time.monotonic() - t0) * 1000
             span.set_attribute("ai.api_duration_ms", elapsed_ms)

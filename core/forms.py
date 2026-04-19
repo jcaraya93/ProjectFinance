@@ -89,9 +89,6 @@ class YamlRuleForm(forms.Form):
         for k in mapping:
             mapping[k].sort()
         return json.dumps(mapping)
-        for k in mapping:
-            mapping[k].sort()
-        return json.dumps(mapping)
 
     def clean(self):
         cleaned = super().clean()
