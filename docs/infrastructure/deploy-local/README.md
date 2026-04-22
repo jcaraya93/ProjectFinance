@@ -135,3 +135,9 @@ ports:
 docker compose down --volumes --remove-orphans
 docker compose up -d --build
 ```
+
+## See Also
+
+- [Local-Lite (bare-metal + SQLite)](../deploy-local-lite/README.md) — fastest iteration, no Docker needed
+- [Azure Simple Deployment (Single VM)](../deploy-azure-simple/azure-deploy-simple.md)
+- [Azure Complex Deployment (Container Apps)](../deploy-azure-complex/azure-deploy-complex.md)

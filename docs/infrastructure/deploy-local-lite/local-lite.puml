@@ -1,0 +1,26 @@
+@startuml local-lite
+!theme plain
+title Local-Lite Development — Bare-Metal + SQLite
+
+skinparam rectangle {
+  RoundCorner 10
+}
+
+cloud "Browser" as browser
+
+rectangle "**Django dev server**\nrunserver\nPort 8000" as web #LightBlue
+
+note left of web
+  Python 3.12
+  settings_local.py
+  Built-in static serving
+  OTel: console exporter
+end note
+
+database "**db.sqlite3**\nSQLite (file-based)" as db #LightYellow
+
+browser --> web : "HTTP :8000"
+
+web --> db : "File I/O"
+
+@enduml
