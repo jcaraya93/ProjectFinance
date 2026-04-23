@@ -42,4 +42,8 @@ urlpatterns = [
     path('rules/clear-classifications/', views.clear_classifications, name='clear_classifications'),
     # User preferences
     path('preferences/transaction-columns/', views.save_transaction_columns, name='save_transaction_columns'),
+    # Account management
+    path('account/', views.account_page, name='account_page'),
+    path('account/export/', views.export_data_api, name='export_data_api'),
+    path('account/import/', views.import_data_api, name='import_data_api'),
 ]

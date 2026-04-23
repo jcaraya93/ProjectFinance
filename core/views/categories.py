@@ -101,17 +101,17 @@ def import_categories(request):
     uploaded = request.FILES.get('file')
     if not uploaded:
         messages.error(request, 'No file selected.')
-        return redirect('core:category_list')
+        return redirect('core:account_page')
 
     try:
         data = yaml.safe_load(uploaded.read().decode('utf-8'))
     except Exception:
         messages.error(request, 'Invalid YAML file.')
-        return redirect('core:category_list')
+        return redirect('core:account_page')
 
     if not data or 'groups' not in data:
         messages.error(request, 'YAML must have a "groups" key.')
-        return redirect('core:category_list')
+        return redirect('core:account_page')
 
     cats_created = 0
     cats_skipped = 0
@@ -188,4 +188,4 @@ def import_categories(request):
         parts.append(f'{" and ".join(skip_parts)} already existed')
 
     messages.success(request, '. '.join(parts) + '.' if parts else 'Nothing to import.')
-    return redirect('core:category_list')
+    return redirect('core:account_page')

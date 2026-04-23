@@ -301,7 +301,7 @@ def delete_all_rules(request):
     _reload_yaml()
 
     messages.success(request, f'Deleted {rule_count} rules. Affected transactions moved to Unclassified.')
-    return redirect('core:yaml_rule_list')
+    return redirect('core:account_page')
 
 
 @login_required
@@ -451,7 +451,7 @@ def yaml_category_delete_all(request):
         request,
         f'Deleted {cat_count} {scope}categories and {rule_count} rules. Affected transactions moved to Unclassified.'
     )
-    return redirect('core:category_list')
+    return redirect('core:account_page')
 
 
 @login_required

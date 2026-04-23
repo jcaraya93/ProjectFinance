@@ -4,14 +4,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="mb-0">Rules</h2>
-  <div class="d-flex gap-2">
-    <form method="post" action="{% url 'core:delete_all_rules' %}" class="d-inline"
-          onsubmit="return confirm('Delete ALL rules? Transactions classified by rules will become unclassified.')">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-outline-danger">Delete All Rules</button>
-    </form>
-    <a href="{% url 'core:yaml_rule_add' %}{% if filter_group %}?group={{ filter_group|urlencode }}&category={{ filter_category|urlencode }}{% endif %}" class="btn btn-primary">+ Add Rule</a>
-  </div>
+  <a href="{% url 'core:yaml_rule_add' %}{% if filter_group %}?group={{ filter_group|urlencode }}&category={{ filter_category|urlencode }}{% endif %}" class="btn btn-primary">+ Add Rule</a>
 </div>
 
 <div class="row">

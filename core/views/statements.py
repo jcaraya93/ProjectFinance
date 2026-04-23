@@ -149,14 +149,14 @@ def purge_all_data(request):
     confirm = request.POST.get('confirm', '')
     if confirm != 'DELETE ALL':
         messages.error(request, 'Purge cancelled — confirmation text did not match.')
-        return redirect('core:statement_list')
+        return redirect('core:account_page')
 
     deleted_accounts = Account.objects.filter(user=request.user).delete()
     deleted_exchange = LogicalTransaction.objects.filter(user=request.user).delete()
     deleted_raw = RawTransaction.objects.filter(user=request.user).delete()
 
     messages.success(request, 'All transactions, statements, and accounts have been deleted.')
-    return redirect('core:statement_list')
+    return redirect('core:account_page')
 
 
 @login_required

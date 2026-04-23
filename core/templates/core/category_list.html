@@ -5,32 +5,6 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="mb-0">Categories</h2>
-  <div class="d-flex gap-2">
-    <a href="{% url 'core:export_categories' %}" class="btn btn-sm btn-outline-secondary">Export YAML</a>
-    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal">Import YAML</button>
-  </div>
-</div>
-
-<!-- Import modal -->
-<div class="modal fade" id="importModal" tabindex="-1">
-  <div class="modal-dialog modal-sm">
-    <div class="modal-content">
-      <form method="post" action="{% url 'core:import_categories' %}" enctype="multipart/form-data">
-        {% csrf_token %}
-        <div class="modal-header">
-          <h6 class="modal-title">Import Categories &amp; Rules</h6>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="file" name="file" accept=".yaml,.yml" class="form-control form-control-sm" required>
-          <div class="small text-muted mt-2">Imports categories and rules. Existing items won't be duplicated.</div>
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-sm btn-primary">Import</button>
-        </div>
-      </form>
-    </div>
-  </div>
 </div>
 
 {% for grp_slug, grp_info in groups.items %}
@@ -44,12 +18,6 @@
     </span>
     {% if grp_slug != 'unclassified' %}
     <div class="d-flex gap-2">
-      <form method="post" action="{% url 'core:yaml_category_delete_all' %}" class="d-inline"
-            onsubmit="return confirm('Delete ALL categories and their rules? Default categories will be kept. Affected transactions will become unclassified.')">
-        {% csrf_token %}
-        <input type="hidden" name="group" value="{{ grp_slug }}">
-        <button type="submit" class="btn btn-sm btn-outline-danger">Delete All</button>
-      </form>
       <button type="button" class="btn btn-sm btn-outline-primary add-category-btn" data-group="{{ grp_slug }}">+ Add Category</button>
     </div>
     {% endif %}
