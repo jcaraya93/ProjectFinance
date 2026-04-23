@@ -168,20 +168,6 @@
       </div>
       <div class="card-body">
 
-        {% if cat_count > 0 %}
-        <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-          <div>
-            <p class="mb-0 fw-bold">Delete all categories</p>
-            <p class="text-muted small mb-0">Remove all custom categories and their rules. Default categories are kept. Affected transactions become unclassified.</p>
-          </div>
-          <form method="post" action="{% url 'core:yaml_category_delete_all' %}" class="ms-3 flex-shrink-0"
-                onsubmit="return confirm('Delete ALL custom categories and their rules? Affected transactions will become unclassified.')">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-danger btn-sm">Delete Categories</button>
-          </form>
-        </div>
-        {% endif %}
-
         {% if rule_count > 0 %}
         <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
           <div>
@@ -192,6 +178,20 @@
                 onsubmit="return confirm('Delete ALL rules? Transactions classified by rules will become unclassified.')">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline-danger btn-sm">Delete Rules</button>
+          </form>
+        </div>
+        {% endif %}
+
+        {% if cat_count > 0 %}
+        <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+          <div>
+            <p class="mb-0 fw-bold">Delete all categories</p>
+            <p class="text-muted small mb-0">Remove all custom categories and their rules. Default categories are kept. Affected transactions become unclassified.</p>
+          </div>
+          <form method="post" action="{% url 'core:yaml_category_delete_all' %}" class="ms-3 flex-shrink-0"
+                onsubmit="return confirm('Delete ALL custom categories and their rules? Affected transactions will become unclassified.')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger btn-sm">Delete Categories</button>
           </form>
         </div>
         {% endif %}

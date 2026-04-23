@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 
 from ..models import (
     Transaction, LogicalTransaction, RawTransaction, Category,
-    CurrencyLedger, Account, CreditAccount, DebitAccount,
+    ClassificationRule, CurrencyLedger, Account, CreditAccount, DebitAccount,
 )
 from ..ratelimit import ratelimit
 from ._helpers import _safe_next_url
@@ -145,17 +145,19 @@ def statement_list(request):
 @require_POST
 @ratelimit(key='purge', rate='3/h', method='POST')
 def purge_all_data(request):
-    """Delete all transactions, statements, and accounts for the current user."""
+    """Delete all transactions, statements, accounts, rules, and categories for the current user."""
     confirm = request.POST.get('confirm', '')
     if confirm != 'DELETE ALL':
         messages.error(request, 'Purge cancelled — confirmation text did not match.')
         return redirect('core:account_page')
 
-    deleted_accounts = Account.objects.filter(user=request.user).delete()
-    deleted_exchange = LogicalTransaction.objects.filter(user=request.user).delete()
-    deleted_raw = RawTransaction.objects.filter(user=request.user).delete()
+    ClassificationRule.objects.filter(user=request.user).delete()
+    Account.objects.filter(user=request.user).delete()
+    LogicalTransaction.objects.filter(user=request.user).delete()
+    RawTransaction.objects.filter(user=request.user).delete()
+    Category.objects.filter(user=request.user).exclude(name=Category.UNCLASSIFIED_NAME).delete()
 
-    messages.success(request, 'All transactions, statements, and accounts have been deleted.')
+    messages.success(request, 'All data has been deleted.')
     return redirect('core:account_page')
 
 
