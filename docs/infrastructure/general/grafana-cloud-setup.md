@@ -59,5 +59,5 @@ Data should appear within 1-2 minutes.
 | `.env` value | Protocol | Use case |
 |---|---|---|
 | `OTEL_EXPORTER=console` | stdout | Local dev, no backend needed |
-| `OTEL_EXPORTER=otlp` | gRPC | Local Docker otel-collector |
+| `OTEL_EXPORTER=otlp` | gRPC | Docker otel-collector |
 | `OTEL_EXPORTER=otlp-http` | HTTP | Grafana Cloud or any HTTP OTLP endpoint |

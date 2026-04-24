@@ -2,7 +2,7 @@
 
 ## Overview
 
-Management commands to export and import all data belonging to a single user. Produces a single portable JSON file that can be stored in Dropbox, OneDrive, or any file system and later restored into a fresh or existing database — regardless of whether the target runs SQLite (local-lite) or PostgreSQL (Docker/production).
+Management commands to export and import all data belonging to a single user. Produces a single portable JSON file that can be stored in Dropbox, OneDrive, or any file system and later restored into a fresh or existing database — regardless of whether the target runs SQLite (Local) or PostgreSQL (Docker/production).
 
 ## Goals
 

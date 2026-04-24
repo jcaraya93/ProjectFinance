@@ -8,11 +8,16 @@ def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
-    # Load .env before OTel bootstrap so OTEL_EXPORTER and other env vars
-    # are available when the observability module reads them.
+    # Load the correct .env file based on which settings module is active.
+    # .env.local → Local dev (settings_local), .env → Docker/production.
     from pathlib import Path
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parent / '.env')
+    base_dir = Path(__file__).resolve().parent
+    settings_mod = os.environ.get('DJANGO_SETTINGS_MODULE', '')
+    if 'settings_local' in settings_mod and (base_dir / '.env.local').exists():
+        load_dotenv(base_dir / '.env.local', override=True)
+    else:
+        load_dotenv(base_dir / '.env')
 
     # Bootstrap OpenTelemetry early so management commands (including
     # runserver's autoreloader) benefit from instrumentation.

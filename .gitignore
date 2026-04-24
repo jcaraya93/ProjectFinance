@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 db.sqlite3
 .env
+.env.local
+.env.prod
 *.egg-info/
 dist/
 build/
@@ -11,4 +13,3 @@ Thumbs.db
 staticfiles/
 infra/*.parameters.json
 infra/*.json
-.env.prod

@@ -130,17 +130,17 @@ The project supports three operation modes:
 
 | Mode | Database | Settings | Use case |
 |------|----------|----------|----------|
-| **Local-lite** | SQLite | `config.settings_local` | Fast bare-metal dev — no Docker needed |
-| **Local Docker** | PostgreSQL 17 | `config.settings` | Full-stack local environment |
+| **Local** | SQLite | `config.settings_local` | Fast dev — no Docker needed |
+| **Docker** | PostgreSQL 17 | `config.settings` | Full-stack local environment |
 | **Production** | PostgreSQL 17 | `config.settings` | VM or Azure Container Apps deployment |
 
 ### Prerequisites (all modes)
 
-- Python 3.12+ and a `.env` file in the project root (see [Environment Variables](docs/infrastructure/deploy-local/README.md#environment-variables))
+- Python 3.12+ and a `.env` file in the project root (see [Environment Variables](docs/infrastructure/deploy-docker/README.md#environment-variables))
 
-### Local-lite (bare-metal + SQLite)
+### Local (SQLite)
 
-No Docker required. Uses Django's dev server and a file-based SQLite database. For full details see [docs/infrastructure/deploy-local-lite/README.md](docs/infrastructure/deploy-local-lite/README.md).
+No Docker required. Uses Django's dev server and a file-based SQLite database. For full details see [docs/infrastructure/deploy-local/README.md](docs/infrastructure/deploy-local/README.md).
 
 ```bash
 # Create and activate a virtual environment
@@ -167,7 +167,7 @@ python manage.py runserver
 
 The app will be available at `http://localhost:8000/`.
 
-### Local Docker (PostgreSQL)
+### Docker (PostgreSQL)
 
 Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose plugin).
 
@@ -194,7 +194,7 @@ docker compose logs -f web
 
 # Create a superuser
 docker compose exec web python manage.py createsuperuser              # Docker
-python manage.py createsuperuser --settings=config.settings_local     # Local-lite
+python manage.py createsuperuser --settings=config.settings_local     # Local
 
 # Run any management command
 docker compose exec web python manage.py <command>
@@ -204,12 +204,12 @@ docker compose up -d --build
 
 # Reset the database
 docker compose down -v && docker compose up -d                        # Docker
-del db.sqlite3 && python manage.py migrate --settings=config.settings_local  # Local-lite (Windows)
+del db.sqlite3 && python manage.py migrate --settings=config.settings_local  # Local (Windows)
 ```
 
 For full deployment details see:
-- [Local-Lite (bare-metal + SQLite)](docs/infrastructure/deploy-local-lite/README.md)
-- [Local Docker (PostgreSQL)](docs/infrastructure/deploy-local/README.md)
+- [Local (SQLite)](docs/infrastructure/deploy-local/README.md)
+- [Docker (PostgreSQL)](docs/infrastructure/deploy-docker/README.md)
 - [Azure Simple (Single VM)](docs/infrastructure/deploy-azure-simple/azure-deploy-simple.md)
 - [Azure Complex (Container Apps)](docs/infrastructure/deploy-azure-complex/azure-deploy-complex.md)
 
