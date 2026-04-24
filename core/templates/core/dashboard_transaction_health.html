@@ -212,9 +212,9 @@
       colors: [CHART_COLORS.primary, CHART_COLORS.info, CHART_COLORS.warning],
       plotOptions: { bar: { horizontal: true } },
       xaxis: {
+        categories: catData.labels || [],
         labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
       },
-      yaxis: { labels: { formatter: function(v) { return v; } } },
       dataLabels: { enabled: false },
       legend: { position: 'bottom' },
       markers: { size: 0 },
