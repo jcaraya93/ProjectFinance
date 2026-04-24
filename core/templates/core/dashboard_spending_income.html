@@ -85,98 +85,36 @@
 {% block extra_js %}
 <script>
 (function() {
-  function parseJSON(id) {
-    const el = document.getElementById(id);
-    if (!el || !el.textContent.trim()) return null;
-    try { return JSON.parse(el.textContent); } catch (e) { return null; }
-  }
-
   // Expense Breakdown (doughnut)
-  const expenseRaw = parseJSON('expenseCategoryData');
+  var expenseRaw = DashboardCharts.parseJSON('expenseCategoryData');
   if (expenseRaw) {
-    new Chart(document.getElementById('expenseChart'), {
-      type: 'doughnut',
-      data: {
-        labels: expenseRaw.labels || [],
-        datasets: [{
-          data: expenseRaw.values || [],
-          backgroundColor: expenseRaw.colors || [],
-          borderWidth: 2,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'right' } },
-      },
-    });
+    DashboardCharts.create('expenseChart', 'doughnut',
+      { labels: expenseRaw.labels || [], datasets: [{ data: expenseRaw.values || [], backgroundColor: expenseRaw.colors || [], borderWidth: 2 }] },
+      'doughnut', { plugins: { legend: { position: 'right' } } });
   }
 
   // Income Breakdown (doughnut)
-  const incomeRaw = parseJSON('incomeCategoryData');
+  var incomeRaw = DashboardCharts.parseJSON('incomeCategoryData');
   if (incomeRaw) {
-    new Chart(document.getElementById('incomeChart'), {
-      type: 'doughnut',
-      data: {
-        labels: incomeRaw.labels || [],
-        datasets: [{
-          data: incomeRaw.values || [],
-          backgroundColor: incomeRaw.colors || [],
-          borderWidth: 2,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'right' } },
-      },
-    });
+    DashboardCharts.create('incomeChart', 'doughnut',
+      { labels: incomeRaw.labels || [], datasets: [{ data: incomeRaw.values || [], backgroundColor: incomeRaw.colors || [], borderWidth: 2 }] },
+      'doughnut', { plugins: { legend: { position: 'right' } } });
   }
 
   // Top Spending Categories (horizontal bar)
-  const topRaw = parseJSON('topCategoriesData');
+  var topRaw = DashboardCharts.parseJSON('topCategoriesData');
   if (topRaw) {
-    new Chart(document.getElementById('topCategoriesChart'), {
-      type: 'bar',
-      data: {
-        labels: topRaw.labels || [],
-        datasets: [{
-          data: topRaw.values || [],
-          backgroundColor: topRaw.colors || [],
-          borderWidth: 0,
-        }],
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { beginAtZero: true } },
-      },
-    });
+    DashboardCharts.create('topCategoriesChart', 'bar',
+      { labels: topRaw.labels || [], datasets: [{ data: topRaw.values || [], backgroundColor: topRaw.colors || [], borderWidth: 0 }] },
+      'horizontalNoLegend');
   }
 
   // Top Income Categories (horizontal bar)
-  const topIncomeRaw = parseJSON('topIncomeData');
+  var topIncomeRaw = DashboardCharts.parseJSON('topIncomeData');
   if (topIncomeRaw) {
-    new Chart(document.getElementById('topIncomeChart'), {
-      type: 'bar',
-      data: {
-        labels: topIncomeRaw.labels || [],
-        datasets: [{
-          data: topIncomeRaw.values || [],
-          backgroundColor: topIncomeRaw.colors || [],
-          borderWidth: 0,
-        }],
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { beginAtZero: true } },
-      },
-    });
+    DashboardCharts.create('topIncomeChart', 'bar',
+      { labels: topIncomeRaw.labels || [], datasets: [{ data: topIncomeRaw.values || [], backgroundColor: topIncomeRaw.colors || [], borderWidth: 0 }] },
+      'horizontalNoLegend');
   }
 })();
 </script>

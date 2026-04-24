@@ -247,27 +247,16 @@
     trendDS.push({ label: cat, data: trend.datasets[cat], backgroundColor: trend.colors[cat] || '#6c757d' });
   });
 
-  new Chart(document.getElementById('trendChart'), {
-    type: 'bar',
-    data: { labels: trend.labels, datasets: trendDS },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
-  });
+  DashboardCharts.create('trendChart', 'bar',
+    { labels: trend.labels, datasets: trendDS }, 'stacked');
 
-  new Chart(document.getElementById('breakdownChart'), {
-    type: 'doughnut',
-    data: { labels: bd.labels, datasets: [{ data: bd.values, backgroundColor: bd.colors }] },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
-  });
+  DashboardCharts.create('breakdownChart', 'doughnut',
+    { labels: bd.labels, datasets: [{ data: bd.values, backgroundColor: bd.colors }] }, 'doughnut');
 
   // ── Running Costs: Stacked bar ──
   var running = JSON.parse(document.getElementById('runningData').textContent);
-  new Chart(document.getElementById('runningChart'), {
-    type: 'bar',
-    data: { labels: running.labels, datasets: running.datasets },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
-  });
+  DashboardCharts.create('runningChart', 'bar',
+    { labels: running.labels, datasets: running.datasets }, 'stacked');
 })();
 </script>
 {% endblock %}

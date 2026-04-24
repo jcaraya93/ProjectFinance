@@ -152,13 +152,7 @@
 {% block extra_js %}
 <script>
 (function () {
-  function parseJSON(id) {
-    var el = document.getElementById(id);
-    if (!el || !el.textContent.trim()) return null;
-    try { return JSON.parse(el.textContent); } catch (e) { return null; }
-  }
-
-  var trendRaw = parseJSON('trendData');
+  var trendRaw = DashboardCharts.parseJSON('trendData');
   var isPrivacy = dashboardPrivacy.isOn();
   var privacyTicks = isPrivacy ? { callback: function () { return ''; } } : {};
   window._dashCharts = [];
@@ -173,8 +167,8 @@
           {
             label: 'Recurring Income',
             data: trendRaw.income || [],
-            borderColor: 'rgba(25, 135, 84, 1)',
-            backgroundColor: 'rgba(25, 135, 84, 0.05)',
+            borderColor: CHART_COLORS.incomeLine,
+            backgroundColor: CHART_COLORS.incomeFill,
             borderDash: [6, 3],
             fill: false,
             tension: 0.3,
@@ -183,8 +177,8 @@
           {
             label: 'Expenses',
             data: trendRaw.expenses || [],
-            borderColor: 'rgba(220, 53, 69, 1)',
-            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+            borderColor: CHART_COLORS.expenseLine,
+            backgroundColor: CHART_COLORS.expenseFill,
             fill: true,
             tension: 0.3,
             pointRadius: 4,
@@ -205,7 +199,7 @@
     var netData = (trendRaw.income || []).map(function (inc, i) {
       return inc - (trendRaw.expenses || [])[i] || 0;
     });
-    var barColors = netData.map(function (v) { return v >= 0 ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)'; });
+    var barColors = netData.map(function (v) { return v >= 0 ? CHART_COLORS.barPositive : CHART_COLORS.barNegative; });
     window._dashCharts.push(new Chart(document.getElementById('netCashflowBarChart'), {
       type: 'bar',
       data: {

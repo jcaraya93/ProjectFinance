@@ -78,15 +78,9 @@
       pointRadius: 0,
     };
   });
-  new Chart(document.getElementById('stackedAreaChart'), {
-    type: 'line',
-    data: { labels: months, datasets: areaDS },
-    options: {
-      responsive: true,
-      plugins: { legend: { position: 'bottom' } },
-      scales: { x: { display: true }, y: { stacked: true, beginAtZero: true } },
-    },
-  });
+  DashboardCharts.create('stackedAreaChart', 'line',
+    { labels: months, datasets: areaDS },
+    'base', { scales: { x: { display: true }, y: { stacked: true, beginAtZero: true } } });
 
   // ── Option 2: Small Multiples ──
   var container = document.getElementById('sparklineContainer');
@@ -175,15 +169,8 @@
       backgroundColor: c.color,
     };
   });
-  new Chart(document.getElementById('stackedBarChart'), {
-    type: 'bar',
-    data: { labels: months, datasets: barDS },
-    options: {
-      responsive: true,
-      plugins: { legend: { position: 'bottom' } },
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
-    },
-  });
+  DashboardCharts.create('stackedBarChart', 'bar',
+    { labels: months, datasets: barDS }, 'stacked');
 })();
 </script>
 {% endblock %}

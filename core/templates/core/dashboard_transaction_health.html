@@ -149,116 +149,37 @@
 {% block extra_js %}
 <script>
 (function () {
-  function parseJSON(id) {
-    var el = document.getElementById(id);
-    if (!el || !el.textContent.trim()) return null;
-    try { return JSON.parse(el.textContent); } catch (e) { return null; }
-  }
-
   // Classification breakdown doughnut
-  var clsData = parseJSON('classificationData');
+  var clsData = DashboardCharts.parseJSON('classificationData');
   if (clsData) {
-    new Chart(document.getElementById('classificationDoughnut'), {
-      type: 'doughnut',
-      data: {
-        labels: clsData.labels,
-        datasets: [{
-          data: clsData.values,
-          backgroundColor: clsData.colors,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom' },
-          tooltip: {
-            callbacks: {
-              label: function (ctx) {
-                var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
-                var pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
-                return ctx.label + ': ' + ctx.parsed.toLocaleString() + ' (' + pct + '%)';
-              }
-            }
-          }
-        },
-      },
-    });
+    DashboardCharts.createDoughnut('classificationDoughnut',
+      { labels: clsData.labels, datasets: [{ data: clsData.values, backgroundColor: clsData.colors }] });
   }
 
   // Monthly classification trend (stacked bar)
-  var trendData = parseJSON('monthlyTrendData');
+  var trendData = DashboardCharts.parseJSON('monthlyTrendData');
   if (trendData) {
-    new Chart(document.getElementById('monthlyTrendChart'), {
-      type: 'bar',
-      data: {
-        labels: trendData.labels,
-        datasets: [
-          {
-            label: 'Rule',
-            data: trendData.rule,
-            backgroundColor: 'rgba(13, 110, 253, 0.8)',
-          },
-          {
-            label: 'Manual',
-            data: trendData.manual,
-            backgroundColor: 'rgba(13, 202, 240, 0.8)',
-          },
-          {
-            label: 'Unclassified',
-            data: trendData.unclassified,
-            backgroundColor: 'rgba(255, 193, 7, 0.8)',
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { stacked: true },
-          y: { stacked: true, beginAtZero: true },
-        },
-        plugins: { legend: { position: 'bottom' } },
-      },
-    });
+    DashboardCharts.create('monthlyTrendChart', 'bar', {
+      labels: trendData.labels,
+      datasets: [
+        { label: 'Rule', data: trendData.rule, backgroundColor: CHART_COLORS.primary },
+        { label: 'Manual', data: trendData.manual, backgroundColor: CHART_COLORS.info },
+        { label: 'Unclassified', data: trendData.unclassified, backgroundColor: CHART_COLORS.warning },
+      ],
+    }, 'stacked');
   }
 
   // Category coverage (horizontal stacked bar)
-  var catData = parseJSON('categoryCoverageData');
+  var catData = DashboardCharts.parseJSON('categoryCoverageData');
   if (catData) {
-    new Chart(document.getElementById('categoryCoverageChart'), {
-      type: 'bar',
-      data: {
-        labels: catData.labels,
-        datasets: [
-          {
-            label: 'Rule',
-            data: catData.rule,
-            backgroundColor: 'rgba(13, 110, 253, 0.8)',
-          },
-          {
-            label: 'Manual',
-            data: catData.manual,
-            backgroundColor: 'rgba(13, 202, 240, 0.8)',
-          },
-          {
-            label: 'Unclassified',
-            data: catData.unclassified,
-            backgroundColor: 'rgba(255, 193, 7, 0.8)',
-          },
-        ],
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { stacked: true, beginAtZero: true },
-          y: { stacked: true },
-        },
-        plugins: { legend: { position: 'bottom' } },
-      },
-    });
+    DashboardCharts.create('categoryCoverageChart', 'bar', {
+      labels: catData.labels,
+      datasets: [
+        { label: 'Rule', data: catData.rule, backgroundColor: CHART_COLORS.primary },
+        { label: 'Manual', data: catData.manual, backgroundColor: CHART_COLORS.info },
+        { label: 'Unclassified', data: catData.unclassified, backgroundColor: CHART_COLORS.warning },
+      ],
+    }, 'horizontalStacked');
   }
 })();
 </script>

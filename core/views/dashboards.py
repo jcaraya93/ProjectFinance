@@ -2,6 +2,7 @@ import functools
 import json
 import time
 from datetime import date
+from decimal import Decimal
 
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -22,6 +23,23 @@ __all__ = [
     'car_parking_dashboard',
     'income_salary_dashboard',
 ]
+
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
+
+CHART_COLORS = {
+    'income': 'rgba(25, 135, 84, 0.8)',
+    'expense': 'rgba(220, 53, 69, 0.8)',
+    'primary': 'rgba(13, 110, 253, 0.8)',
+    'info': 'rgba(13, 202, 240, 0.8)',
+    'warning': 'rgba(255, 193, 7, 0.8)',
+    'secondary': 'rgba(108, 117, 125, 0.8)',
+}
 
 
 def dashboard_view(name, template, default_time_group='monthly'):
@@ -67,11 +85,9 @@ def dashboard(request, display_currency, time_group):
     return context
 
 
-@login_required
-def transaction_health_dashboard(request):
+@dashboard_view("transaction_health", "core/dashboard_transaction_health.html")
+def transaction_health_dashboard(request, display_currency, time_group):
     """Dashboard showing classification health: unclassified %, rule coverage, manual vs auto."""
-    import json
-    from decimal import Decimal
     from collections import defaultdict
     from django.db.models import Count, Q
     from django.db.models.functions import TruncMonth
@@ -96,7 +112,7 @@ def transaction_health_dashboard(request):
     classification_data = {
         'labels': ['Rule', 'Manual', 'Unclassified'],
         'values': [rule_count, manual_count, unclassified_count],
-        'colors': ['rgba(13, 110, 253, 0.8)', 'rgba(13, 202, 240, 0.8)', 'rgba(255, 193, 7, 0.8)'],
+        'colors': [CHART_COLORS['primary'], CHART_COLORS['info'], CHART_COLORS['warning']],
     }
 
     # Monthly classification trend
@@ -162,14 +178,12 @@ def transaction_health_dashboard(request):
         'category_chart_height': category_chart_height,
         'recent_unclassified': recent_unclassified,
     }
-    return render(request, 'core/dashboard_transaction_health.html', context)
+    return context
 
 
-@login_required
-def rule_matching_dashboard(request):
+@dashboard_view("rule_matching", "core/dashboard_rule_matching.html")
+def rule_matching_dashboard(request, display_currency, time_group):
     """Dashboard dedicated to classification rule matching analysis."""
-    import json
-    from decimal import Decimal
     from collections import defaultdict
     from django.db.models import Count, Q, Max
     from django.db.models.functions import TruncMonth
@@ -189,8 +203,8 @@ def rule_matching_dashboard(request):
     # Rules by group doughnut
     GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transaction': 'Transfer', 'unclassified': 'Unclassified'}
     GROUP_CHART_COLORS = {
-        'expense': 'rgba(220,53,69,0.8)', 'income': 'rgba(25,135,84,0.8)',
-        'transaction': 'rgba(13,110,253,0.8)', 'unclassified': 'rgba(255,193,7,0.8)',
+        'expense': CHART_COLORS['expense'], 'income': CHART_COLORS['income'],
+        'transaction': CHART_COLORS['primary'], 'unclassified': CHART_COLORS['warning'],
     }
     group_counts = (
         rules_qs.values('category__group__slug')
@@ -200,7 +214,7 @@ def rule_matching_dashboard(request):
     rules_by_group = {
         'labels': [GROUP_LABELS.get(r['category__group__slug'], r['category__group__slug']) for r in group_counts],
         'values': [r['c'] for r in group_counts],
-        'colors': [GROUP_CHART_COLORS.get(r['category__group__slug'], 'rgba(108,117,125,0.8)') for r in group_counts],
+        'colors': [GROUP_CHART_COLORS.get(r['category__group__slug'], CHART_COLORS['secondary']) for r in group_counts],
     }
 
     # Monthly rule-matched transactions trend
@@ -232,37 +246,28 @@ def rule_matching_dashboard(request):
         .order_by('category__group__slug', 'category__name', 'description')
     )
 
-    class DE(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, Decimal):
-                return float(obj)
-            return super().default(obj)
-
     context = {
         'total_rules': total_rules,
         'active_rules': active_rules,
         'unused_count': unused_count,
         'total_rule_matched': total_rule_matched,
         'avg_matches': avg_matches,
-        'rules_by_group_data': json.dumps(rules_by_group, cls=DE),
-        'rule_activity_data': json.dumps(rule_activity_data, cls=DE),
+        'rules_by_group_data': json.dumps(rules_by_group, cls=DecimalEncoder),
+        'rule_activity_data': json.dumps(rule_activity_data, cls=DecimalEncoder),
         'top_rules': top_rules,
         'unused_rules': unused_rules,
     }
-    return render(request, 'core/dashboard_rule_matching.html', context)
+    return context
 
 
-@login_required
-def default_buckets_dashboard(request):
+@dashboard_view("default_buckets", "core/dashboard_default_buckets.html")
+def default_buckets_dashboard(request, display_currency, time_group):
     """Dashboard for transactions in the Default category of each group."""
-    import json
-    from decimal import Decimal
     from collections import defaultdict
     from django.db.models import Count, Sum, Q
     from django.db.models.functions import TruncMonth, Abs
 
     user = request.user
-    display_currency = request.GET.get('display_currency', 'CRC')
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
@@ -348,24 +353,17 @@ def default_buckets_dashboard(request):
         for r in desc_counts
     ]
 
-    class DE(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, Decimal):
-                return float(obj)
-            return super().default(obj)
-
     context = {
-        'display_currency': display_currency,
         'currency_symbol': currency_symbol,
         'total_all': total_all,
         'total_default': total_default,
         'default_pct': (total_default / total_all * 100) if total_all else 0,
         'group_stats': group_stats,
-        'group_doughnut_data': json.dumps(group_doughnut, cls=DE),
-        'monthly_trend_data': json.dumps(monthly_trend, cls=DE),
+        'group_doughnut_data': json.dumps(group_doughnut, cls=DecimalEncoder),
+        'monthly_trend_data': json.dumps(monthly_trend, cls=DecimalEncoder),
         'top_descriptions': top_descriptions,
     }
-    return render(request, 'core/dashboard_default_buckets.html', context)
+    return context
 
 
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
@@ -394,27 +392,18 @@ def chart_comparison(request, display_currency, time_group):
     )
 
 
-@login_required
-def car_dashboard(request):
+@dashboard_view("car", "core/dashboard_car.html")
+def car_dashboard(request, display_currency, time_group):
     """Dashboard focused on car-related expenses with multiple sections."""
-    import json
-    from decimal import Decimal
     from datetime import timedelta
     from django.db.models import Sum, Count, Min, Max
     from django.db.models.functions import TruncMonth, Abs
 
-    display_currency = request.GET.get('display_currency', 'CRC')
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
     CAR_CATEGORIES = ['Car Gas', 'Car Insurance', 'Car Maintenance', 'Car Parking & Toll', 'Car Tax', 'Car Wash']
     SALARY_CATEGORIES = ['Salary Main', 'Salary Bonuses']
-
-    class DE(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, Decimal):
-                return float(obj)
-            return super().default(obj)
 
     abs_field = Abs(amount_field)
 
@@ -697,7 +686,6 @@ def car_dashboard(request):
         table_rows.append(row)
 
     context = {
-        'display_currency': display_currency,
         'currency_symbol': currency_symbol,
         'car_categories': CAR_CATEGORIES,
         'cat_colors': cat_colors,
@@ -717,7 +705,7 @@ def car_dashboard(request):
         'running_data': json.dumps({
             'labels': sorted_months,
             'datasets': [{'label': c, 'data': [running_cat_data[c].get(m, 0) for m in sorted_months], 'backgroundColor': running_colors[c]} for c in RUNNING_CATEGORIES],
-        }, cls=DE),
+        }, cls=DecimalEncoder),
         # Gas
         'gas_last_month': gas_by_month.get(last_month, {}).get('total', 0),
         'gas_avg_monthly': sum(gas_monthly_spend) / len(gas_monthly_spend) if gas_monthly_spend else 0,
@@ -752,51 +740,42 @@ def car_dashboard(request):
         # Chart JSON
         'trend_data': json.dumps({
             'labels': sorted_months, 'datasets': trend_datasets, 'colors': cat_colors,
-        }, cls=DE),
+        }, cls=DecimalEncoder),
         'breakdown_data': json.dumps({
             'labels': [r['category__name'] for r in category_totals],
             'values': [float(r['total']) for r in category_totals],
             'colors': [cat_colors.get(r['category__name'], '#6c757d') for r in category_totals],
-        }, cls=DE),
+        }, cls=DecimalEncoder),
         'cost_type_data': json.dumps({
             'labels': ['Running Costs', 'Ownership Costs'],
             'values': [running_last_year, ownership_last_year],
             'colors': ['#18BC9C', '#E74C3C'],
-        }, cls=DE),
+        }, cls=DecimalEncoder),
         'gas_data': json.dumps({
             'labels': sorted_months, 'counts': gas_counts,
             'avg_per_fillup': gas_avg_per, 'spend': gas_monthly_spend,
             'split_above': gas_split_above, 'split_below': gas_split_below,
             'count_above': gas_count_above, 'count_below': gas_count_below,
             'threshold': threshold,
-        }, cls=DE),
+        }, cls=DecimalEncoder),
         'parking_data': json.dumps({
             'labels': sorted_months,
             'spend_datasets': park_spend_datasets,
             'count_datasets': park_count_datasets,
-        }, cls=DE),
+        }, cls=DecimalEncoder),
     }
-    return render(request, 'core/dashboard_car.html', context)
+    return context
 
 
-@login_required
-def car_gas_dashboard(request):
+@dashboard_view("car_gas", "core/dashboard_car_gas.html")
+def car_gas_dashboard(request, display_currency, time_group):
     """Dashboard focused on car gas expenses."""
-    import json
-    from decimal import Decimal
     from django.db.models import Sum, Count
     from django.db.models.functions import TruncMonth, Abs
 
-    display_currency = request.GET.get('display_currency', 'CRC')
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
-
-    class DE(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, Decimal):
-                return float(obj)
-            return super().default(obj)
 
     gas_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Gas', **{f'{amount_field}__isnull': False})
     monthly_gas = (gas_qs.annotate(month=TruncMonth('date')).values('month')
@@ -875,7 +854,6 @@ def car_gas_dashboard(request):
     lm_fillup_median = sorted(lm_amounts)[len(lm_amounts) // 2] if lm_amounts else 0
 
     context = {
-        'display_currency': display_currency,
         'currency_symbol': currency_symbol,
         'last_month': last_month,
         'gas_last_month': gas_last,
@@ -900,30 +878,21 @@ def car_gas_dashboard(request):
             'count_above': [above_count.get(m, 0) for m in sorted_months],
             'count_below': [below_count.get(m, 0) for m in sorted_months],
             'threshold': threshold,
-        }, cls=DE),
+        }, cls=DecimalEncoder),
     }
-    return render(request, 'core/dashboard_car_gas.html', context)
+    return context
 
 
-@login_required
-def car_parking_dashboard(request):
+@dashboard_view("car_parking", "core/dashboard_car_parking.html")
+def car_parking_dashboard(request, display_currency, time_group):
     """Dashboard focused on car parking & tolls."""
-    import json
-    from decimal import Decimal
     from datetime import date, timedelta
     from django.db.models import Sum, Count, Max
     from django.db.models.functions import TruncMonth, Abs
 
-    display_currency = request.GET.get('display_currency', 'CRC')
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
-
-    class DE(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, Decimal):
-                return float(obj)
-            return super().default(obj)
 
     park_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Parking & Toll', **{f'{amount_field}__isnull': False})
     park_monthly = (park_qs.annotate(month=TruncMonth('date')).values('month')
@@ -994,7 +963,7 @@ def car_parking_dashboard(request):
         loc['total'] = float(loc['total'])
 
     context = {
-        'display_currency': display_currency, 'currency_symbol': currency_symbol,
+        'currency_symbol': currency_symbol,
         'last_month': last_month,
         'park_last_month': park_last_month, 'park_avg_monthly': park_avg_monthly,
         'park_median_monthly': park_median_monthly, 'park_median_pct': park_median_pct,
@@ -1008,28 +977,19 @@ def car_parking_dashboard(request):
             'labels': sorted_months,
             'spend_datasets': park_spend_datasets,
             'count_datasets': park_count_datasets,
-        }, cls=DE),
+        }, cls=DecimalEncoder),
     }
-    return render(request, 'core/dashboard_car_parking.html', context)
+    return context
 
 
-@login_required
-def income_salary_dashboard(request):
+@dashboard_view("income_salary", "core/dashboard_income_salary.html")
+def income_salary_dashboard(request, display_currency, time_group):
     """Dashboard focused on Salary Main income."""
-    import json
-    from decimal import Decimal
     from django.db.models import Sum, Count, Avg
     from django.db.models.functions import TruncMonth
 
-    display_currency = request.GET.get('display_currency', 'CRC')
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
-
-    class DE(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, Decimal):
-                return float(obj)
-            return super().default(obj)
 
     salary_qs = Transaction.objects.filter(user=request.user).filter(
         category__name='Salary Main',
@@ -1072,7 +1032,7 @@ def income_salary_dashboard(request):
         'labels': sorted_months,
         'values': monthly_totals,
         'average': avg_monthly,
-    }, cls=DE)
+    }, cls=DecimalEncoder)
 
     # ── BONUSES & NON-RECURRING SECTION ──
     EXTRA_CATEGORIES = ['Salary Bonuses', 'Non-recurring']
@@ -1104,7 +1064,6 @@ def income_salary_dashboard(request):
         e['color'] = e.pop('category__color') or '#6c757d'
 
     context = {
-        'display_currency': display_currency,
         'currency_symbol': currency_symbol,
         'last_month': last_month,
         'last_month_total': last_month_total,
@@ -1120,4 +1079,4 @@ def income_salary_dashboard(request):
         'extra_combined': extra_combined,
         'extra_events': extra_events,
     }
-    return render(request, 'core/dashboard_income_salary.html', context)
+    return context

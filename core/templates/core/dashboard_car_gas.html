@@ -163,44 +163,30 @@
   var thr = gas.threshold;
 
   // Monthly gas spend
-  new Chart(document.getElementById('gasSpendChart'), {
-    type: 'bar',
-    data: {
-      labels: gas.labels,
-      datasets: [{ label: 'Monthly Gas Spend', data: gas.spend, backgroundColor: '#2980b9' }]
-    },
-    options: { responsive: true, plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } } }
-  });
+  DashboardCharts.create('gasSpendChart', 'bar', {
+    labels: gas.labels,
+    datasets: [{ label: 'Monthly Gas Spend', data: gas.spend, backgroundColor: CHART_COLORS.carBlue }]
+  }, 'noLegend');
 
   // Fill-ups count split by threshold
-  new Chart(document.getElementById('gasFreqChart'), {
-    type: 'bar',
-    data: {
-      labels: gas.labels,
-      datasets: [
-        { label: '≥ ' + sym + thr.toLocaleString(), data: gas.count_above, backgroundColor: '#2980b9' },
-        { label: '< ' + sym + thr.toLocaleString(), data: gas.count_below, backgroundColor: '#85c1e9' },
-      ]
-    },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } }
-  });
+  DashboardCharts.create('gasFreqChart', 'bar', {
+    labels: gas.labels,
+    datasets: [
+      { label: '≥ ' + sym + thr.toLocaleString(), data: gas.count_above, backgroundColor: CHART_COLORS.carBlue },
+      { label: '< ' + sym + thr.toLocaleString(), data: gas.count_below, backgroundColor: CHART_COLORS.carBlueLight },
+    ]
+  }, 'stacked', { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
 
   // Cost per fill-up: area band (min-max shaded + avg/median lines)
-  new Chart(document.getElementById('gasBandChart'), {
-    type: 'line',
-    data: {
-      labels: gas.labels,
-      datasets: [
-        { label: 'Max', data: gas.max_per_fillup, borderColor: 'transparent', backgroundColor: 'rgba(52, 152, 219, 0.15)', fill: '+1', pointRadius: 0 },
-        { label: 'Min', data: gas.min_per_fillup, borderColor: 'transparent', backgroundColor: 'rgba(52, 152, 219, 0.15)', fill: false, pointRadius: 0 },
-        { label: 'Average', data: gas.avg_per_fillup, borderColor: '#e67e22', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 2 },
-        { label: 'Median', data: gas.median_per_fillup, borderColor: '#2C3E50', backgroundColor: 'transparent', borderDash: [5, 5], tension: 0.3, pointRadius: 3, borderWidth: 2 }
-      ]
-    },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
-  });
+  DashboardCharts.create('gasBandChart', 'line', {
+    labels: gas.labels,
+    datasets: [
+      { label: 'Max', data: gas.max_per_fillup, borderColor: 'transparent', backgroundColor: CHART_COLORS.bandFill, fill: '+1', pointRadius: 0 },
+      { label: 'Min', data: gas.min_per_fillup, borderColor: 'transparent', backgroundColor: CHART_COLORS.bandFill, fill: false, pointRadius: 0 },
+      { label: 'Average', data: gas.avg_per_fillup, borderColor: '#e67e22', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 2 },
+      { label: 'Median', data: gas.median_per_fillup, borderColor: CHART_COLORS.darkGray, backgroundColor: 'transparent', borderDash: [5, 5], tension: 0.3, pointRadius: 3, borderWidth: 2 }
+    ]
+  }, 'base', { scales: { y: { beginAtZero: true } } });
 })();
 </script>
 {% endblock %}

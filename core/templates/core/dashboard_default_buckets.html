@@ -123,69 +123,31 @@
 <script>
 (function () {
   var GROUP_COLORS = {
-    expense: 'rgba(220,53,69,0.8)',
-    income: 'rgba(25,135,84,0.8)',
-    transaction: 'rgba(13,110,253,0.8)',
-    unclassified: 'rgba(255,193,7,0.8)',
+    expense: CHART_COLORS.expense,
+    income: CHART_COLORS.income,
+    transaction: CHART_COLORS.primary,
+    unclassified: CHART_COLORS.warning,
   };
 
-  function parseJSON(id) {
-    var el = document.getElementById(id);
-    if (!el || !el.textContent.trim()) return null;
-    try { return JSON.parse(el.textContent); } catch (e) { return null; }
-  }
-
   // Group doughnut
-  var gd = parseJSON('groupDoughnutData');
+  var gd = DashboardCharts.parseJSON('groupDoughnutData');
   if (gd) {
-    new Chart(document.getElementById('groupDoughnut'), {
-      type: 'doughnut',
-      data: {
-        labels: gd.labels,
-        datasets: [{ data: gd.values, backgroundColor: gd.colors }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom' },
-          tooltip: {
-            callbacks: {
-              label: function (ctx) {
-                var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
-                var pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
-                return ctx.label + ': ' + ctx.parsed.toLocaleString() + ' (' + pct + '%)';
-              }
-            }
-          }
-        },
-      },
-    });
+    DashboardCharts.createDoughnut('groupDoughnut',
+      { labels: gd.labels, datasets: [{ data: gd.values, backgroundColor: gd.colors }] });
   }
 
   // Monthly trend (stacked bar)
-  var td = parseJSON('monthlyTrendData');
+  var td = DashboardCharts.parseJSON('monthlyTrendData');
   if (td) {
     var datasets = td.datasets.map(function (ds) {
       return {
         label: ds.label,
         data: ds.data,
-        backgroundColor: GROUP_COLORS[ds.slug] || 'rgba(108,117,125,0.8)',
+        backgroundColor: GROUP_COLORS[ds.slug] || CHART_COLORS.secondary,
       };
     });
-    new Chart(document.getElementById('monthlyTrendChart'), {
-      type: 'bar',
-      data: { labels: td.labels, datasets: datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { stacked: true },
-          y: { stacked: true, beginAtZero: true },
-        },
-        plugins: { legend: { position: 'bottom' } },
-      },
-    });
+    DashboardCharts.create('monthlyTrendChart', 'bar',
+      { labels: td.labels, datasets: datasets }, 'stacked');
   }
 })();
 </script>

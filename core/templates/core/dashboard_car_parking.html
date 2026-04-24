@@ -152,19 +152,12 @@
 (function() {
   var park = JSON.parse(document.getElementById('parkingData').textContent);
 
-  new Chart(document.getElementById('parkingSpendChart'), {
-    type: 'bar',
-    data: { labels: park.labels, datasets: park.spend_datasets },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
-  });
+  DashboardCharts.create('parkingSpendChart', 'bar',
+    { labels: park.labels, datasets: park.spend_datasets }, 'stacked');
 
-  new Chart(document.getElementById('parkingFreqChart'), {
-    type: 'bar',
-    data: { labels: park.labels, datasets: park.count_datasets },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } }
-  });
+  DashboardCharts.create('parkingFreqChart', 'bar',
+    { labels: park.labels, datasets: park.count_datasets },
+    'stacked', { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
 })();
 </script>
 {% endblock %}
