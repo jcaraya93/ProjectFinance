@@ -22,6 +22,7 @@ __all__ = [
     'car_gas_dashboard',
     'car_parking_dashboard',
     'income_salary_dashboard',
+    'category_stats_dashboard',
 ]
 
 
@@ -1080,5 +1081,99 @@ def income_salary_dashboard(request, display_currency, time_group):
         'nonrecurring_total': nonrecurring_total,
         'extra_combined': extra_combined,
         'extra_events': extra_events,
+    }
+    return context
+
+
+@dashboard_view("category_stats", "core/dashboard_category_stats.html")
+def category_stats_dashboard(request, display_currency, time_group):
+    """Dashboard comparing last month per category vs historical min/median/avg/max."""
+    from collections import defaultdict
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth, Abs
+
+    user = request.user
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    qs = LogicalTransaction.objects.filter(
+        user=user,
+        category__isnull=False,
+        **{f'{amount_field}__isnull': False},
+    ).exclude(category__name='Default')
+
+    monthly_cat = (
+        qs.annotate(month=TruncMonth('date'))
+        .values('month', 'category__name', 'category__group__slug', 'category__color')
+        .annotate(total=Sum(abs_field))
+        .order_by('category__group__slug', 'category__name', 'month')
+    )
+
+    cat_months = defaultdict(lambda: {'months': [], 'group': '', 'color': '#6c757d'})
+    all_months = set()
+    for r in monthly_cat:
+        key = r['category__name']
+        cat_months[key]['months'].append(float(r['total'] or 0))
+        cat_months[key]['group'] = r['category__group__slug']
+        cat_months[key]['color'] = r['category__color'] or '#6c757d'
+        all_months.add(r['month'])
+
+    sorted_months = sorted(all_months)
+    last_month = sorted_months[-1] if sorted_months else None
+    last_month_name = last_month.strftime('%B %Y') if last_month else 'N/A'
+
+    last_month_totals = {}
+    if last_month:
+        last_month_qs = (
+            qs.filter(date__year=last_month.year, date__month=last_month.month)
+            .values('category__name')
+            .annotate(total=Sum(abs_field))
+        )
+        for r in last_month_qs:
+            last_month_totals[r['category__name']] = float(r['total'] or 0)
+
+    def compute_stats(values):
+        if not values:
+            return {'min': 0, 'max': 0, 'avg': 0, 'median': 0}
+        s = sorted(values)
+        n = len(s)
+        return {
+            'min': s[0],
+            'max': s[-1],
+            'avg': sum(s) / n,
+            'median': s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2,
+        }
+
+    expense_categories = []
+    income_categories = []
+
+    for cat_name, data in sorted(cat_months.items(), key=lambda x: x[0]):
+        stats = compute_stats(data['months'])
+        last_val = last_month_totals.get(cat_name, 0)
+        entry = {
+            'name': cat_name,
+            'color': data['color'],
+            'last_month': round(last_val),
+            'min': round(stats['min']),
+            'median': round(stats['median']),
+            'avg': round(stats['avg']),
+            'max': round(stats['max']),
+        }
+        if data['group'] == 'expense':
+            expense_categories.append(entry)
+        elif data['group'] == 'income':
+            income_categories.append(entry)
+
+    expense_categories.sort(key=lambda x: x['last_month'], reverse=True)
+    income_categories.sort(key=lambda x: x['last_month'], reverse=True)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'last_month_name': last_month_name,
+        'expense_categories': expense_categories,
+        'income_categories': income_categories,
+        'expense_data': json.dumps(expense_categories, cls=DecimalEncoder),
+        'income_data': json.dumps(income_categories, cls=DecimalEncoder),
     }
     return context

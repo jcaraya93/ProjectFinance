@@ -1,0 +1,166 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}Category Stats — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="category_stats" %}
+  </div>
+  <div class="col-md-10">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Category Stats — {{ last_month_name }}</h4>
+      {% include "core/_currency_toggle.html" %}
+    </div>
+
+    <!-- EXPENSES SECTION -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expenses</h5>
+    <div class="card mb-4">
+      <div class="card-body">
+        <div id="expenseStatsChart"></div>
+      </div>
+    </div>
+
+    <!-- INCOME SECTION -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Income</h5>
+    <div class="card mb-4">
+      <div class="card-body">
+        <div id="incomeStatsChart"></div>
+      </div>
+    </div>
+
+    <!-- Summary tables -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expense Details</h5>
+    <div class="card mb-4">
+      <div class="card-body table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-end">Last Month</th>
+              <th class="text-end">Min</th>
+              <th class="text-end">Median</th>
+              <th class="text-end">Average</th>
+              <th class="text-end">Max</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cat in expense_categories %}
+            <tr>
+              <td><span class="badge rounded-pill me-1" style="background-color: {{ cat.color }}">⠀</span>{{ cat.name }}</td>
+              <td class="text-end">{{ currency_symbol }}{{ cat.last_month|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.min|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.median|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.avg|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.max|format_number }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-muted">No expense data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Income Details</h5>
+    <div class="card mb-4">
+      <div class="card-body table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-end">Last Month</th>
+              <th class="text-end">Min</th>
+              <th class="text-end">Median</th>
+              <th class="text-end">Average</th>
+              <th class="text-end">Max</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cat in income_categories %}
+            <tr>
+              <td><span class="badge rounded-pill me-1" style="background-color: {{ cat.color }}">⠀</span>{{ cat.name }}</td>
+              <td class="text-end">{{ currency_symbol }}{{ cat.last_month|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.min|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.median|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.avg|format_number }}</td>
+              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.max|format_number }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-muted">No income data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script id="expenseData" type="application/json">{{ expense_data|escapejson }}</script>
+<script id="incomeData" type="application/json">{{ income_data|escapejson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var expenseRaw = DashboardCharts.parseJSON('expenseData');
+  var incomeRaw = DashboardCharts.parseJSON('incomeData');
+
+  function renderStatsChart(elementId, categories) {
+    if (!categories || !categories.length) return;
+
+    var catNames = categories.map(function(c) { return c.name; });
+    var lastMonthData = categories.map(function(c) { return c.last_month; });
+    var avgData = categories.map(function(c) { return c.avg; });
+    var medianData = categories.map(function(c) { return c.median; });
+
+    var chartHeight = Math.max(300, categories.length * 45);
+
+    new ApexCharts(document.getElementById(elementId), {
+      chart: { type: 'bar', height: chartHeight, toolbar: { show: false } },
+      series: [
+        { name: 'Last Month', data: lastMonthData },
+        { name: 'Average', data: avgData },
+        { name: 'Median', data: medianData },
+      ],
+      colors: ['#0d6efd', '#6c757d', '#adb5bd'],
+      plotOptions: {
+        bar: {
+          horizontal: true,
+          barHeight: '60%',
+          borderRadius: 2,
+        },
+      },
+      xaxis: {
+        categories: catNames,
+        labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      yaxis: {
+        labels: { maxWidth: 200 },
+      },
+      dataLabels: { enabled: false },
+      legend: { position: 'top' },
+      tooltip: {
+        shared: true,
+        intersect: false,
+        custom: function(opts) {
+          var cat = categories[opts.dataPointIndex];
+          return '<div style="padding: 8px 12px; font-size: 13px;">' +
+            '<strong>' + cat.name + '</strong><br>' +
+            'Last Month: <strong>' + Math.round(cat.last_month).toLocaleString() + '</strong><br>' +
+            '<span style="color:#999">Min: ' + Math.round(cat.min).toLocaleString() +
+            ' · Median: ' + Math.round(cat.median).toLocaleString() +
+            ' · Avg: ' + Math.round(cat.avg).toLocaleString() +
+            ' · Max: ' + Math.round(cat.max).toLocaleString() + '</span>' +
+            '</div>';
+        },
+      },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
+  }
+
+  renderStatsChart('expenseStatsChart', expenseRaw);
+  renderStatsChart('incomeStatsChart', incomeRaw);
+})();
+</script>
+{% endblock %}
