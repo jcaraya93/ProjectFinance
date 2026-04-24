@@ -15,10 +15,7 @@
     <!-- Currency toggle -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Spending & Income — Last 12 Months</h4>
-      <div class="btn-group btn-group-sm">
-        <a href="?display_currency=CRC" class="btn {% if display_currency == 'CRC' %}btn-primary{% else %}btn-outline-primary{% endif %}">₡ CRC</a>
-        <a href="?display_currency=USD" class="btn {% if display_currency == 'USD' %}btn-primary{% else %}btn-outline-primary{% endif %}">$ USD</a>
-      </div>
+      {% include "core/_currency_toggle.html" %}
     </div>
 
     <!-- ═══ SPENDING ═══ -->

@@ -1,0 +1,4 @@
+<div class="btn-group btn-group-sm">
+  <a href="?display_currency=CRC{% if extra_params %}&{{ extra_params }}{% endif %}" class="btn {% if display_currency == 'CRC' %}btn-primary{% else %}btn-outline-primary{% endif %}">₡ CRC</a>
+  <a href="?display_currency=USD{% if extra_params %}&{{ extra_params }}{% endif %}" class="btn {% if display_currency == 'USD' %}btn-primary{% else %}btn-outline-primary{% endif %}">$ USD</a>
+</div>

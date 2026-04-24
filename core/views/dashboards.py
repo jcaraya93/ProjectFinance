@@ -41,6 +41,14 @@ CHART_COLORS = {
     'secondary': 'rgba(108, 117, 125, 0.8)',
 }
 
+# Category name constants used by car and salary dashboards.
+# Update these if the user renames categories in the UI.
+CAR_CATEGORIES = ['Car Gas', 'Car Insurance', 'Car Maintenance', 'Car Parking & Toll', 'Car Tax', 'Car Wash']
+RUNNING_CATEGORIES = ['Car Gas', 'Car Parking & Toll', 'Car Wash']
+OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
+SALARY_CATEGORIES = ['Salary Main', 'Salary Bonuses']
+EXTRA_INCOME_CATEGORIES = ['Salary Bonuses', 'Non-recurring']
+
 
 def dashboard_view(name, template, default_time_group='monthly'):
     """Decorator that handles common dashboard boilerplate:
@@ -402,9 +410,6 @@ def car_dashboard(request, display_currency, time_group):
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
-    CAR_CATEGORIES = ['Car Gas', 'Car Insurance', 'Car Maintenance', 'Car Parking & Toll', 'Car Tax', 'Car Wash']
-    SALARY_CATEGORIES = ['Salary Main', 'Salary Bonuses']
-
     abs_field = Abs(amount_field)
 
     # ── Base querysets ──
@@ -508,7 +513,6 @@ def car_dashboard(request, display_currency, time_group):
     gas_count_below = [below_count_by_month.get(m, 0) for m in sorted_months]
 
     # ── RUNNING COSTS (Gas + Parking + Wash) ──
-    RUNNING_CATEGORIES = ['Car Gas', 'Car Parking & Toll', 'Car Wash']
     running_qs = Transaction.objects.filter(user=request.user).filter(
         category__name__in=RUNNING_CATEGORIES, **{f'{amount_field}__isnull': False})
     running_monthly = (running_qs.annotate(month=TruncMonth('date')).values('month')
@@ -532,7 +536,6 @@ def car_dashboard(request, display_currency, time_group):
     running_colors = {'Car Gas': '#2980b9', 'Car Parking & Toll': '#607d8b', 'Car Wash': '#1abc9c'}
 
     # ── OWNERSHIP COSTS (Maintenance + Insurance + Tax) ──
-    OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
     ownership_qs = Transaction.objects.filter(user=request.user).filter(
         category__name__in=OWNERSHIP_CATEGORIES, **{f'{amount_field}__isnull': False})
     ownership_monthly = (ownership_qs.annotate(month=TruncMonth('date')).values('month')
@@ -1035,9 +1038,8 @@ def income_salary_dashboard(request, display_currency, time_group):
     }, cls=DecimalEncoder)
 
     # ── BONUSES & NON-RECURRING SECTION ──
-    EXTRA_CATEGORIES = ['Salary Bonuses', 'Non-recurring']
     extra_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name__in=EXTRA_CATEGORIES,
+        category__name__in=EXTRA_INCOME_CATEGORIES,
         **{f'{amount_field}__isnull': False},
     )
 
