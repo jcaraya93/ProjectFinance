@@ -61,7 +61,7 @@
           <div class="card-body">
             <h5 class="card-title">Rules by Group</h5>
             <div class="chart-container">
-              <canvas id="groupDoughnut"></canvas>
+              <div id="groupDoughnut"></div>
             </div>
           </div>
         </div>
@@ -71,7 +71,7 @@
           <div class="card-body">
             <h5 class="card-title">Monthly Rule-matched Transactions</h5>
             <div class="chart-container">
-              <canvas id="ruleActivityChart"></canvas>
+              <div id="ruleActivityChart"></div>
             </div>
           </div>
         </div>
@@ -152,20 +152,46 @@
 {% block extra_js %}
 <script>
 (function () {
-  // Rules by group doughnut
+  // Rules by group (donut)
   var gd = DashboardCharts.parseJSON('groupDoughnutData');
   if (gd) {
-    DashboardCharts.createDoughnut('groupDoughnut',
-      { labels: gd.labels, datasets: [{ data: gd.values, backgroundColor: gd.colors }] });
+    new ApexCharts(document.getElementById('groupDoughnut'), {
+      chart: { type: 'donut', height: 320 },
+      series: (gd.values || []).map(Math.round),
+      labels: gd.labels || [],
+      colors: gd.colors || [],
+      dataLabels: { enabled: false },
+      legend: { position: 'bottom' },
+      tooltip: {
+        y: {
+          formatter: function(val, opts) {
+            var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
+            return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+          }
+        }
+      },
+    }).render();
   }
 
-  // Monthly rule activity bar chart
+  // Monthly rule activity (bar)
   var ra = DashboardCharts.parseJSON('ruleActivityData');
   if (ra) {
-    DashboardCharts.create('ruleActivityChart', 'bar', {
-      labels: ra.labels,
-      datasets: [{ label: 'Rule-matched transactions', data: ra.values, backgroundColor: 'rgba(13, 110, 253, 0.7)' }],
-    }, 'noLegend');
+    new ApexCharts(document.getElementById('ruleActivityChart'), {
+      chart: { type: 'bar', height: 320, toolbar: { show: false } },
+      series: [{ name: 'Rule-matched transactions', data: (ra.values || []).map(Math.round) }],
+      colors: ['rgba(13, 110, 253, 0.7)'],
+      xaxis: { categories: ra.labels || [] },
+      yaxis: {
+        labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      dataLabels: { enabled: false },
+      legend: { show: false },
+      markers: { size: 0 },
+      tooltip: {
+        y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
   }
 })();
 </script>

@@ -65,7 +65,7 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-title">Monthly Cost Trend</h6>
-            <canvas id="trendChart" height="260"></canvas>
+            <div id="trendChart"></div>
           </div>
         </div>
       </div>
@@ -73,7 +73,7 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-title">Cost Breakdown</h6>
-            <canvas id="breakdownChart" height="260"></canvas>
+            <div id="breakdownChart"></div>
           </div>
         </div>
       </div>
@@ -123,7 +123,7 @@
         <div class="card">
           <div class="card-body">
             <h6 class="card-title">Monthly Running Costs</h6>
-            <canvas id="runningChart" height="125"></canvas>
+            <div id="runningChart"></div>
           </div>
         </div>
       </div>
@@ -242,21 +242,80 @@
   var trend = JSON.parse(document.getElementById('trendData').textContent);
   var bd = JSON.parse(document.getElementById('breakdownData').textContent);
 
-  var trendDS = [];
+  // Monthly Cost Trend (stacked bar)
+  var trendSeries = [];
   Object.keys(trend.datasets).forEach(function(cat) {
-    trendDS.push({ label: cat, data: trend.datasets[cat], backgroundColor: trend.colors[cat] || '#6c757d' });
+    trendSeries.push({ name: cat, data: (trend.datasets[cat] || []).map(Math.round) });
+  });
+  var trendColors = [];
+  Object.keys(trend.datasets).forEach(function(cat) {
+    trendColors.push(trend.colors[cat] || '#6c757d');
   });
 
-  DashboardCharts.create('trendChart', 'bar',
-    { labels: trend.labels, datasets: trendDS }, 'stacked');
+  new ApexCharts(document.getElementById('trendChart'), {
+    chart: { type: 'bar', height: 260, stacked: true, toolbar: { show: false } },
+    series: trendSeries,
+    colors: trendColors,
+    xaxis: { categories: trend.labels || [] },
+    yaxis: {
+      labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    markers: { size: 0 },
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
 
-  DashboardCharts.create('breakdownChart', 'doughnut',
-    { labels: bd.labels, datasets: [{ data: bd.values, backgroundColor: bd.colors }] }, 'doughnut');
+  // Cost Breakdown (donut)
+  new ApexCharts(document.getElementById('breakdownChart'), {
+    chart: { type: 'donut', height: 260 },
+    series: (bd.values || []).map(Math.round),
+    labels: bd.labels || [],
+    colors: bd.colors || [],
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: {
+      y: {
+        formatter: function(val, opts) {
+          var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
+          return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+        }
+      }
+    },
+  }).render();
 
-  // ── Running Costs: Stacked bar ──
+  // Running Costs (stacked bar)
   var running = JSON.parse(document.getElementById('runningData').textContent);
-  DashboardCharts.create('runningChart', 'bar',
-    { labels: running.labels, datasets: running.datasets }, 'stacked');
+  var runningSeries = (running.datasets || []).map(function(ds) {
+    return { name: ds.label, data: (ds.data || []).map(Math.round) };
+  });
+  var runningColors = (running.datasets || []).map(function(ds) {
+    return ds.backgroundColor || '#6c757d';
+  });
+
+  new ApexCharts(document.getElementById('runningChart'), {
+    chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
+    series: runningSeries,
+    colors: runningColors,
+    xaxis: { categories: running.labels || [] },
+    yaxis: {
+      labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    markers: { size: 0 },
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
 })();
 </script>
 {% endblock %}

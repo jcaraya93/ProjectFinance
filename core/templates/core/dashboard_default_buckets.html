@@ -54,7 +54,7 @@
           <div class="card-body">
             <h5 class="card-title">By Group</h5>
             <div class="chart-container">
-              <canvas id="groupDoughnut"></canvas>
+              <div id="groupDoughnut"></div>
             </div>
           </div>
         </div>
@@ -64,7 +64,7 @@
           <div class="card-body">
             <h5 class="card-title">Monthly Trend</h5>
             <div class="chart-container">
-              <canvas id="monthlyTrendChart"></canvas>
+              <div id="monthlyTrendChart"></div>
             </div>
           </div>
         </div>
@@ -132,22 +132,52 @@
   // Group doughnut
   var gd = DashboardCharts.parseJSON('groupDoughnutData');
   if (gd) {
-    DashboardCharts.createDoughnut('groupDoughnut',
-      { labels: gd.labels, datasets: [{ data: gd.values, backgroundColor: gd.colors }] });
+    new ApexCharts(document.getElementById('groupDoughnut'), {
+      chart: { type: 'donut', height: 320 },
+      series: (gd.values || []).map(Math.round),
+      labels: gd.labels || [],
+      colors: gd.colors || [],
+      dataLabels: { enabled: false },
+      legend: { position: 'bottom' },
+      tooltip: {
+        y: {
+          formatter: function(val, opts) {
+            var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
+            return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+          }
+        }
+      },
+    }).render();
   }
 
   // Monthly trend (stacked bar)
   var td = DashboardCharts.parseJSON('monthlyTrendData');
   if (td) {
-    var datasets = td.datasets.map(function (ds) {
-      return {
-        label: ds.label,
-        data: ds.data,
-        backgroundColor: GROUP_COLORS[ds.slug] || CHART_COLORS.secondary,
-      };
+    var series = td.datasets.map(function (ds) {
+      return { name: ds.label, data: (ds.data || []).map(Math.round) };
     });
-    DashboardCharts.create('monthlyTrendChart', 'bar',
-      { labels: td.labels, datasets: datasets }, 'stacked');
+    var colors = td.datasets.map(function (ds) {
+      return GROUP_COLORS[ds.slug] || CHART_COLORS.secondary;
+    });
+
+    new ApexCharts(document.getElementById('monthlyTrendChart'), {
+      chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
+      series: series,
+      colors: colors,
+      xaxis: { categories: td.labels || [] },
+      yaxis: {
+        labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      dataLabels: { enabled: false },
+      legend: { position: 'bottom' },
+      markers: { size: 0 },
+      tooltip: {
+        shared: true,
+        intersect: false,
+        y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
   }
 })();
 </script>

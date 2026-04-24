@@ -73,7 +73,7 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-title">Monthly Salary Trend</h6>
-            <canvas id="salaryTrendChart" height="130"></canvas>
+            <div id="salaryTrendChart"></div>
           </div>
         </div>
       </div>
@@ -156,47 +156,40 @@
 <script>
 (function() {
   var data = JSON.parse(document.getElementById('trendData').textContent);
-  var avgLine = data.labels.map(function() { return data.average; });
+  var avgLine = data.labels.map(function() { return Math.round(data.average); });
   var isPrivacy = dashboardPrivacy.isOn();
-  var privacyTicks = isPrivacy ? { callback: function () { return ''; } } : {};
   window._dashCharts = [];
 
-  window._dashCharts.push(new Chart(document.getElementById('salaryTrendChart'), {
-    type: 'bar',
-    data: {
-      labels: data.labels,
-      datasets: [
-        {
-          label: 'Salary Main',
-          data: data.values,
-          backgroundColor: CHART_COLORS.salaryGreen,
-          borderRadius: 4,
-          order: 2
-        },
-        {
-          label: 'Average',
-          data: avgLine,
-          type: 'line',
-          borderColor: CHART_COLORS.averageRed,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [6, 4],
-          pointRadius: 0,
-          order: 1
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: { enabled: !isPrivacy }
+  var salaryChart = new ApexCharts(document.getElementById('salaryTrendChart'), {
+    chart: { type: 'bar', height: 320, toolbar: { show: false } },
+    series: [
+      { name: 'Salary Main', type: 'bar', data: (data.values || []).map(Math.round) },
+      { name: 'Average', type: 'line', data: avgLine },
+    ],
+    colors: [CHART_COLORS.salaryGreen, CHART_COLORS.averageRed],
+    stroke: { width: [0, 2], dashArray: [0, 6], curve: 'smooth' },
+    markers: { size: [0, 0], strokeWidth: 0 },
+    plotOptions: { bar: { borderRadius: 4 } },
+    xaxis: { categories: data.labels || [] },
+    yaxis: {
+      min: 0,
+      labels: {
+        show: !isPrivacy,
+        formatter: function(v) { return Math.round(v).toLocaleString(); },
       },
-      scales: {
-        y: { beginAtZero: true, ticks: privacyTicks }
-      }
-    }
-  }));
+    },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: {
+      enabled: !isPrivacy,
+      shared: true,
+      intersect: false,
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  });
+  salaryChart.render();
+  window._dashCharts.push(salaryChart);
 
   dashboardPrivacy.apply(window._dashCharts);
 })();

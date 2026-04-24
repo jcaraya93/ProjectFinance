@@ -30,7 +30,7 @@
           <div class="card-body">
             <h5 class="card-title">Expense Breakdown</h5>
             <div class="chart-container">
-              <canvas id="expenseChart"></canvas>
+              <div id="expenseChart"></div>
             </div>
           </div>
         </div>
@@ -40,7 +40,7 @@
           <div class="card-body">
             <h5 class="card-title">Top Spending Categories</h5>
             <div class="chart-container">
-              <canvas id="topCategoriesChart"></canvas>
+              <div id="topCategoriesChart"></div>
             </div>
           </div>
         </div>
@@ -56,7 +56,7 @@
           <div class="card-body">
             <h5 class="card-title">Income Breakdown</h5>
             <div class="chart-container">
-              <canvas id="incomeChart"></canvas>
+              <div id="incomeChart"></div>
             </div>
           </div>
         </div>
@@ -66,7 +66,7 @@
           <div class="card-body">
             <h5 class="card-title">Top Income Categories</h5>
             <div class="chart-container">
-              <canvas id="topIncomeChart"></canvas>
+              <div id="topIncomeChart"></div>
             </div>
           </div>
         </div>
@@ -85,36 +85,90 @@
 {% block extra_js %}
 <script>
 (function() {
-  // Expense Breakdown (doughnut)
+  // Expense Breakdown (donut)
   var expenseRaw = DashboardCharts.parseJSON('expenseCategoryData');
   if (expenseRaw) {
-    DashboardCharts.create('expenseChart', 'doughnut',
-      { labels: expenseRaw.labels || [], datasets: [{ data: expenseRaw.values || [], backgroundColor: expenseRaw.colors || [], borderWidth: 2 }] },
-      'doughnut', { plugins: { legend: { position: 'right' } } });
+    new ApexCharts(document.getElementById('expenseChart'), {
+      chart: { type: 'donut', height: 320 },
+      series: (expenseRaw.values || []).map(Math.round),
+      labels: expenseRaw.labels || [],
+      colors: expenseRaw.colors || [],
+      dataLabels: { enabled: false },
+      legend: { position: 'right' },
+      tooltip: {
+        y: {
+          formatter: function(val, opts) {
+            var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
+            return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+          }
+        }
+      },
+    }).render();
   }
 
-  // Income Breakdown (doughnut)
+  // Income Breakdown (donut)
   var incomeRaw = DashboardCharts.parseJSON('incomeCategoryData');
   if (incomeRaw) {
-    DashboardCharts.create('incomeChart', 'doughnut',
-      { labels: incomeRaw.labels || [], datasets: [{ data: incomeRaw.values || [], backgroundColor: incomeRaw.colors || [], borderWidth: 2 }] },
-      'doughnut', { plugins: { legend: { position: 'right' } } });
+    new ApexCharts(document.getElementById('incomeChart'), {
+      chart: { type: 'donut', height: 320 },
+      series: (incomeRaw.values || []).map(Math.round),
+      labels: incomeRaw.labels || [],
+      colors: incomeRaw.colors || [],
+      dataLabels: { enabled: false },
+      legend: { position: 'right' },
+      tooltip: {
+        y: {
+          formatter: function(val, opts) {
+            var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
+            return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+          }
+        }
+      },
+    }).render();
   }
 
   // Top Spending Categories (horizontal bar)
   var topRaw = DashboardCharts.parseJSON('topCategoriesData');
   if (topRaw) {
-    DashboardCharts.create('topCategoriesChart', 'bar',
-      { labels: topRaw.labels || [], datasets: [{ data: topRaw.values || [], backgroundColor: topRaw.colors || [], borderWidth: 0 }] },
-      'horizontalNoLegend');
+    new ApexCharts(document.getElementById('topCategoriesChart'), {
+      chart: { type: 'bar', height: 320, toolbar: { show: false } },
+      series: [{ name: 'Amount', data: (topRaw.values || []).map(Math.round) }],
+      colors: topRaw.colors || [],
+      plotOptions: { bar: { horizontal: true, distributed: true } },
+      xaxis: { categories: topRaw.labels || [] },
+      yaxis: {
+        labels: { formatter: function(v) { return v; } },
+      },
+      dataLabels: { enabled: false },
+      legend: { show: false },
+      markers: { size: 0 },
+      tooltip: {
+        y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
   }
 
   // Top Income Categories (horizontal bar)
   var topIncomeRaw = DashboardCharts.parseJSON('topIncomeData');
   if (topIncomeRaw) {
-    DashboardCharts.create('topIncomeChart', 'bar',
-      { labels: topIncomeRaw.labels || [], datasets: [{ data: topIncomeRaw.values || [], backgroundColor: topIncomeRaw.colors || [], borderWidth: 0 }] },
-      'horizontalNoLegend');
+    new ApexCharts(document.getElementById('topIncomeChart'), {
+      chart: { type: 'bar', height: 320, toolbar: { show: false } },
+      series: [{ name: 'Amount', data: (topIncomeRaw.values || []).map(Math.round) }],
+      colors: topIncomeRaw.colors || [],
+      plotOptions: { bar: { horizontal: true, distributed: true } },
+      xaxis: { categories: topIncomeRaw.labels || [] },
+      yaxis: {
+        labels: { formatter: function(v) { return v; } },
+      },
+      dataLabels: { enabled: false },
+      legend: { show: false },
+      markers: { size: 0 },
+      tooltip: {
+        y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
   }
 })();
 </script>

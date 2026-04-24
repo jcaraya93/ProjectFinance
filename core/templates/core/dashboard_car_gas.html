@@ -60,7 +60,7 @@
         <div class="card">
           <div class="card-body">
             <h6 class="card-title">Fill-ups per Month</h6>
-            <canvas id="gasFreqChart" height="125"></canvas>
+            <div id="gasFreqChart"></div>
           </div>
         </div>
       </div>
@@ -95,7 +95,7 @@
         <div class="card">
           <div class="card-body">
             <h6 class="card-title">Cost per Fill-up (min–max range, avg & median)</h6>
-            <canvas id="gasBandChart" height="150"></canvas>
+            <div id="gasBandChart"></div>
           </div>
         </div>
       </div>
@@ -143,7 +143,7 @@
         <div class="card">
           <div class="card-body">
             <h6 class="card-title">Monthly Gas Spend</h6>
-            <canvas id="gasSpendChart" height="125"></canvas>
+            <div id="gasSpendChart"></div>
           </div>
         </div>
       </div>
@@ -162,31 +162,79 @@
   var sym = '{{ currency_symbol }}';
   var thr = gas.threshold;
 
-  // Monthly gas spend
-  DashboardCharts.create('gasSpendChart', 'bar', {
-    labels: gas.labels,
-    datasets: [{ label: 'Monthly Gas Spend', data: gas.spend, backgroundColor: CHART_COLORS.carBlue }]
-  }, 'noLegend');
+  // Monthly gas spend (bar)
+  new ApexCharts(document.getElementById('gasSpendChart'), {
+    chart: { type: 'bar', height: 280, toolbar: { show: false } },
+    series: [{ name: 'Monthly Gas Spend', data: (gas.spend || []).map(Math.round) }],
+    colors: [CHART_COLORS.carBlue],
+    xaxis: { categories: gas.labels || [] },
+    yaxis: {
+      labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    dataLabels: { enabled: false },
+    legend: { show: false },
+    markers: { size: 0 },
+    tooltip: {
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
 
-  // Fill-ups count split by threshold
-  DashboardCharts.create('gasFreqChart', 'bar', {
-    labels: gas.labels,
-    datasets: [
-      { label: '≥ ' + sym + thr.toLocaleString(), data: gas.count_above, backgroundColor: CHART_COLORS.carBlue },
-      { label: '< ' + sym + thr.toLocaleString(), data: gas.count_below, backgroundColor: CHART_COLORS.carBlueLight },
-    ]
-  }, 'stacked', { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } });
+  // Fill-ups count split by threshold (stacked bar)
+  new ApexCharts(document.getElementById('gasFreqChart'), {
+    chart: { type: 'bar', height: 280, stacked: true, toolbar: { show: false } },
+    series: [
+      { name: '\u2265 ' + sym + thr.toLocaleString(), data: (gas.count_above || []).map(Math.round) },
+      { name: '< ' + sym + thr.toLocaleString(), data: (gas.count_below || []).map(Math.round) },
+    ],
+    colors: [CHART_COLORS.carBlue, CHART_COLORS.carBlueLight],
+    xaxis: { categories: gas.labels || [] },
+    yaxis: {
+      min: 0,
+      tickAmount: undefined,
+      labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    markers: { size: 0 },
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
 
-  // Cost per fill-up: area band (min-max shaded + avg/median lines)
-  DashboardCharts.create('gasBandChart', 'line', {
-    labels: gas.labels,
-    datasets: [
-      { label: 'Max', data: gas.max_per_fillup, borderColor: 'transparent', backgroundColor: CHART_COLORS.bandFill, fill: '+1', pointRadius: 0 },
-      { label: 'Min', data: gas.min_per_fillup, borderColor: 'transparent', backgroundColor: CHART_COLORS.bandFill, fill: false, pointRadius: 0 },
-      { label: 'Average', data: gas.avg_per_fillup, borderColor: '#e67e22', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 2 },
-      { label: 'Median', data: gas.median_per_fillup, borderColor: CHART_COLORS.darkGray, backgroundColor: 'transparent', borderDash: [5, 5], tension: 0.3, pointRadius: 3, borderWidth: 2 }
-    ]
-  }, 'base', { scales: { y: { beginAtZero: true } } });
+  // Cost per fill-up: band chart (4 line series: Max, Min with fill, Average, Median)
+  new ApexCharts(document.getElementById('gasBandChart'), {
+    chart: { type: 'line', height: 280, toolbar: { show: false } },
+    series: [
+      { name: 'Max', data: (gas.max_per_fillup || []).map(Math.round) },
+      { name: 'Min', data: (gas.min_per_fillup || []).map(Math.round) },
+      { name: 'Average', data: (gas.avg_per_fillup || []).map(Math.round) },
+      { name: 'Median', data: (gas.median_per_fillup || []).map(Math.round) },
+    ],
+    colors: ['transparent', 'transparent', '#e67e22', CHART_COLORS.darkGray],
+    stroke: { width: [0, 0, 2, 2], dashArray: [0, 0, 0, 5], curve: 'smooth' },
+    fill: {
+      type: ['solid', 'solid', 'solid', 'solid'],
+      opacity: [0.15, 0, 0, 0],
+    },
+    markers: { size: [0, 0, 3, 3], strokeWidth: 0 },
+    xaxis: { categories: gas.labels || [] },
+    yaxis: {
+      min: 0,
+      labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
 })();
 </script>
 {% endblock %}

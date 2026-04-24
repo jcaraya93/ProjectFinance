@@ -17,7 +17,7 @@
     <div class="card-header fw-bold">Option 1: Stacked Area Chart</div>
     <div class="card-body">
       <p class="text-muted small">Shows total expense composition over time. Good for seeing how the total changes and which categories dominate.</p>
-      <canvas id="stackedAreaChart" height="200"></canvas>
+      <div id="stackedAreaChart"></div>
     </div>
   </div>
 
@@ -49,7 +49,7 @@
     <div class="card-header fw-bold">Option 4: Stacked Bar Chart</div>
     <div class="card-body">
       <p class="text-muted small">Monthly bars broken down by category. Similar to stacked area but discrete per month.</p>
-      <canvas id="stackedBarChart" height="200"></canvas>
+      <div id="stackedBarChart"></div>
     </div>
   </div>
 
@@ -66,23 +66,34 @@
   var cats = raw.categories;
 
   // ── Option 1: Stacked Area Chart ──
-  var areaDS = cats.map(function(c) {
-    return {
-      label: c.name,
-      data: c.data,
-      backgroundColor: c.color + '88',
-      borderColor: c.color,
-      borderWidth: 1,
-      fill: true,
-      tension: 0.3,
-      pointRadius: 0,
-    };
+  var areaSeries = cats.map(function(c) {
+    return { name: c.name, data: (c.data || []).map(Math.round) };
   });
-  DashboardCharts.create('stackedAreaChart', 'line',
-    { labels: months, datasets: areaDS },
-    'base', { scales: { x: { display: true }, y: { stacked: true, beginAtZero: true } } });
+  var areaColors = cats.map(function(c) { return c.color; });
 
-  // ── Option 2: Small Multiples ──
+  new ApexCharts(document.getElementById('stackedAreaChart'), {
+    chart: { type: 'area', height: 200, stacked: true, toolbar: { show: false } },
+    series: areaSeries,
+    colors: areaColors,
+    xaxis: { categories: months },
+    yaxis: {
+      min: 0,
+      labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    stroke: { width: 1, curve: 'smooth' },
+    fill: { type: 'solid', opacity: 0.5 },
+    markers: { size: 0 },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
+
+  // ── Option 2: Small Multiples (Sparklines) ──
   var container = document.getElementById('sparklineContainer');
   cats.forEach(function(c, idx) {
     var col = document.createElement('div');
@@ -93,49 +104,35 @@
       '<div class="d-flex justify-content-between align-items-center mb-1">' +
       '<span class="small fw-bold">' + c.name + '</span>' +
       '</div>' +
-      '<canvas id="spark' + idx + '" height="60"></canvas></div>';
+      '<div id="spark' + idx + '"></div></div>';
     col.appendChild(card);
     container.appendChild(col);
 
     requestAnimationFrame(function() {
-      new Chart(document.getElementById('spark' + idx), {
-        type: 'line',
-        data: {
-          labels: months,
-          datasets: [{
-            data: c.data,
-            borderColor: c.color,
-            backgroundColor: c.color + '22',
-            fill: true,
-            tension: 0.3,
-            pointRadius: 2,
-            borderWidth: 2,
-          }],
+      new ApexCharts(document.getElementById('spark' + idx), {
+        chart: { type: 'area', height: 60, sparkline: { enabled: true } },
+        series: [{ data: (c.data || []).map(Math.round) }],
+        colors: [c.color],
+        stroke: { width: 2, curve: 'smooth' },
+        fill: { type: 'solid', opacity: 0.1 },
+        tooltip: {
+          fixed: { enabled: false },
+          y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: { display: false },
-            y: { display: false, beginAtZero: true },
-          },
-        },
-      });
+      }).render();
     });
   });
 
-  // ── Option 3: Heatmap Table ──
+  // ── Option 3: Heatmap Table (DOM-based, no chart library) ──
   var table = document.getElementById('heatmapTable');
   var thead = table.querySelector('thead tr');
   months.forEach(function(m) {
     var th = document.createElement('th');
     th.className = 'text-center small';
-    th.textContent = m.substring(5);  // just MM
+    th.textContent = m.substring(5);
     thead.appendChild(th);
   });
 
-  // Find global max for color scaling
   var globalMax = 0;
   cats.forEach(function(c) {
     c.data.forEach(function(v) { if (v > globalMax) globalMax = v; });
@@ -162,15 +159,29 @@
   });
 
   // ── Option 4: Stacked Bar Chart ──
-  var barDS = cats.map(function(c) {
-    return {
-      label: c.name,
-      data: c.data,
-      backgroundColor: c.color,
-    };
+  var barSeries = cats.map(function(c) {
+    return { name: c.name, data: (c.data || []).map(Math.round) };
   });
-  DashboardCharts.create('stackedBarChart', 'bar',
-    { labels: months, datasets: barDS }, 'stacked');
+  var barColors = cats.map(function(c) { return c.color; });
+
+  new ApexCharts(document.getElementById('stackedBarChart'), {
+    chart: { type: 'bar', height: 200, stacked: true, toolbar: { show: false } },
+    series: barSeries,
+    colors: barColors,
+    xaxis: { categories: months },
+    yaxis: {
+      labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    markers: { size: 0 },
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
 })();
 </script>
 {% endblock %}

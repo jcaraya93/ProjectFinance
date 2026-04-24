@@ -63,7 +63,7 @@
           <div class="card-body">
             <h5 class="card-title">Classification Breakdown</h5>
             <div class="chart-container">
-              <canvas id="classificationDoughnut"></canvas>
+              <div id="classificationDoughnut"></div>
             </div>
           </div>
         </div>
@@ -73,7 +73,7 @@
           <div class="card-body">
             <h5 class="card-title">Monthly Classification Trend</h5>
             <div class="chart-container">
-              <canvas id="monthlyTrendChart"></canvas>
+              <div id="monthlyTrendChart"></div>
             </div>
           </div>
         </div>
@@ -89,7 +89,7 @@
           <div class="card-body">
             <h5 class="card-title">Category Classification Methods</h5>
             <div class="chart-container" style="height: {{ category_chart_height }}px;">
-              <canvas id="categoryCoverageChart"></canvas>
+              <div id="categoryCoverageChart"></div>
             </div>
           </div>
         </div>
@@ -149,37 +149,82 @@
 {% block extra_js %}
 <script>
 (function () {
-  // Classification breakdown doughnut
+  // Classification breakdown (donut)
   var clsData = DashboardCharts.parseJSON('classificationData');
   if (clsData) {
-    DashboardCharts.createDoughnut('classificationDoughnut',
-      { labels: clsData.labels, datasets: [{ data: clsData.values, backgroundColor: clsData.colors }] });
+    new ApexCharts(document.getElementById('classificationDoughnut'), {
+      chart: { type: 'donut', height: 320 },
+      series: (clsData.values || []).map(Math.round),
+      labels: clsData.labels || [],
+      colors: clsData.colors || [],
+      dataLabels: { enabled: false },
+      legend: { position: 'bottom' },
+      tooltip: {
+        y: {
+          formatter: function(val, opts) {
+            var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
+            return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+          }
+        }
+      },
+    }).render();
   }
 
   // Monthly classification trend (stacked bar)
   var trendData = DashboardCharts.parseJSON('monthlyTrendData');
   if (trendData) {
-    DashboardCharts.create('monthlyTrendChart', 'bar', {
-      labels: trendData.labels,
-      datasets: [
-        { label: 'Rule', data: trendData.rule, backgroundColor: CHART_COLORS.primary },
-        { label: 'Manual', data: trendData.manual, backgroundColor: CHART_COLORS.info },
-        { label: 'Unclassified', data: trendData.unclassified, backgroundColor: CHART_COLORS.warning },
+    new ApexCharts(document.getElementById('monthlyTrendChart'), {
+      chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
+      series: [
+        { name: 'Rule', data: (trendData.rule || []).map(Math.round) },
+        { name: 'Manual', data: (trendData.manual || []).map(Math.round) },
+        { name: 'Unclassified', data: (trendData.unclassified || []).map(Math.round) },
       ],
-    }, 'stacked');
+      colors: [CHART_COLORS.primary, CHART_COLORS.info, CHART_COLORS.warning],
+      xaxis: { categories: trendData.labels || [] },
+      yaxis: {
+        labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      dataLabels: { enabled: false },
+      legend: { position: 'bottom' },
+      markers: { size: 0 },
+      tooltip: {
+        shared: true,
+        intersect: false,
+        y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
   }
 
   // Category coverage (horizontal stacked bar)
   var catData = DashboardCharts.parseJSON('categoryCoverageData');
   if (catData) {
-    DashboardCharts.create('categoryCoverageChart', 'bar', {
-      labels: catData.labels,
-      datasets: [
-        { label: 'Rule', data: catData.rule, backgroundColor: CHART_COLORS.primary },
-        { label: 'Manual', data: catData.manual, backgroundColor: CHART_COLORS.info },
-        { label: 'Unclassified', data: catData.unclassified, backgroundColor: CHART_COLORS.warning },
+    var containerEl = document.getElementById('categoryCoverageChart').parentElement;
+    var chartHeight = parseInt(containerEl.style.height) || 320;
+    new ApexCharts(document.getElementById('categoryCoverageChart'), {
+      chart: { type: 'bar', height: chartHeight, stacked: true, toolbar: { show: false } },
+      series: [
+        { name: 'Rule', data: (catData.rule || []).map(Math.round) },
+        { name: 'Manual', data: (catData.manual || []).map(Math.round) },
+        { name: 'Unclassified', data: (catData.unclassified || []).map(Math.round) },
       ],
-    }, 'horizontalStacked');
+      colors: [CHART_COLORS.primary, CHART_COLORS.info, CHART_COLORS.warning],
+      plotOptions: { bar: { horizontal: true } },
+      xaxis: {
+        labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      yaxis: { labels: { formatter: function(v) { return v; } } },
+      dataLabels: { enabled: false },
+      legend: { position: 'bottom' },
+      markers: { size: 0 },
+      tooltip: {
+        shared: true,
+        intersect: false,
+        y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
   }
 })();
 </script>
