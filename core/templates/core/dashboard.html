@@ -115,14 +115,13 @@
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h5 class="card-title mb-0">Recurring Income vs Expenses</h5>
           <div class="btn-group btn-group-sm" role="group">
-            <a href="?display_currency={{ display_currency }}&time_group=weekly" class="btn {% if time_group == 'weekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Weekly</a>
             <a href="?display_currency={{ display_currency }}&time_group=biweekly" class="btn {% if time_group == 'biweekly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Bi-weekly</a>
             <a href="?display_currency={{ display_currency }}&time_group=monthly" class="btn {% if time_group == 'monthly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Monthly</a>
             <a href="?display_currency={{ display_currency }}&time_group=quarterly" class="btn {% if time_group == 'quarterly' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Quarterly</a>
           </div>
         </div>
         <div class="chart-container">
-          <canvas id="trendChart"></canvas>
+          <div id="trendChart"></div>
         </div>
       </div>
     </div>
@@ -133,9 +132,9 @@
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <h5 class="card-title">Net Cash Flow</h5>
+        <h5 class="card-title">Net Cash Flow & Cumulative Savings</h5>
         <div class="chart-container">
-          <canvas id="netCashflowBarChart"></canvas>
+          <div id="netCashflowBarChart"></div>
         </div>
       </div>
     </div>
@@ -154,70 +153,108 @@
 (function () {
   var trendRaw = DashboardCharts.parseJSON('trendData');
   var isPrivacy = dashboardPrivacy.isOn();
-  var privacyTicks = isPrivacy ? { callback: function () { return ''; } } : {};
   window._dashCharts = [];
 
-  // Recurring Income vs Expenses (line chart)
+  // Recurring Income vs Expenses (line chart — matching original style)
   if (trendRaw) {
-    window._dashCharts.push(new Chart(document.getElementById('trendChart'), {
-      type: 'line',
-      data: {
-        labels: trendRaw.labels || [],
-        datasets: [
-          {
-            label: 'Recurring Income',
-            data: trendRaw.income || [],
-            borderColor: CHART_COLORS.incomeLine,
-            backgroundColor: CHART_COLORS.incomeFill,
-            borderDash: [6, 3],
-            fill: false,
-            tension: 0.3,
-            pointRadius: 4,
-          },
-          {
-            label: 'Expenses',
-            data: trendRaw.expenses || [],
-            borderColor: CHART_COLORS.expenseLine,
-            backgroundColor: CHART_COLORS.expenseFill,
-            fill: true,
-            tension: 0.3,
-            pointRadius: 4,
-          },
-        ],
+    var trendChart = new ApexCharts(document.getElementById('trendChart'), {
+      chart: {
+        type: 'line',
+        height: 320,
+        group: 'overview',
+        toolbar: { show: false },
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true, ticks: privacyTicks } },
-        plugins: { legend: { position: 'bottom' }, tooltip: { enabled: !isPrivacy } },
+      series: [
+        { name: 'Recurring Income', data: (trendRaw.income || []).map(Math.round) },
+        { name: 'Expenses', data: (trendRaw.expenses || []).map(Math.round) },
+      ],
+      colors: [CHART_COLORS.incomeLine, CHART_COLORS.expenseLine],
+      stroke: { width: 2, dashArray: [6, 0], curve: 'smooth' },
+      markers: { size: 4, strokeWidth: 0 },
+      dataLabels: { enabled: false },
+      xaxis: { categories: trendRaw.labels || [] },
+      yaxis: {
+        min: 0,
+        labels: {
+          show: !isPrivacy,
+          formatter: function (v) { return Math.round(v).toLocaleString(); },
+        },
       },
-    }));
+      legend: { position: 'bottom' },
+      tooltip: { enabled: !isPrivacy, shared: true, intersect: false,
+        y: { formatter: function (v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    });
+    trendChart.render();
+    window._dashCharts.push(trendChart);
   }
 
-  // Net Cash Flow (bar chart)
+  // Net Cash Flow (bar) + Cumulative Savings (line)
   if (trendRaw) {
     var netData = (trendRaw.income || []).map(function (inc, i) {
       return inc - (trendRaw.expenses || [])[i] || 0;
     });
-    var barColors = netData.map(function (v) { return v >= 0 ? CHART_COLORS.barPositive : CHART_COLORS.barNegative; });
-    window._dashCharts.push(new Chart(document.getElementById('netCashflowBarChart'), {
-      type: 'bar',
-      data: {
-        labels: trendRaw.labels || [],
-        datasets: [{
-          label: 'Net Cash Flow',
-          data: netData,
-          backgroundColor: barColors,
-          borderWidth: 0,
-        }],
+
+    // Compute cumulative savings
+    var cumulative = [];
+    var runningTotal = 0;
+    netData.forEach(function (v) {
+      runningTotal += v;
+      cumulative.push(Math.round(runningTotal));
+    });
+
+    // Round net data to avoid decimal display
+    netData = netData.map(function (v) { return Math.round(v); });
+
+    var cashflowChart = new ApexCharts(document.getElementById('netCashflowBarChart'), {
+      chart: {
+        type: 'bar',
+        height: 350,
+        group: 'overview',
+        toolbar: { show: false },
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { beginAtZero: false, ticks: privacyTicks } },
-        plugins: { legend: { display: false }, tooltip: { enabled: !isPrivacy } },
+      series: [
+        { name: 'Monthly Cash Flow', type: 'bar', data: netData },
+        { name: 'Cumulative Savings', type: 'line', data: cumulative },
+      ],
+      colors: [CHART_COLORS.barPositive, '#6f42c1'],
+      dataLabels: { enabled: false },
+      plotOptions: {
+        bar: {
+          colors: {
+            ranges: [{ from: -999999999, to: 0, color: CHART_COLORS.barNegative }],
+          },
+        },
       },
-    }));
+      stroke: { width: [0, 3], curve: 'smooth' },
+      markers: { size: [0, 4], strokeWidth: 0 },
+      xaxis: { categories: trendRaw.labels || [] },
+      yaxis: [
+        {
+          title: { text: 'Monthly' },
+          labels: {
+            show: !isPrivacy,
+            formatter: function (v) { return Math.round(v).toLocaleString(); },
+          },
+        },
+        {
+          opposite: true,
+          title: { text: 'Cumulative' },
+          labels: {
+            show: !isPrivacy,
+            formatter: function (v) { return Math.round(v).toLocaleString(); },
+          },
+        },
+      ],
+      legend: { position: 'bottom' },
+      tooltip: { enabled: !isPrivacy, shared: true, intersect: false,
+        y: { formatter: function (v) { return Math.round(v).toLocaleString(); } },
+      },
+      grid: { borderColor: '#e9ecef' },
+    });
+    cashflowChart.render();
+    window._dashCharts.push(cashflowChart);
   }
 
   // Apply privacy on load

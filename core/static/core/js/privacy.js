@@ -29,17 +29,26 @@
       }
     });
 
-    // Update Chart.js instances
+    // Update chart instances (supports both Chart.js and ApexCharts)
     (charts || []).forEach(function (chart) {
-      chart.options.plugins.tooltip.enabled = !on;
-      if (chart.options.scales && chart.options.scales.y) {
-        if (on) {
-          chart.options.scales.y.ticks.callback = function () { return ''; };
-        } else {
-          delete chart.options.scales.y.ticks.callback;
+      if (chart.update && chart.options && chart.options.plugins) {
+        // Chart.js instance
+        chart.options.plugins.tooltip.enabled = !on;
+        if (chart.options.scales && chart.options.scales.y) {
+          if (on) {
+            chart.options.scales.y.ticks.callback = function () { return ''; };
+          } else {
+            delete chart.options.scales.y.ticks.callback;
+          }
         }
+        chart.update('none');
+      } else if (chart.updateOptions) {
+        // ApexCharts instance
+        chart.updateOptions({
+          yaxis: { labels: { show: !on } },
+          tooltip: { enabled: !on },
+        }, false, false);
       }
-      chart.update('none');
     });
 
     // Update toggle button appearance
