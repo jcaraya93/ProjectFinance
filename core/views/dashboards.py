@@ -64,7 +64,6 @@ def dashboard(request, display_currency, time_group):
         display_currency=display_currency,
         time_group=time_group,
     )
-    context['privacy'] = request.GET.get('privacy', '1') != '0'
     return context
 
 
@@ -1120,6 +1119,5 @@ def income_salary_dashboard(request):
         'nonrecurring_total': nonrecurring_total,
         'extra_combined': extra_combined,
         'extra_events': extra_events,
-        'privacy': request.GET.get('privacy', '1') != '0',
     }
     return render(request, 'core/dashboard_income_salary.html', context)
