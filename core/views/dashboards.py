@@ -61,7 +61,7 @@ OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
 SALARY_CATEGORIES = ['Work Salary', 'Work Bonuses']
 EXTRA_INCOME_CATEGORIES = ['Work Bonuses', 'Work Association', 'Work Goverment']
 TXN_INCOME_CATEGORIES = ['Reimbursement Default']
-BANK_INCOME_CATEGORIES = ['Bank Interest CDP', 'Bank Interest Cashback', 'Bank Interest Reversals']
+BANK_INCOME_CATEGORIES = ['Bank Interest CDP', 'Bank Interest Cashback', 'Bank Interest Reversals', 'Bank Interest Credit']
 CREDIT_PAYMENT_CATEGORY = 'Credit'
 PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
@@ -2289,15 +2289,15 @@ def transfer_flow_dashboard(request, display_currency, time_group):
                 # Debit side paying to credit card
                 currency = ledger.currency if ledger else ''
                 if amt < 0:
-                    flows[(acct_name, 'Credit Card')] += abs(amt)
-                    flow_counts[(acct_name, 'Credit Card')] += 1
+                    flows[(acct_name, 'Credit 2918')] += abs(amt)
+                    flow_counts[(acct_name, 'Credit 2918')] += 1
         elif cat == 'External':
             if amt < 0:
-                flows[(acct_name, 'External')] += abs(amt)
-                flow_counts[(acct_name, 'External')] += 1
+                flows[(acct_name, 'Investments')] += abs(amt)
+                flow_counts[(acct_name, 'Investments')] += 1
             else:
-                flows[('External', acct_name)] += abs(amt)
-                flow_counts[('External', acct_name)] += 1
+                flows[('Investments', acct_name)] += abs(amt)
+                flow_counts[('Investments', acct_name)] += 1
         elif cat == 'Cash Withdrawal':
             if amt < 0:
                 flows[(acct_name, 'Cash')] += abs(amt)
@@ -2325,6 +2325,69 @@ def transfer_flow_dashboard(request, display_currency, time_group):
         vol = abs(p['out']['amount'])
         flows[(src, dst)] += vol
         flow_counts[(src, dst)] += 1
+
+    # Add income sources flowing into debit accounts
+    from django.db.models.functions import Abs as _Abs
+    income_qs = Transaction.objects.filter(
+        user=request.user,
+        category__group__slug='income',
+        **{f'{amount_field}__isnull': False},
+    ).select_related(
+        'raw_transaction__ledger__statement_import__account',
+        'category',
+    )
+
+    # Map income categories to unified labels
+    income_label_map = {}
+    for cat_name in ['Work Salary', 'Work Bonuses', 'Work Association', 'Work Goverment']:
+        income_label_map[cat_name] = 'Work Income'
+    for cat_name in REIMBURSEMENT_CATEGORIES:
+        income_label_map[cat_name] = 'Reimbursement Income'
+    for cat_name in BANK_INCOME_CATEGORIES:
+        income_label_map[cat_name] = 'Bank Income'
+
+    for t in income_qs:
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        acct_name = str(acct) if acct else 'Unknown'
+        is_credit = hasattr(acct, 'creditaccount') if acct else False
+        cat = t.category.name
+        amt = float(getattr(t, amount_field) or 0)
+        # Debit: income is positive; Credit card: income is negative (credit to balance)
+        is_income = (not is_credit and amt > 0) or (is_credit and amt < 0)
+        if is_income:
+            if cat in REIMBURSEMENT_CATEGORIES:
+                label = 'Reimbursement Income'
+            elif cat in BANK_INCOME_CATEGORIES:
+                label = 'Bank Income'
+            else:
+                label = cat
+            flows[(label, acct_name)] += abs(amt)
+            flow_counts[(label, acct_name)] += 1
+
+    # Add expenses flowing out of accounts
+    expense_qs = Transaction.objects.filter(
+        user=request.user,
+        category__group__slug='expense',
+        **{f'{amount_field}__isnull': False},
+    ).select_related(
+        'raw_transaction__ledger__statement_import__account',
+    )
+
+    for t in expense_qs:
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        acct_name = str(acct) if acct else 'Unknown'
+        is_credit = hasattr(acct, 'creditaccount') if acct else False
+        amt = float(getattr(t, amount_field) or 0)
+        # Debit: expenses are negative; Credit card: expenses are positive
+        if (not is_credit and amt < 0) or (is_credit and amt > 0):
+            flows[(acct_name, 'Expenses')] += abs(amt)
+            flow_counts[(acct_name, 'Expenses')] += 1
 
     # Build nodes and links for Sankey — resolve circular flows by netting
     all_nodes = set()
@@ -2365,12 +2428,25 @@ def transfer_flow_dashboard(request, display_currency, time_group):
     sankey_links = [{'source': node_index[src], 'target': node_index[dst], 'value': vol}
                     for (src, dst), vol in sankey_flows.items() if vol > 0]
 
+    # Compute net balance per node from raw flows (not netted)
+    node_inflows = defaultdict(float)
+    node_outflows = defaultdict(float)
+    for (src, dst), vol in flows.items():
+        node_outflows[src] += vol
+        node_inflows[dst] += vol
+    node_balances = {}
+    for n in node_list:
+        net = node_inflows[n] - node_outflows[n]
+        if abs(net) > 100:
+            node_balances[n] = round(net)
+
     # Sort table by volume
     table_rows.sort(key=lambda r: -r['volume'])
 
     flow_data = json.dumps({
         'nodes': node_list,
         'links': sankey_links,
+        'balances': node_balances,
     }, cls=DecimalEncoder)
 
     context = {

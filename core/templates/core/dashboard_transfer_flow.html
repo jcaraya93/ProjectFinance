@@ -25,7 +25,7 @@
     <div class="card mb-4">
       <div class="card-body">
         <h6 class="card-title">Money Flow Between Accounts</h6>
-        <div id="sankeyChart" style="width:100%;height:500px;"></div>
+        <div id="sankeyChart" style="width:100%;height:650px;"></div>
       </div>
     </div>
 
@@ -79,7 +79,7 @@
   var data = JSON.parse(document.getElementById('flowData').textContent);
   var container = document.getElementById('sankeyChart');
   var width = container.offsetWidth || 800;
-  var height = 500;
+  var height = 650;
   var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
 
   if (!data.nodes.length || !data.links.length) {
@@ -88,19 +88,28 @@
   }
 
   var nodeColors = {
-    'Debit 0265': '#2980b9',
-    'Debit 2456': '#3498db',
-    'Credit 2918 (CRC)': '#27ae60',
-    'Credit 2918 (USD)': '#2ecc71',
-    'Credit Card': '#27ae60',
-    'External': '#e74c3c',
-    'Cash': '#f39c12',
-    'CDP': '#8e44ad',
-    'Investments': '#1abc9c',
-    'Internal (other debit)': '#607d8b',
-    'Debit Account': '#2980b9',
+    // Accounts — blues
+    'Debit 0265': '#2471a3',
+    'Debit 2456': '#2e86c1',
+    'Credit 2918': '#3498db',
+    'Credit 2918 (CRC)': '#3498db',
+    'Credit 2918 (USD)': '#5dade2',
+    // Income — green (money earned)
+    'Work Salary': '#1e8449',
+    'Work Bonuses': '#27ae60',
+    'Work Association': '#2ecc71',
+    'Work Goverment': '#58d68d',
+    'Reimbursement Income': '#82e0aa',
+    'Bank Income': '#a9dfbf',
+    // Expenses — orange (money spent)
+    'Expenses': '#e67e22',
+    // Investments/CDP — teal (money growing)
+    'Investments': '#148f77',
+    'CDP': '#1abc9c',
+    // Cash — yellow (physical money)
+    'Cash': '#f4d03f',
   };
-  var defaultColor = '#95a5a6';
+  var defaultColor = '#bdc3c7';
 
   var svg = d3.select(container).append('svg')
     .attr('width', width)
@@ -109,9 +118,9 @@
   var sankeyGen = d3.sankey()
     .nodeId(function(d) { return d.index; })
     .nodeWidth(20)
-    .nodePadding(15)
+    .nodePadding(30)
     .nodeAlign(d3.sankeyJustify)
-    .extent([[1, 30], [width - 1, height - 10]]);
+    .extent([[1, 20], [width - 1, height - 20]]);
 
   var nodes = data.nodes.map(function(name, i) { return { index: i, name: name }; });
   var links = data.links.map(function(l) { return { source: l.source, target: l.target, value: l.value }; });
@@ -149,14 +158,31 @@
       .append('title')
       .text(function(d) { return d.name + '\n' + fmtNum(d.value); });
 
+    // Node name labels
     node.append('text')
       .attr('x', function(d) { return d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6; })
       .attr('y', function(d) { return (d.y1 + d.y0) / 2; })
-      .attr('dy', '0.35em')
+      .attr('dy', '-0.2em')
       .attr('text-anchor', function(d) { return d.x0 < width / 2 ? 'start' : 'end'; })
       .attr('font-size', '12px')
+      .attr('font-weight', 'bold')
       .attr('fill', '#333')
       .text(function(d) { return d.name; });
+
+    // Balance labels (below name)
+    var balances = data.balances || {};
+    node.filter(function(d) { return balances[d.name] != null; })
+      .append('text')
+      .attr('x', function(d) { return d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6; })
+      .attr('y', function(d) { return (d.y1 + d.y0) / 2; })
+      .attr('dy', '1.1em')
+      .attr('text-anchor', function(d) { return d.x0 < width / 2 ? 'start' : 'end'; })
+      .attr('font-size', '10px')
+      .attr('fill', function(d) { return balances[d.name] >= 0 ? '#27ae60' : '#e74c3c'; })
+      .text(function(d) {
+        var b = balances[d.name];
+        return (b >= 0 ? '+' : '') + fmtNum(b);
+      });
   } catch(e) {
     container.innerHTML = '<div class="alert alert-warning">Error rendering Sankey: ' + e.message + '</div>';
     console.error('Sankey error:', e);
