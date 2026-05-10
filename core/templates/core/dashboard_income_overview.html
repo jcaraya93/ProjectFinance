@@ -1,0 +1,87 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}Income Overview — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="income_overview" %}
+  </div>
+
+  <div class="col-md-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Income Overview</h4>
+      {% include "core/_currency_toggle.html" %}
+    </div>
+
+    <div class="row g-3 mb-4" style="align-items: stretch;">
+      <div class="col-lg-5 d-flex">
+        <div class="card w-100">
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title">Income Breakdown</h5>
+            <div id="incomeChart" class="flex-grow-1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7 d-flex">
+        <div class="card w-100">
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title">Top Income Categories</h5>
+            <div id="topIncomeChart" class="flex-grow-1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script id="incomeCategoryData" type="application/json">{{ income_category_data|escapejson }}</script>
+<script id="topIncomeData" type="application/json">{{ top_income_data|escapejson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  // Income Breakdown (donut)
+  var incomeRaw = DashboardCharts.parseJSON('incomeCategoryData');
+  if (incomeRaw) {
+    new ApexCharts(document.getElementById('incomeChart'), {
+      chart: { type: 'donut', height: 320 },
+      series: (incomeRaw.values || []).map(Math.round),
+      labels: incomeRaw.labels || [],
+      colors: incomeRaw.colors || [],
+      dataLabels: { enabled: false },
+      legend: { position: 'right' },
+      tooltip: {
+        y: {
+          formatter: function(val, opts) {
+            var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
+            return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+          }
+        }
+      },
+    }).render();
+  }
+
+  // Top Income Categories (horizontal bar)
+  var topIncomeRaw = DashboardCharts.parseJSON('topIncomeData');
+  if (topIncomeRaw) {
+    new ApexCharts(document.getElementById('topIncomeChart'), {
+      chart: { type: 'bar', height: 320, toolbar: { show: false } },
+      series: [{ name: 'Amount', data: (topIncomeRaw.values || []).map(Math.round) }],
+      colors: topIncomeRaw.colors || [],
+      plotOptions: { bar: { horizontal: true, distributed: true } },
+      xaxis: { categories: topIncomeRaw.labels || [] },
+      yaxis: { labels: { formatter: function(v) { return v; } } },
+      dataLabels: { enabled: false },
+      legend: { show: false },
+      markers: { size: 0 },
+      tooltip: { y: { formatter: function(v) { return Math.round(v).toLocaleString(); } } },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
+  }
+})();
+</script>
+{% endblock %}

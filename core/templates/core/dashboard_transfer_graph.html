@@ -1,0 +1,309 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}Transfer Graph — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="transfer_graph" %}
+  </div>
+
+  <div class="col-md-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Transfer Graph</h4>
+      {% include "core/_currency_toggle.html" %}
+    </div>
+
+    <!-- Option 1: Chord Diagram -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Option 1 — Chord Diagram</h6>
+        <div id="chordChart" style="width:100%;height:500px;display:flex;justify-content:center;"></div>
+      </div>
+    </div>
+
+    <!-- Option 2: Hub and Spoke -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Option 2 — Hub & Spoke</h6>
+        <div id="hubChart" style="width:100%;height:500px;"></div>
+      </div>
+    </div>
+
+    <!-- Option 3: Matrix Heatmap -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Option 3 — Matrix Heatmap</h6>
+        <div id="matrixChart"></div>
+      </div>
+    </div>
+
+    <!-- Option 4: Simple Left-to-Right -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Option 4 — Left-to-Right Flow</h6>
+        <div id="ltrChart" style="width:100%;height:400px;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script id="graphData" type="application/json">{{ graph_data|escapejson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script>
+(function() {
+  var data = JSON.parse(document.getElementById('graphData').textContent);
+  var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
+
+  var nodeColorMap = {
+    'External': '#e74c3c', 'Cash': '#f39c12', 'CDP': '#8e44ad',
+    'Investments': '#1abc9c', 'Credit Card': '#27ae60',
+  };
+  function nodeColor(d) {
+    var id = typeof d === 'string' ? d : d.id;
+    if (nodeColorMap[id]) return nodeColorMap[id];
+    if (id.startsWith('Debit')) return '#2980b9';
+    if (id.startsWith('Credit')) return '#27ae60';
+    return '#95a5a6';
+  }
+
+  var nodes = data.nodes;
+  var links = data.links;
+  var nodeIds = nodes.map(function(n) { return n.id; });
+
+  // ═══ OPTION 1: CHORD DIAGRAM ═══
+  (function() {
+    var size = 450;
+    var outer = size / 2, inner = outer - 30;
+
+    // Build matrix
+    var n = nodeIds.length;
+    var matrix = Array.from({length: n}, function() { return new Array(n).fill(0); });
+    var idx = {};
+    nodeIds.forEach(function(id, i) { idx[id] = i; });
+    links.forEach(function(l) {
+      var si = idx[l.source] != null ? idx[l.source] : idx[l.source.id];
+      var ti = idx[l.target] != null ? idx[l.target] : idx[l.target.id];
+      if (si != null && ti != null) matrix[si][ti] += l.volume;
+    });
+
+    var svg = d3.select('#chordChart').append('svg')
+      .attr('width', size).attr('height', size)
+      .append('g').attr('transform', 'translate(' + outer + ',' + outer + ')');
+
+    var chord = d3.chord().padAngle(0.05).sortSubgroups(d3.descending);
+    var chords = chord(matrix);
+    var arc = d3.arc().innerRadius(inner).outerRadius(outer);
+    var ribbon = d3.ribbon().radius(inner);
+
+    svg.append('g').selectAll('path')
+      .data(chords.groups).join('path')
+      .attr('d', arc)
+      .attr('fill', function(d) { return nodeColor(nodeIds[d.index]); })
+      .attr('stroke', '#fff').attr('stroke-width', 1)
+      .append('title').text(function(d) { return nodeIds[d.index]; });
+
+    svg.append('g').selectAll('path')
+      .data(chords).join('path')
+      .attr('d', ribbon)
+      .attr('fill', function(d) { return nodeColor(nodeIds[d.source.index]); })
+      .attr('stroke', '#fff').attr('stroke-width', 0.5)
+      .attr('opacity', 0.6)
+      .append('title').text(function(d) {
+        return nodeIds[d.source.index] + ' → ' + nodeIds[d.target.index] + '\n' + fmtNum(matrix[d.source.index][d.target.index]);
+      });
+
+    // Labels
+    svg.append('g').selectAll('text')
+      .data(chords.groups).join('text')
+      .each(function(d) { d.angle = (d.startAngle + d.endAngle) / 2; })
+      .attr('transform', function(d) {
+        return 'rotate(' + (d.angle * 180 / Math.PI - 90) + ') translate(' + (outer + 10) + ')' + (d.angle > Math.PI ? ' rotate(180)' : '');
+      })
+      .attr('text-anchor', function(d) { return d.angle > Math.PI ? 'end' : 'start'; })
+      .attr('font-size', '11px').attr('fill', '#333')
+      .text(function(d) { return nodeIds[d.index]; });
+  })();
+
+  // ═══ OPTION 2: HUB & SPOKE ═══
+  (function() {
+    var container = document.getElementById('hubChart');
+    var w = container.offsetWidth || 800, h = 500;
+    var cx = w / 2, cy = h / 2;
+
+    // Hub = debit accounts, spokes = everything else
+    var hubs = nodes.filter(function(n) { return n.id.startsWith('Debit'); });
+    var spokes = nodes.filter(function(n) { return !n.id.startsWith('Debit'); });
+
+    // Position hubs in center area
+    var hubPositions = {};
+    hubs.forEach(function(n, i) {
+      hubPositions[n.id] = { x: cx + (i - (hubs.length - 1) / 2) * 120, y: cy };
+    });
+
+    // Position spokes in a circle around
+    var spokePositions = {};
+    var radius = Math.min(w, h) * 0.38;
+    spokes.forEach(function(n, i) {
+      var angle = (2 * Math.PI * i) / spokes.length - Math.PI / 2;
+      spokePositions[n.id] = { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
+    });
+
+    var pos = Object.assign({}, hubPositions, spokePositions);
+
+    var svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
+
+    // Edges
+    links.forEach(function(l) {
+      var src = typeof l.source === 'string' ? l.source : l.source.id;
+      var tgt = typeof l.target === 'string' ? l.target : l.target.id;
+      if (!pos[src] || !pos[tgt]) return;
+      var maxVol = d3.max(links, function(d) { return d.volume; }) || 1;
+      var sw = 1.5 + (l.volume / maxVol) * 8;
+
+      svg.append('line')
+        .attr('x1', pos[src].x).attr('y1', pos[src].y)
+        .attr('x2', pos[tgt].x).attr('y2', pos[tgt].y)
+        .attr('stroke', '#ccc').attr('stroke-width', sw).attr('stroke-opacity', 0.5);
+
+      // Volume label on edge
+      svg.append('text')
+        .attr('x', (pos[src].x + pos[tgt].x) / 2)
+        .attr('y', (pos[src].y + pos[tgt].y) / 2 - 6)
+        .attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', '#888')
+        .text(fmtNum(l.volume));
+    });
+
+    // Nodes
+    nodes.forEach(function(n) {
+      if (!pos[n.id]) return;
+      var r = n.id.startsWith('Debit') ? 28 : 20;
+      svg.append('circle')
+        .attr('cx', pos[n.id].x).attr('cy', pos[n.id].y).attr('r', r)
+        .attr('fill', nodeColor(n)).attr('stroke', '#fff').attr('stroke-width', 2);
+      svg.append('text')
+        .attr('x', pos[n.id].x).attr('y', pos[n.id].y + r + 16)
+        .attr('text-anchor', 'middle').attr('font-size', '11px').attr('font-weight', 'bold').attr('fill', '#333')
+        .text(n.id);
+    });
+  })();
+
+  // ═══ OPTION 3: MATRIX HEATMAP ═══
+  (function() {
+    var n = nodeIds.length;
+    var matrix = [];
+    var idx = {};
+    nodeIds.forEach(function(id, i) { idx[id] = i; });
+    links.forEach(function(l) {
+      var src = typeof l.source === 'string' ? l.source : l.source.id;
+      var tgt = typeof l.target === 'string' ? l.target : l.target.id;
+      matrix.push({ source: src, target: tgt, value: l.volume });
+    });
+
+    // Use ApexCharts heatmap
+    var series = [];
+    nodeIds.forEach(function(src) {
+      var row = [];
+      nodeIds.forEach(function(tgt) {
+        var found = matrix.find(function(m) { return m.source === src && m.target === tgt; });
+        row.push({ x: tgt, y: found ? found.value : 0 });
+      });
+      series.push({ name: src, data: row });
+    });
+
+    new ApexCharts(document.getElementById('matrixChart'), {
+      chart: { type: 'heatmap', height: Math.max(250, nodeIds.length * 45), toolbar: { show: false } },
+      series: series,
+      plotOptions: {
+        heatmap: {
+          shadeIntensity: 0.6,
+          colorScale: {
+            ranges: [
+              { from: 0, to: 0, color: '#f5f5f5', name: 'None' },
+              { from: 1, to: Infinity, color: '#2980b9', name: 'Flow' },
+            ],
+          },
+        },
+      },
+      dataLabels: {
+        enabled: true,
+        formatter: function(v) { return v > 0 ? fmtNum(v) : ''; },
+        style: { fontSize: '10px' },
+      },
+      tooltip: { y: { formatter: function(v) { return v > 0 ? fmtNum(v) : 'No flow'; } } },
+      grid: { borderColor: '#e9ecef' },
+    }).render();
+  })();
+
+  // ═══ OPTION 4: LEFT-TO-RIGHT FLOW ═══
+  (function() {
+    var container = document.getElementById('ltrChart');
+    var w = container.offsetWidth || 800, h = 400;
+    var svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
+
+    // Left side: sources (debit accounts), Right side: destinations
+    var sources = nodes.filter(function(n) { return n.id.startsWith('Debit'); });
+    var destinations = nodes.filter(function(n) { return !n.id.startsWith('Debit'); });
+
+    var leftX = 100, rightX = w - 100;
+    var srcPos = {}, dstPos = {};
+    sources.forEach(function(n, i) {
+      srcPos[n.id] = { x: leftX, y: 60 + i * (h - 120) / Math.max(1, sources.length - 1) };
+    });
+    destinations.forEach(function(n, i) {
+      dstPos[n.id] = { x: rightX, y: 40 + i * (h - 80) / Math.max(1, destinations.length - 1) };
+    });
+
+    var maxVol = d3.max(links, function(d) { return d.volume; }) || 1;
+
+    // Edges as curves
+    links.forEach(function(l) {
+      var src = typeof l.source === 'string' ? l.source : l.source.id;
+      var tgt = typeof l.target === 'string' ? l.target : l.target.id;
+      var sp = srcPos[src] || dstPos[src];
+      var tp = dstPos[tgt] || srcPos[tgt];
+      if (!sp || !tp) return;
+      var sw = 1.5 + (l.volume / maxVol) * 10;
+      var midX = (sp.x + tp.x) / 2;
+
+      svg.append('path')
+        .attr('d', 'M' + sp.x + ',' + sp.y + ' C' + midX + ',' + sp.y + ' ' + midX + ',' + tp.y + ' ' + tp.x + ',' + tp.y)
+        .attr('fill', 'none')
+        .attr('stroke', nodeColor(src))
+        .attr('stroke-width', sw)
+        .attr('stroke-opacity', 0.4);
+
+      svg.append('text')
+        .attr('x', midX).attr('y', (sp.y + tp.y) / 2 - 5)
+        .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#666')
+        .text(fmtNum(l.volume));
+    });
+
+    // Source nodes (left)
+    sources.forEach(function(n) {
+      var p = srcPos[n.id];
+      svg.append('circle').attr('cx', p.x).attr('cy', p.y).attr('r', 22)
+        .attr('fill', nodeColor(n)).attr('stroke', '#fff').attr('stroke-width', 2);
+      svg.append('text').attr('x', p.x - 32).attr('y', p.y + 4)
+        .attr('text-anchor', 'end').attr('font-size', '12px').attr('font-weight', 'bold').attr('fill', '#333')
+        .text(n.id);
+    });
+
+    // Destination nodes (right)
+    destinations.forEach(function(n) {
+      var p = dstPos[n.id];
+      svg.append('circle').attr('cx', p.x).attr('cy', p.y).attr('r', 18)
+        .attr('fill', nodeColor(n)).attr('stroke', '#fff').attr('stroke-width', 2);
+      svg.append('text').attr('x', p.x + 28).attr('y', p.y + 4)
+        .attr('text-anchor', 'start').attr('font-size', '12px').attr('font-weight', 'bold').attr('fill', '#333')
+        .text(n.id);
+    });
+  })();
+})();
+</script>
+{% endblock %}

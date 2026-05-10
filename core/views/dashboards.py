@@ -23,6 +23,16 @@ __all__ = [
     'car_parking_dashboard',
     'income_salary_dashboard',
     'income_bonus_dashboard',
+    'income_overview_dashboard',
+    'income_txn_dashboard',
+    'reimbursement_overview_dashboard',
+    'bank_income_overview_dashboard',
+    'bank_income_detail_dashboard',
+    'internal_transfers_dashboard',
+    'credit_transfers_dashboard',
+    'external_transfers_dashboard',
+    'transfer_flow_dashboard',
+    'transfer_graph_dashboard',
     'category_stats_dashboard',
 ]
 
@@ -48,8 +58,12 @@ CHART_COLORS = {
 CAR_CATEGORIES = ['Car Gas', 'Car Insurance', 'Car Maintenance', 'Car Parking & Toll', 'Car Tax', 'Car Wash']
 RUNNING_CATEGORIES = ['Car Gas', 'Car Parking & Toll', 'Car Wash']
 OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
-SALARY_CATEGORIES = ['Salary Main', 'Salary Bonuses']
-EXTRA_INCOME_CATEGORIES = ['Salary Bonuses', 'Non-recurring']
+SALARY_CATEGORIES = ['Work Salary', 'Work Bonuses']
+EXTRA_INCOME_CATEGORIES = ['Work Bonuses', 'Work Association', 'Work Goverment']
+TXN_INCOME_CATEGORIES = ['Reimbursement Default']
+BANK_INCOME_CATEGORIES = ['Bank Interest CDP', 'Bank Interest Cashback', 'Bank Interest Reversals']
+CREDIT_PAYMENT_CATEGORY = 'Credit'
+PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
 
 def dashboard_view(name, template, default_time_group='monthly'):
@@ -1000,7 +1014,7 @@ def income_salary_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
     salary_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name='Salary Main',
+        category__name='Work Salary',
         **{f'{amount_field}__isnull': False},
     )
 
@@ -1092,14 +1106,18 @@ def income_bonus_dashboard(request, display_currency, time_group):
     )
 
     bonus_total = float(
-        extra_qs.filter(category__name='Salary Bonuses')
+        extra_qs.filter(category__name='Work Bonuses')
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
-    nonrecurring_total = float(
-        extra_qs.filter(category__name='Non-recurring')
+    association_total = float(
+        extra_qs.filter(category__name='Work Association')
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
-    extra_combined = bonus_total + nonrecurring_total
+    goverment_total = float(
+        extra_qs.filter(category__name='Work Goverment')
+        .aggregate(t=Sum(amount_field))['t'] or 0
+    )
+    extra_combined = bonus_total + association_total + goverment_total
 
     extra_events = list(
         extra_qs.order_by('-date')
@@ -1122,10 +1140,1343 @@ def income_bonus_dashboard(request, display_currency, time_group):
     context = {
         'currency_symbol': currency_symbol,
         'bonus_total': bonus_total,
-        'nonrecurring_total': nonrecurring_total,
+        'association_total': association_total,
+        'goverment_total': goverment_total,
         'extra_combined': extra_combined,
         'extra_events': extra_events,
         'extra_events_json': extra_events_json,
+    }
+    return context
+
+
+@dashboard_view("income_overview", "core/dashboard_income_overview.html")
+def income_overview_dashboard(request, display_currency, time_group):
+    """Overview dashboard for all income categories."""
+    from django.db.models import Sum
+    from django.db.models.functions import Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    income_qs = Transaction.objects.filter(
+        user=request.user,
+        category__group__slug='income',
+        **{f'{amount_field}__isnull': False},
+    )
+
+    # All-time breakdown by category
+    cat_breakdown = list(
+        income_qs.values('category__name', 'category__color')
+        .annotate(abs_total=Sum(abs_field))
+        .order_by('-abs_total')
+    )
+    income_category_data = {'labels': [], 'values': [], 'colors': []}
+    top_income_data = {'labels': [], 'values': [], 'colors': []}
+    for r in cat_breakdown:
+        name = r['category__name'] or 'Uncategorized'
+        val = float(r['abs_total'] or 0)
+        color = r['category__color'] or '#6c757d'
+        income_category_data['labels'].append(name)
+        income_category_data['values'].append(val)
+        income_category_data['colors'].append(color)
+        top_income_data['labels'].append(name)
+        top_income_data['values'].append(val)
+        top_income_data['colors'].append(color)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'income_category_data': json.dumps(income_category_data, cls=DecimalEncoder),
+        'top_income_data': json.dumps(top_income_data, cls=DecimalEncoder),
+    }
+    return context
+
+
+@dashboard_view("income_txn", "core/dashboard_income_txn.html", default_time_group="biweekly")
+def income_txn_dashboard(request, display_currency, time_group):
+    """Dashboard for Reimbursement income categories — filterable by sub-category."""
+    from collections import defaultdict
+    from datetime import timedelta
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    today = date.today()
+    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    last_month_label = last_month_start.strftime('%Y-%m')
+
+    # Category filter from query param
+    selected_category = request.GET.get('category', '')
+    if selected_category and selected_category in REIMBURSEMENT_CATEGORIES:
+        filter_categories = [selected_category]
+    else:
+        selected_category = ''
+        filter_categories = REIMBURSEMENT_CATEGORIES
+
+    txn_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name__in=filter_categories,
+        category__group__slug='income',
+        **{f'{amount_field}__isnull': False},
+    )
+
+    # --- Summary cards (always monthly) ---
+    last_month_total = float(
+        txn_qs.filter(date__gte=last_month_start, date__lte=last_month_end)
+        .aggregate(t=Sum(abs_field))['t'] or 0
+    )
+
+    monthly_agg = (
+        txn_qs.annotate(month=TruncMonth('date'))
+        .values('month')
+        .annotate(total=Sum(abs_field), cnt=Count('id'))
+        .order_by('month')
+    )
+    monthly_map = {}
+    monthly_counts = {}
+    for r in monthly_agg:
+        m = r['month'].strftime('%Y-%m')
+        monthly_map[m] = float(r['total'] or 0)
+        monthly_counts[m] = r['cnt']
+    sorted_month_keys = sorted(monthly_map.keys())
+    monthly_totals = [monthly_map[m] for m in sorted_month_keys]
+
+    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
+    sorted_vals = sorted(monthly_totals)
+    n = len(sorted_vals)
+    median_monthly = (sorted_vals[n // 2] if n % 2 else
+                      (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2) if n else 0
+    all_time_total = sum(monthly_totals)
+    median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
+
+    # --- Chart data grouped by time_group ---
+    if time_group == 'biweekly':
+        def _semi_month_key(d):
+            return date(d.year, d.month, 1 if d.day < 15 else 15)
+
+        txn_raw = txn_qs.values_list('date', amount_field)
+        period_totals = defaultdict(float)
+        period_counts = defaultdict(int)
+        for d, amt in txn_raw:
+            if amt:
+                key = _semi_month_key(d)
+                period_totals[key] += abs(float(amt))
+                period_counts[key] += 1
+
+        sorted_periods = sorted(period_totals.keys())
+        chart_labels = [p.strftime('%Y-%m-%d') for p in sorted_periods]
+        chart_values = [round(period_totals[p]) for p in sorted_periods]
+        chart_counts = [period_counts[p] for p in sorted_periods]
+    else:
+        chart_labels = sorted_month_keys
+        chart_values = [round(v) for v in monthly_totals]
+        chart_counts = [monthly_counts.get(m, 0) for m in sorted_month_keys]
+
+    chart_vals_sorted = sorted(chart_values)
+    cn = len(chart_vals_sorted)
+    chart_median = (chart_vals_sorted[cn // 2] if cn % 2 else
+                    (chart_vals_sorted[cn // 2 - 1] + chart_vals_sorted[cn // 2]) / 2) if cn else 0
+
+    trend_data = json.dumps({
+        'labels': chart_labels,
+        'values': chart_values,
+        'median': chart_median,
+    }, cls=DecimalEncoder)
+
+    count_data = json.dumps({
+        'labels': chart_labels,
+        'values': chart_counts,
+    }, cls=DecimalEncoder)
+
+    # --- Individual transactions for scatter plot ---
+    individual_txns = list(
+        txn_qs.order_by('date')
+        .values_list('date', amount_field, 'description')
+    )
+    scatter_data = json.dumps([{
+        'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
+        'amount': round(abs(float(amt))) if amt else 0,
+        'description': desc,
+    } for d, amt, desc in individual_txns], cls=DecimalEncoder)
+
+    # --- Recent transactions table ---
+    events = list(
+        txn_qs.order_by('-date')[:50]
+        .values('date', 'description', amount_field)
+    )
+    for e in events:
+        e['amount'] = abs(float(e.pop(amount_field) or 0))
+
+    # --- Overview charts (only when showing All) ---
+    breakdown_data = ''
+    stacked_data = ''
+    if not selected_category:
+        from django.db.models.functions import TruncMonth as _TM
+        cat_breakdown = list(
+            txn_qs.values('category__name', 'category__color')
+            .annotate(abs_total=Sum(abs_field))
+            .order_by('-abs_total')
+        )
+        bd = {'labels': [], 'values': [], 'colors': []}
+        for r in cat_breakdown:
+            bd['labels'].append(r['category__name'] or 'Uncategorized')
+            bd['values'].append(float(r['abs_total'] or 0))
+            bd['colors'].append(r['category__color'] or '#6c757d')
+        breakdown_data = json.dumps(bd, cls=DecimalEncoder)
+
+        cat_monthly_qs = (
+            txn_qs.annotate(month=_TM('date'))
+            .values('month', 'category__name', 'category__color')
+            .annotate(total=Sum(abs_field))
+            .order_by('month')
+        )
+        from collections import defaultdict as _dd
+        csm = _dd(lambda: _dd(float))
+        ccm = {}
+        for r in cat_monthly_qs:
+            name = r['category__name']
+            m = r['month'].strftime('%Y-%m')
+            csm[name][m] = float(r['total'] or 0)
+            ccm[name] = r['category__color'] or '#6c757d'
+        ss = []
+        sc = []
+        for name in sorted(csm.keys(), key=lambda k: -sum(csm[k].values())):
+            ss.append({'name': name, 'data': [round(csm[name].get(m, 0)) for m in sorted_month_keys]})
+            sc.append(ccm[name])
+        stacked_data = json.dumps({'labels': sorted_month_keys, 'series': ss, 'colors': sc}, cls=DecimalEncoder)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'last_month_label': last_month_label,
+        'last_month_total': last_month_total,
+        'avg_monthly': avg_monthly,
+        'median_monthly': median_monthly,
+        'median_pct': median_pct,
+        'all_time_total': all_time_total,
+        'trend_data': trend_data,
+        'count_data': count_data,
+        'scatter_data': scatter_data,
+        'breakdown_data': breakdown_data,
+        'stacked_data': stacked_data,
+        'events': events,
+        'reimbursement_categories': REIMBURSEMENT_CATEGORIES,
+        'selected_category': selected_category,
+    }
+    return context
+
+
+REIMBURSEMENT_CATEGORIES = ['Reimbursement Default', 'Reimbursement Housing', 'Reimbursement Insurance', 'Reimbursement Partner']
+
+
+@dashboard_view("reimbursement_overview", "core/dashboard_reimbursement_overview.html")
+def reimbursement_overview_dashboard(request, display_currency, time_group):
+    """Overview dashboard for all reimbursement income categories."""
+    from collections import defaultdict
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    today = date.today()
+    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    last_month_label = last_month_start.strftime('%Y-%m')
+
+    reimb_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name__in=REIMBURSEMENT_CATEGORIES,
+        category__group__slug='income',
+        **{f'{amount_field}__isnull': False},
+    )
+
+    # --- Summary cards ---
+    last_month_total = float(
+        reimb_qs.filter(date__gte=last_month_start, date__lte=last_month_end)
+        .aggregate(t=Sum(abs_field))['t'] or 0
+    )
+
+    monthly_agg = (
+        reimb_qs.annotate(month=TruncMonth('date'))
+        .values('month')
+        .annotate(total=Sum(abs_field))
+        .order_by('month')
+    )
+    monthly_map = {}
+    for r in monthly_agg:
+        m = r['month'].strftime('%Y-%m')
+        monthly_map[m] = float(r['total'] or 0)
+    sorted_months = sorted(monthly_map.keys())
+    monthly_totals = [monthly_map[m] for m in sorted_months]
+
+    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
+    sorted_vals = sorted(monthly_totals)
+    n = len(sorted_vals)
+    median_monthly = (sorted_vals[n // 2] if n % 2 else
+                      (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2) if n else 0
+    all_time_total = sum(monthly_totals)
+    median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
+
+    # --- Monthly trend ---
+    trend_data = json.dumps({
+        'labels': sorted_months,
+        'values': monthly_totals,
+        'median': median_monthly,
+    }, cls=DecimalEncoder)
+
+    # --- All-time breakdown by category (donut + bar) ---
+    cat_breakdown = list(
+        reimb_qs.values('category__name', 'category__color')
+        .annotate(abs_total=Sum(abs_field))
+        .order_by('-abs_total')
+    )
+    breakdown_data = {'labels': [], 'values': [], 'colors': []}
+    top_data = {'labels': [], 'values': [], 'colors': []}
+    for r in cat_breakdown:
+        name = r['category__name'] or 'Uncategorized'
+        val = float(r['abs_total'] or 0)
+        color = r['category__color'] or '#6c757d'
+        breakdown_data['labels'].append(name)
+        breakdown_data['values'].append(val)
+        breakdown_data['colors'].append(color)
+        top_data['labels'].append(name)
+        top_data['values'].append(val)
+        top_data['colors'].append(color)
+
+    # --- Stacked bar by category over time ---
+    cat_monthly = (
+        reimb_qs.annotate(month=TruncMonth('date'))
+        .values('month', 'category__name', 'category__color')
+        .annotate(total=Sum(abs_field))
+        .order_by('month')
+    )
+    cat_series_map = defaultdict(lambda: defaultdict(float))
+    cat_color_map = {}
+    for r in cat_monthly:
+        name = r['category__name']
+        m = r['month'].strftime('%Y-%m')
+        cat_series_map[name][m] = float(r['total'] or 0)
+        cat_color_map[name] = r['category__color'] or '#6c757d'
+
+    stacked_series = []
+    stacked_colors = []
+    for name in sorted(cat_series_map.keys(), key=lambda k: -sum(cat_series_map[k].values())):
+        stacked_series.append({
+            'name': name,
+            'data': [round(cat_series_map[name].get(m, 0)) for m in sorted_months],
+        })
+        stacked_colors.append(cat_color_map[name])
+
+    stacked_data = json.dumps({
+        'labels': sorted_months,
+        'series': stacked_series,
+        'colors': stacked_colors,
+    }, cls=DecimalEncoder)
+
+    # --- Recent transactions ---
+    events = list(
+        reimb_qs.order_by('-date')[:50]
+        .values('date', 'description', 'category__name', 'category__color', amount_field)
+    )
+    for e in events:
+        e['amount'] = abs(float(e.pop(amount_field) or 0))
+        e['category'] = e.pop('category__name')
+        e['color'] = e.pop('category__color') or '#6c757d'
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'last_month_label': last_month_label,
+        'last_month_total': last_month_total,
+        'avg_monthly': avg_monthly,
+        'median_monthly': median_monthly,
+        'median_pct': median_pct,
+        'all_time_total': all_time_total,
+        'trend_data': trend_data,
+        'breakdown_data': json.dumps(breakdown_data, cls=DecimalEncoder),
+        'top_data': json.dumps(top_data, cls=DecimalEncoder),
+        'stacked_data': stacked_data,
+        'events': events,
+    }
+    return context
+
+
+@dashboard_view("bank_income_overview", "core/dashboard_bank_income_overview.html")
+def bank_income_overview_dashboard(request, display_currency, time_group):
+    """Overview dashboard for all bank interest income categories."""
+    from collections import defaultdict
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    today = date.today()
+    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    last_month_label = last_month_start.strftime('%Y-%m')
+
+    bank_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name__in=BANK_INCOME_CATEGORIES,
+        category__group__slug='income',
+        **{f'{amount_field}__isnull': False},
+    )
+
+    # Summary cards
+    last_month_total = float(
+        bank_qs.filter(date__gte=last_month_start, date__lte=last_month_end)
+        .aggregate(t=Sum(abs_field))['t'] or 0
+    )
+    monthly_agg = (
+        bank_qs.annotate(month=TruncMonth('date'))
+        .values('month').annotate(total=Sum(abs_field)).order_by('month')
+    )
+    monthly_map = {r['month'].strftime('%Y-%m'): float(r['total'] or 0) for r in monthly_agg}
+    sorted_months = sorted(monthly_map.keys())
+    monthly_totals = [monthly_map[m] for m in sorted_months]
+    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
+    sv = sorted(monthly_totals)
+    n = len(sv)
+    median_monthly = (sv[n // 2] if n % 2 else (sv[n // 2 - 1] + sv[n // 2]) / 2) if n else 0
+    all_time_total = sum(monthly_totals)
+
+    # Breakdown
+    cat_breakdown = list(
+        bank_qs.values('category__name', 'category__color')
+        .annotate(abs_total=Sum(abs_field)).order_by('-abs_total')
+    )
+    breakdown_data = {'labels': [], 'values': [], 'colors': []}
+    for r in cat_breakdown:
+        breakdown_data['labels'].append(r['category__name'] or 'Uncategorized')
+        breakdown_data['values'].append(float(r['abs_total'] or 0))
+        breakdown_data['colors'].append(r['category__color'] or '#6c757d')
+
+    # Stacked bar
+    cat_monthly = (
+        bank_qs.annotate(month=TruncMonth('date'))
+        .values('month', 'category__name', 'category__color')
+        .annotate(total=Sum(abs_field)).order_by('month')
+    )
+    csm = defaultdict(lambda: defaultdict(float))
+    ccm = {}
+    for r in cat_monthly:
+        name = r['category__name']
+        m = r['month'].strftime('%Y-%m')
+        csm[name][m] = float(r['total'] or 0)
+        ccm[name] = r['category__color'] or '#6c757d'
+    ss, sc = [], []
+    for name in sorted(csm.keys(), key=lambda k: -sum(csm[k].values())):
+        ss.append({'name': name, 'data': [round(csm[name].get(m, 0)) for m in sorted_months]})
+        sc.append(ccm[name])
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'last_month_label': last_month_label,
+        'last_month_total': last_month_total,
+        'avg_monthly': avg_monthly,
+        'median_monthly': median_monthly,
+        'all_time_total': all_time_total,
+        'breakdown_data': json.dumps(breakdown_data, cls=DecimalEncoder),
+        'stacked_data': json.dumps({'labels': sorted_months, 'series': ss, 'colors': sc}, cls=DecimalEncoder),
+    }
+    return context
+
+
+@dashboard_view("bank_income_detail", "core/dashboard_bank_income_detail.html", default_time_group="biweekly")
+def bank_income_detail_dashboard(request, display_currency, time_group):
+    """Detail dashboard for bank interest income — filterable by sub-category."""
+    from collections import defaultdict
+    from datetime import timedelta
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    today = date.today()
+    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    last_month_label = last_month_start.strftime('%Y-%m')
+
+    selected_category = request.GET.get('category', '')
+    if selected_category and selected_category in BANK_INCOME_CATEGORIES:
+        filter_categories = [selected_category]
+    else:
+        selected_category = ''
+        filter_categories = BANK_INCOME_CATEGORIES
+
+    bank_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name__in=filter_categories,
+        category__group__slug='income',
+        **{f'{amount_field}__isnull': False},
+    )
+
+    # Summary cards
+    last_month_total = float(
+        bank_qs.filter(date__gte=last_month_start, date__lte=last_month_end)
+        .aggregate(t=Sum(abs_field))['t'] or 0
+    )
+    monthly_agg = (
+        bank_qs.annotate(month=TruncMonth('date'))
+        .values('month').annotate(total=Sum(abs_field), cnt=Count('id')).order_by('month')
+    )
+    monthly_map = {}
+    monthly_counts = {}
+    for r in monthly_agg:
+        m = r['month'].strftime('%Y-%m')
+        monthly_map[m] = float(r['total'] or 0)
+        monthly_counts[m] = r['cnt']
+    sorted_month_keys = sorted(monthly_map.keys())
+    monthly_totals = [monthly_map[m] for m in sorted_month_keys]
+
+    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
+    sv = sorted(monthly_totals)
+    n = len(sv)
+    median_monthly = (sv[n // 2] if n % 2 else (sv[n // 2 - 1] + sv[n // 2]) / 2) if n else 0
+    all_time_total = sum(monthly_totals)
+    median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
+
+    # Chart data by time_group
+    if time_group == 'biweekly':
+        def _semi(d):
+            return date(d.year, d.month, 1 if d.day < 15 else 15)
+        raw = bank_qs.values_list('date', amount_field)
+        pt = defaultdict(float)
+        pc = defaultdict(int)
+        for d, amt in raw:
+            if amt:
+                k = _semi(d)
+                pt[k] += abs(float(amt))
+                pc[k] += 1
+        sp = sorted(pt.keys())
+        chart_labels = [p.strftime('%Y-%m-%d') for p in sp]
+        chart_values = [round(pt[p]) for p in sp]
+        chart_counts = [pc[p] for p in sp]
+    else:
+        chart_labels = sorted_month_keys
+        chart_values = [round(v) for v in monthly_totals]
+        chart_counts = [monthly_counts.get(m, 0) for m in sorted_month_keys]
+
+    cvs = sorted(chart_values)
+    cn = len(cvs)
+    chart_median = (cvs[cn // 2] if cn % 2 else (cvs[cn // 2 - 1] + cvs[cn // 2]) / 2) if cn else 0
+
+    # Scatter data
+    individual = list(bank_qs.order_by('date').values_list('date', amount_field, 'description'))
+    scatter_data = json.dumps([{
+        'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
+        'amount': round(abs(float(amt))) if amt else 0,
+        'description': desc,
+    } for d, amt, desc in individual], cls=DecimalEncoder)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'last_month_label': last_month_label,
+        'last_month_total': last_month_total,
+        'avg_monthly': avg_monthly,
+        'median_monthly': median_monthly,
+        'median_pct': median_pct,
+        'all_time_total': all_time_total,
+        'trend_data': json.dumps({'labels': chart_labels, 'values': chart_values, 'median': chart_median}, cls=DecimalEncoder),
+        'count_data': json.dumps({'labels': chart_labels, 'values': chart_counts}, cls=DecimalEncoder),
+        'scatter_data': scatter_data,
+        'bank_categories': BANK_INCOME_CATEGORIES,
+        'selected_category': selected_category,
+    }
+    return context
+
+
+@dashboard_view("credit_payment", "core/dashboard_credit_payment.html")
+def credit_payment_dashboard(request, display_currency, time_group):
+    """Dashboard for credit card payment analysis — matching debit/credit sides."""
+    from collections import defaultdict
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    cp_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name=CREDIT_PAYMENT_CATEGORY,
+    ).exclude(
+        amount_crc__isnull=True, amount_usd__isnull=True,
+    ).select_related('raw_transaction__ledger__statement_import__account')
+
+    # Separate by account type, store both currency amounts for matching
+    credit_txns = []
+    debit_txns = []
+    for t in cp_qs.order_by('date'):
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        is_credit = hasattr(acct, 'creditaccount') if acct else False
+        amt_display = abs(float(getattr(t, amount_field) or 0))
+        amt_crc = abs(float(t.amount_crc or 0))
+        amt_usd = abs(float(t.amount_usd or 0))
+        entry = {
+            'date': t.date, 'amount': amt_display,
+            'amount_crc': amt_crc, 'amount_usd': amt_usd,
+            'description': t.description, 'id': t.id,
+        }
+        if is_credit:
+            credit_txns.append(entry)
+        else:
+            debit_txns.append(entry)
+
+    # Match credit entries to debit entries (±2 days, close amount in either currency)
+    matched_credits = set()
+    matched_debits = set()
+    matches = []
+    unmatched_credits = []
+
+    for ci, ct in enumerate(credit_txns):
+        best_match = None
+        best_diff = float('inf')
+        for di, dt in enumerate(debit_txns):
+            if di in matched_debits:
+                continue
+            day_diff = abs((ct['date'] - dt['date']).days)
+            if day_diff > 2:
+                continue
+            # Match on CRC or USD — whichever is closer
+            crc_diff = abs(ct['amount_crc'] - dt['amount_crc']) if ct['amount_crc'] and dt['amount_crc'] else float('inf')
+            usd_diff = abs(ct['amount_usd'] - dt['amount_usd']) if ct['amount_usd'] and dt['amount_usd'] else float('inf')
+            amt_diff = min(crc_diff, usd_diff)
+            if amt_diff < 5000 and amt_diff < best_diff:
+                best_diff = amt_diff
+                best_match = di
+        if best_match is not None:
+            matched_credits.add(ci)
+            matched_debits.add(best_match)
+            matches.append({'credit': ct, 'debit': debit_txns[best_match], 'fee': debit_txns[best_match]['amount'] - ct['amount']})
+        else:
+            unmatched_credits.append(ct)
+
+    # Summary
+    total_credit = sum(c['amount'] for c in credit_txns)
+    total_debit = sum(d['amount'] for d in debit_txns)
+    total_matched = sum(m['credit']['amount'] for m in matches)
+    total_unmatched = sum(u['amount'] for u in unmatched_credits)
+    match_rate = (len(matches) / len(credit_txns) * 100) if credit_txns else 0
+
+    # Monthly trend: credit vs debit totals
+    monthly_credit = defaultdict(float)
+    monthly_debit = defaultdict(float)
+    monthly_unmatched = defaultdict(float)
+    for ct in credit_txns:
+        m = ct['date'].strftime('%Y-%m')
+        monthly_credit[m] += ct['amount']
+    for dt in debit_txns:
+        m = dt['date'].strftime('%Y-%m')
+        monthly_debit[m] += dt['amount']
+    for u in unmatched_credits:
+        m = u['date'].strftime('%Y-%m')
+        monthly_unmatched[m] += u['amount']
+
+    all_months = sorted(set(list(monthly_credit.keys()) + list(monthly_debit.keys())))
+
+    trend_data = json.dumps({
+        'labels': all_months,
+        'credit': [round(monthly_credit.get(m, 0)) for m in all_months],
+        'debit': [round(monthly_debit.get(m, 0)) for m in all_months],
+        'unmatched': [round(monthly_unmatched.get(m, 0)) for m in all_months],
+    }, cls=DecimalEncoder)
+
+    # Unmatched table data
+    unmatched_json = json.dumps([{
+        'date': u['date'].isoformat(),
+        'amount': round(u['amount']),
+        'description': u['description'],
+    } for u in sorted(unmatched_credits, key=lambda x: x['date'], reverse=True)], cls=DecimalEncoder)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'total_credit': total_credit,
+        'total_debit': total_debit,
+        'total_matched': total_matched,
+        'total_unmatched': total_unmatched,
+        'match_rate': match_rate,
+        'match_count': len(matches),
+        'unmatched_count': len(unmatched_credits),
+        'total_count': len(credit_txns),
+        'trend_data': trend_data,
+        'unmatched_credits': unmatched_credits,
+    }
+    return context
+
+
+@dashboard_view("personal_account", "core/dashboard_personal_account.html")
+def personal_account_dashboard(request, display_currency, time_group):
+    """Dashboard for Personal Account transfers — internal vs external."""
+    from collections import defaultdict
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+
+    pa_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name__in=[PERSONAL_ACCOUNT_CATEGORY, CREDIT_PAYMENT_CATEGORY],
+    ).exclude(
+        amount_crc__isnull=True, amount_usd__isnull=True,
+    ).select_related('raw_transaction__ledger__statement_import__account')
+
+    # Collect all transactions with their account info
+    all_txns = []
+    for t in pa_qs.order_by('date'):
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        acct_id = acct.id if acct else None
+        amt_display = float(getattr(t, amount_field) or 0)
+        amt_crc = float(t.amount_crc or 0)
+        amt_usd = float(t.amount_usd or 0)
+        all_txns.append({
+            'date': t.date, 'amount': amt_display,
+            'amount_crc': amt_crc, 'amount_usd': amt_usd,
+            'description': t.description, 'account_id': acct_id, 'id': t.id,
+            'category': t.category.name,
+        })
+
+    # Match: find pairs on same/adjacent day, different accounts, opposite signs, close amounts
+    matched = set()
+    internal_txns = []
+    external_txns = []
+
+    for i, ti in enumerate(all_txns):
+        if i in matched:
+            continue
+        found_pair = False
+        for j, tj in enumerate(all_txns):
+            if j <= i or j in matched:
+                continue
+            if ti['account_id'] == tj['account_id']:
+                continue
+            day_diff = abs((ti['date'] - tj['date']).days)
+            if day_diff > 2:
+                continue
+            # Opposite signs check
+            if ti['amount_crc'] * tj['amount_crc'] >= 0:
+                continue
+            # Match on CRC or USD — whichever is closer
+            crc_diff = abs(abs(ti['amount_crc']) - abs(tj['amount_crc'])) if ti['amount_crc'] and tj['amount_crc'] else float('inf')
+            usd_diff = abs(abs(ti['amount_usd']) - abs(tj['amount_usd'])) if ti['amount_usd'] and tj['amount_usd'] else float('inf')
+            amt_diff = min(crc_diff, usd_diff)
+            threshold = min(abs(ti['amount_crc']), abs(tj['amount_crc'])) * 0.02 + 5000
+            if amt_diff < threshold:
+                    matched.add(i)
+                    matched.add(j)
+                    internal_txns.append(ti)
+                    internal_txns.append(tj)
+                    found_pair = True
+                    break
+        if not found_pair and i not in matched:
+            external_txns.append(ti)
+
+    # Summary
+    total_internal = sum(abs(t['amount']) for t in internal_txns) / 2  # pairs counted twice
+    total_external_out = sum(abs(t['amount']) for t in external_txns if t['amount'] < 0)
+    total_external_in = sum(abs(t['amount']) for t in external_txns if t['amount'] > 0)
+
+    # Monthly trend
+    monthly_internal = defaultdict(float)
+    monthly_ext_out = defaultdict(float)
+    monthly_ext_in = defaultdict(float)
+    for t in internal_txns:
+        if t['amount'] < 0:
+            monthly_internal[t['date'].strftime('%Y-%m')] += abs(t['amount'])
+    for t in external_txns:
+        m = t['date'].strftime('%Y-%m')
+        if t['amount'] < 0:
+            monthly_ext_out[m] += abs(t['amount'])
+        else:
+            monthly_ext_in[m] += abs(t['amount'])
+
+    all_months = sorted(set(
+        list(monthly_internal.keys()) + list(monthly_ext_out.keys()) + list(monthly_ext_in.keys())
+    ))
+
+    trend_data = json.dumps({
+        'labels': all_months,
+        'internal': [round(monthly_internal.get(m, 0)) for m in all_months],
+        'external_out': [round(monthly_ext_out.get(m, 0)) for m in all_months],
+        'external_in': [round(monthly_ext_in.get(m, 0)) for m in all_months],
+    }, cls=DecimalEncoder)
+
+    # External transactions table
+    ext_sorted = sorted(external_txns, key=lambda t: t['date'], reverse=True)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'total_txns': len(all_txns),
+        'internal_count': len(internal_txns) // 2,
+        'external_count': len(external_txns),
+        'total_internal': total_internal,
+        'total_external_out': total_external_out,
+        'total_external_in': total_external_in,
+        'trend_data': trend_data,
+        'external_txns': ext_sorted,
+    }
+    return context
+
+
+def _match_transfer_pairs(user, amount_field, display_currency):
+    """Shared logic: match Personal Account + Credit Payment transactions into internal/external."""
+    from collections import defaultdict
+
+    pa_qs = Transaction.objects.filter(
+        user=user,
+        category__name__in=[PERSONAL_ACCOUNT_CATEGORY, CREDIT_PAYMENT_CATEGORY],
+    ).exclude(
+        amount_crc__isnull=True, amount_usd__isnull=True,
+    ).select_related('raw_transaction__ledger__statement_import__account')
+
+    all_txns = []
+    for t in pa_qs.order_by('date'):
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        currency = ledger.currency if ledger else ''
+        acct_label = str(acct) if acct else 'Unknown'
+        if currency and hasattr(acct, 'creditaccount'):
+            acct_label = f'{acct_label} ({currency})'
+        all_txns.append({
+            'date': t.date,
+            'amount': float(getattr(t, amount_field) or 0),
+            'amount_crc': float(t.amount_crc or 0),
+            'amount_usd': float(t.amount_usd or 0),
+            'description': t.description,
+            'account_id': acct.id if acct else None,
+            'account_name': acct_label,
+            'category': t.category.name,
+            'id': t.id,
+        })
+
+    matched = set()
+    internal_pairs = []
+    external_txns = []
+
+    for i, ti in enumerate(all_txns):
+        if i in matched:
+            continue
+        found = False
+        for j, tj in enumerate(all_txns):
+            if j <= i or j in matched or ti['account_id'] == tj['account_id']:
+                continue
+            if abs((ti['date'] - tj['date']).days) > 2:
+                continue
+            if ti['amount_crc'] * tj['amount_crc'] >= 0:
+                continue
+            crc_diff = abs(abs(ti['amount_crc']) - abs(tj['amount_crc'])) if ti['amount_crc'] and tj['amount_crc'] else float('inf')
+            usd_diff = abs(abs(ti['amount_usd']) - abs(tj['amount_usd'])) if ti['amount_usd'] and tj['amount_usd'] else float('inf')
+            threshold = min(abs(ti['amount_crc']), abs(tj['amount_crc'])) * 0.02 + 5000
+            if min(crc_diff, usd_diff) < threshold:
+                matched.add(i)
+                matched.add(j)
+                # The outgoing side is the one with negative amount
+                out_side = ti if ti['amount'] < 0 else tj
+                in_side = tj if ti['amount'] < 0 else ti
+                out_side['abs_amount'] = abs(out_side['amount'])
+                internal_pairs.append({'out': out_side, 'in': in_side})
+                found = True
+                break
+        if not found and i not in matched:
+            external_txns.append(ti)
+
+    return all_txns, internal_pairs, external_txns
+
+
+@dashboard_view("internal_transfers", "core/dashboard_internal_transfers.html")
+def internal_transfers_dashboard(request, display_currency, time_group):
+    """Dashboard dedicated to internal transfers between registered accounts."""
+    from collections import defaultdict
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+
+    _, internal_pairs, _ = _match_transfer_pairs(request.user, amount_field, display_currency)
+
+    # Summary
+    total_volume = sum(abs(p['out']['amount']) for p in internal_pairs)
+    pair_count = len(internal_pairs)
+    avg_transfer = total_volume / pair_count if pair_count else 0
+
+    # Monthly trend
+    monthly_volume = defaultdict(float)
+    monthly_count = defaultdict(int)
+    for p in internal_pairs:
+        m = p['out']['date'].strftime('%Y-%m')
+        monthly_volume[m] += abs(p['out']['amount'])
+        monthly_count[m] += 1
+
+    all_months = sorted(monthly_volume.keys())
+
+    trend_data = json.dumps({
+        'labels': all_months,
+        'volume': [round(monthly_volume[m]) for m in all_months],
+        'count': [monthly_count[m] for m in all_months],
+    }, cls=DecimalEncoder)
+
+    # Paired table (most recent first)
+    pairs_sorted = sorted(internal_pairs, key=lambda p: p['out']['date'], reverse=True)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'total_volume': total_volume,
+        'pair_count': pair_count,
+        'avg_transfer': avg_transfer,
+        'trend_data': trend_data,
+        'pairs': pairs_sorted,
+    }
+    return context
+
+
+@dashboard_view("credit_transfers", "core/dashboard_credit_transfers.html")
+def credit_transfers_dashboard(request, display_currency, time_group):
+    """Dashboard matching credit card payments from debit to credit accounts."""
+    from collections import defaultdict
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+
+    cp_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name=CREDIT_PAYMENT_CATEGORY,
+    ).exclude(
+        amount_crc__isnull=True, amount_usd__isnull=True,
+    ).select_related('raw_transaction__ledger__statement_import__account')
+
+    # Separate by account type
+    credit_txns = []
+    debit_txns = []
+    for t in cp_qs.order_by('date'):
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        is_credit = hasattr(acct, 'creditaccount') if acct else False
+        currency = ledger.currency if ledger else ''
+        acct_label = str(acct) if acct else 'Unknown'
+        if currency and is_credit:
+            acct_label = f'{acct_label} ({currency})'
+        entry = {
+            'date': t.date,
+            'amount': float(getattr(t, amount_field) or 0),
+            'amount_crc': float(t.amount_crc or 0),
+            'amount_usd': float(t.amount_usd or 0),
+            'description': t.description,
+            'account_name': acct_label,
+            'currency': currency,
+            'id': t.id,
+        }
+        if is_credit:
+            credit_txns.append(entry)
+        else:
+            debit_txns.append(entry)
+
+    # Match debit→credit pairs
+    matched_debits = set()
+    matched_credits = set()
+    pairs = []
+    unmatched_credit = []
+    unmatched_debit = []
+
+    for ci, ct in enumerate(credit_txns):
+        best_match = None
+        best_diff = float('inf')
+        for di, dt in enumerate(debit_txns):
+            if di in matched_debits:
+                continue
+            day_diff = abs((ct['date'] - dt['date']).days)
+            if day_diff > 2:
+                continue
+            crc_diff = abs(abs(ct['amount_crc']) - abs(dt['amount_crc'])) if ct['amount_crc'] and dt['amount_crc'] else float('inf')
+            usd_diff = abs(abs(ct['amount_usd']) - abs(dt['amount_usd'])) if ct['amount_usd'] and dt['amount_usd'] else float('inf')
+            amt_diff = min(crc_diff, usd_diff)
+            if amt_diff < 5000 and amt_diff < best_diff:
+                best_diff = amt_diff
+                best_match = di
+        if best_match is not None:
+            matched_credits.add(ci)
+            matched_debits.add(best_match)
+            ct['abs_amount'] = abs(ct['amount'])
+            pairs.append({'debit': debit_txns[best_match], 'credit': ct})
+        else:
+            unmatched_credit.append(ct)
+
+    for di, dt in enumerate(debit_txns):
+        if di not in matched_debits:
+            unmatched_debit.append(dt)
+
+    # Summary
+    total_matched = sum(abs(p['credit']['amount']) for p in pairs)
+    total_unmatched_credit = sum(abs(u['amount']) for u in unmatched_credit)
+    total_unmatched_debit = sum(abs(u['amount']) for u in unmatched_debit)
+    match_rate = (len(pairs) / len(credit_txns) * 100) if credit_txns else 0
+
+    # Monthly trend
+    monthly_credit = defaultdict(float)
+    monthly_debit = defaultdict(float)
+    monthly_unmatched = defaultdict(float)
+    for ct in credit_txns:
+        m = ct['date'].strftime('%Y-%m')
+        monthly_credit[m] += abs(ct['amount'])
+    for dt in debit_txns:
+        m = dt['date'].strftime('%Y-%m')
+        monthly_debit[m] += abs(dt['amount'])
+    for u in unmatched_credit:
+        m = u['date'].strftime('%Y-%m')
+        monthly_unmatched[m] += abs(u['amount'])
+
+    all_months = sorted(set(list(monthly_credit.keys()) + list(monthly_debit.keys())))
+
+    trend_data = json.dumps({
+        'labels': all_months,
+        'credit': [round(monthly_credit.get(m, 0)) for m in all_months],
+        'debit': [round(monthly_debit.get(m, 0)) for m in all_months],
+        'unmatched': [round(monthly_unmatched.get(m, 0)) for m in all_months],
+    }, cls=DecimalEncoder)
+
+    pairs_sorted = sorted(pairs, key=lambda p: p['credit']['date'], reverse=True)
+
+    for u in unmatched_credit:
+        u['abs_amount'] = abs(u['amount'])
+    for u in unmatched_debit:
+        u['abs_amount'] = abs(u['amount'])
+    unmatched_credit_sorted = sorted(unmatched_credit, key=lambda u: u['date'], reverse=True)
+    unmatched_debit_sorted = sorted(unmatched_debit, key=lambda u: u['date'], reverse=True)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'pair_count': len(pairs),
+        'total_matched': total_matched,
+        'unmatched_credit_count': len(unmatched_credit),
+        'total_unmatched_credit': total_unmatched_credit,
+        'unmatched_debit_count': len(unmatched_debit),
+        'total_unmatched_debit': total_unmatched_debit,
+        'match_rate': match_rate,
+        'trend_data': trend_data,
+        'pairs': pairs_sorted,
+        'unmatched_credit': unmatched_credit_sorted,
+        'unmatched_debit': unmatched_debit_sorted,
+    }
+    return context
+
+
+@dashboard_view("external_transfers", "core/dashboard_external_transfers.html")
+def external_transfers_dashboard(request, display_currency, time_group):
+    """Dashboard for external transfers — money going to/from non-registered accounts."""
+    from collections import defaultdict
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    ext_qs = Transaction.objects.filter(
+        user=request.user,
+        category__name='External',
+        category__group__slug='transaction',
+        **{f'{amount_field}__isnull': False},
+    )
+
+    # Separate outgoing/incoming
+    all_txns = list(ext_qs.order_by('-date').values(
+        'date', 'description', amount_field,
+    ))
+    outgoing = []
+    incoming = []
+    for t in all_txns:
+        amt = float(t[amount_field] or 0)
+        entry = {'date': t['date'], 'amount': amt, 'abs_amount': abs(amt), 'description': t['description']}
+        if amt < 0:
+            outgoing.append(entry)
+        else:
+            incoming.append(entry)
+
+    total_out = sum(t['abs_amount'] for t in outgoing)
+    total_in = sum(t['abs_amount'] for t in incoming)
+    net = total_in - total_out
+
+    # Monthly trend
+    monthly_out = defaultdict(float)
+    monthly_in = defaultdict(float)
+    for t in outgoing:
+        monthly_out[t['date'].strftime('%Y-%m')] += t['abs_amount']
+    for t in incoming:
+        monthly_in[t['date'].strftime('%Y-%m')] += t['abs_amount']
+
+    all_months = sorted(set(list(monthly_out.keys()) + list(monthly_in.keys())))
+
+    trend_data = json.dumps({
+        'labels': all_months,
+        'outgoing': [round(monthly_out.get(m, 0)) for m in all_months],
+        'incoming': [round(monthly_in.get(m, 0)) for m in all_months],
+    }, cls=DecimalEncoder)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'total_out': total_out,
+        'total_in': total_in,
+        'net': net,
+        'out_count': len(outgoing),
+        'in_count': len(incoming),
+        'total_count': len(all_txns),
+        'trend_data': trend_data,
+        'outgoing': outgoing,
+        'incoming': incoming,
+    }
+    return context
+
+
+@dashboard_view("transfer_flow", "core/dashboard_transfer_flow.html")
+def transfer_flow_dashboard(request, display_currency, time_group):
+    """Graph view of money flows between accounts and external nodes."""
+    from collections import defaultdict
+    from django.db.models.functions import Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+
+    transfer_qs = Transaction.objects.filter(
+        user=request.user,
+        category__group__slug='transaction',
+        **{f'{amount_field}__isnull': False},
+    ).select_related(
+        'raw_transaction__ledger__statement_import__account',
+        'category',
+    )
+
+    # Build flows: source → destination with volume
+    flows = defaultdict(float)
+    flow_counts = defaultdict(int)
+
+    for t in transfer_qs:
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        acct_name = str(acct) if acct else 'Unknown'
+        cat = t.category.name
+        amt = float(getattr(t, amount_field) or 0)
+
+        # Determine source and destination based on category and direction
+        if cat == 'Internal':
+            # Skip — will use matched pairs from _match_transfer_pairs below
+            pass
+        elif cat == 'Credit':
+            if acct and hasattr(acct, 'creditaccount'):
+                # Credit side — skip, we'll capture this from the debit side
+                pass
+            else:
+                # Debit side paying to credit card
+                currency = ledger.currency if ledger else ''
+                if amt < 0:
+                    flows[(acct_name, 'Credit Card')] += abs(amt)
+                    flow_counts[(acct_name, 'Credit Card')] += 1
+        elif cat == 'External':
+            if amt < 0:
+                flows[(acct_name, 'External')] += abs(amt)
+                flow_counts[(acct_name, 'External')] += 1
+            else:
+                flows[('External', acct_name)] += abs(amt)
+                flow_counts[('External', acct_name)] += 1
+        elif cat == 'Cash Withdrawal':
+            if amt < 0:
+                flows[(acct_name, 'Cash')] += abs(amt)
+                flow_counts[(acct_name, 'Cash')] += 1
+        elif cat == 'CDP':
+            if amt < 0:
+                flows[(acct_name, 'CDP')] += abs(amt)
+                flow_counts[(acct_name, 'CDP')] += 1
+            else:
+                flows[('CDP', acct_name)] += abs(amt)
+                flow_counts[('CDP', acct_name)] += 1
+        elif cat == 'Investments':
+            if amt < 0:
+                flows[(acct_name, 'Investments')] += abs(amt)
+                flow_counts[(acct_name, 'Investments')] += 1
+            else:
+                flows[('Investments', acct_name)] += abs(amt)
+                flow_counts[('Investments', acct_name)] += 1
+
+    # Add Internal transfers using matched pairs (actual account names)
+    _, internal_pairs, _ = _match_transfer_pairs(request.user, amount_field, display_currency)
+    for p in internal_pairs:
+        src = p['out']['account_name']
+        dst = p['in']['account_name']
+        vol = abs(p['out']['amount'])
+        flows[(src, dst)] += vol
+        flow_counts[(src, dst)] += 1
+
+    # Build nodes and links for Sankey — resolve circular flows by netting
+    all_nodes = set()
+    sankey_flows = {}
+    table_rows = []
+    processed = set()
+
+    for (src, dst), vol in sorted(flows.items(), key=lambda x: -x[1]):
+        pair_key = tuple(sorted([src, dst]))
+        if pair_key in processed:
+            continue
+        processed.add(pair_key)
+
+        reverse_vol = flows.get((dst, src), 0)
+        reverse_cnt = flow_counts.get((dst, src), 0)
+        fwd_vol = vol
+        fwd_cnt = flow_counts[(src, dst)]
+
+        # Table gets both directions
+        table_rows.append({'source': src, 'target': dst, 'volume': round(fwd_vol), 'count': fwd_cnt})
+        if reverse_vol > 0:
+            table_rows.append({'source': dst, 'target': src, 'volume': round(reverse_vol), 'count': reverse_cnt})
+
+        # Sankey gets net direction only
+        net = fwd_vol - reverse_vol
+        if net > 0:
+            sankey_flows[(src, dst)] = round(net)
+        elif net < 0:
+            sankey_flows[(dst, src)] = round(abs(net))
+        # If exactly equal, skip (net zero)
+
+    for (src, dst) in sankey_flows:
+        all_nodes.add(src)
+        all_nodes.add(dst)
+
+    node_list = sorted(all_nodes)
+    node_index = {n: i for i, n in enumerate(node_list)}
+    sankey_links = [{'source': node_index[src], 'target': node_index[dst], 'value': vol}
+                    for (src, dst), vol in sankey_flows.items() if vol > 0]
+
+    # Sort table by volume
+    table_rows.sort(key=lambda r: -r['volume'])
+
+    flow_data = json.dumps({
+        'nodes': node_list,
+        'links': sankey_links,
+    }, cls=DecimalEncoder)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'flow_data': flow_data,
+        'table_rows': table_rows,
+        'total_volume': sum(r['volume'] for r in table_rows),
+    }
+    return context
+
+
+@dashboard_view("transfer_graph", "core/dashboard_transfer_graph.html")
+def transfer_graph_dashboard(request, display_currency, time_group):
+    """Network graph view of connections between accounts."""
+    from collections import defaultdict
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+
+    transfer_qs = Transaction.objects.filter(
+        user=request.user,
+        category__group__slug='transaction',
+        **{f'{amount_field}__isnull': False},
+    ).select_related(
+        'raw_transaction__ledger__statement_import__account',
+        'category',
+    )
+
+    # Build edges: unique connections with volume and count
+    edges = defaultdict(lambda: {'volume': 0, 'count': 0})
+
+    for t in transfer_qs:
+        raw = t.raw_transaction
+        ledger = raw.ledger if raw else None
+        stmt = ledger.statement_import if ledger else None
+        acct = stmt.account if stmt else None
+        acct_name = str(acct) if acct else 'Unknown'
+        cat = t.category.name
+        amt = float(getattr(t, amount_field) or 0)
+
+        if cat == 'Internal':
+            pass  # handled via pairs below
+        elif cat == 'Credit':
+            if acct and hasattr(acct, 'creditaccount'):
+                pass
+            elif amt < 0:
+                edges[(acct_name, 'Credit Card')]['volume'] += abs(amt)
+                edges[(acct_name, 'Credit Card')]['count'] += 1
+        elif cat == 'External':
+            if amt < 0:
+                edges[(acct_name, 'External')]['volume'] += abs(amt)
+                edges[(acct_name, 'External')]['count'] += 1
+            else:
+                edges[('External', acct_name)]['volume'] += abs(amt)
+                edges[('External', acct_name)]['count'] += 1
+        elif cat == 'Cash Withdrawal':
+            if amt < 0:
+                edges[(acct_name, 'Cash')]['volume'] += abs(amt)
+                edges[(acct_name, 'Cash')]['count'] += 1
+        elif cat == 'CDP':
+            if amt < 0:
+                edges[(acct_name, 'CDP')]['volume'] += abs(amt)
+                edges[(acct_name, 'CDP')]['count'] += 1
+            else:
+                edges[('CDP', acct_name)]['volume'] += abs(amt)
+                edges[('CDP', acct_name)]['count'] += 1
+        elif cat == 'Investments':
+            if amt < 0:
+                edges[(acct_name, 'Investments')]['volume'] += abs(amt)
+                edges[(acct_name, 'Investments')]['count'] += 1
+            else:
+                edges[('Investments', acct_name)]['volume'] += abs(amt)
+                edges[('Investments', acct_name)]['count'] += 1
+
+    # Internal pairs
+    _, internal_pairs, _ = _match_transfer_pairs(request.user, amount_field, display_currency)
+    for p in internal_pairs:
+        src = p['out']['account_name']
+        dst = p['in']['account_name']
+        edges[(src, dst)]['volume'] += abs(p['out']['amount'])
+        edges[(src, dst)]['count'] += 1
+
+    # Build graph data
+    all_nodes = set()
+    for src, dst in edges:
+        all_nodes.add(src)
+        all_nodes.add(dst)
+
+    node_types = {}
+    for n in all_nodes:
+        if n.startswith('Debit'):
+            node_types[n] = 'debit'
+        elif n.startswith('Credit'):
+            node_types[n] = 'credit'
+        else:
+            node_types[n] = 'external'
+
+    graph_data = json.dumps({
+        'nodes': [{'id': n, 'type': node_types.get(n, 'external')} for n in sorted(all_nodes)],
+        'links': [{'source': src, 'target': dst, 'volume': round(e['volume']), 'count': e['count']}
+                  for (src, dst), e in sorted(edges.items(), key=lambda x: -x[1]['volume'])],
+    }, cls=DecimalEncoder)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'graph_data': graph_data,
     }
     return context
 

@@ -1,0 +1,223 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}Credit Transfers — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="credit_transfers" %}
+  </div>
+
+  <div class="col-md-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Credit Transfers</h4>
+      <div class="d-flex align-items-center gap-2">
+        <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
+          <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
+          <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
+        </button>
+        {% include "core/_currency_toggle.html" %}
+      </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Matched Payments</h6>
+            <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ total_matched|format_number }}</h3>
+            <div class="small text-muted">{{ pair_count }} paired</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 {% if unmatched_credit_count > 0 %}border-warning{% endif %}">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Unmatched (Credit side)</h6>
+            <h3 class="card-title mb-1 {% if unmatched_credit_count > 0 %}text-warning{% endif %}" data-sensitive>{{ currency_symbol }}{{ total_unmatched_credit|format_number }}</h3>
+            <div class="small text-muted">{{ unmatched_credit_count }} payments from other sources</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 {% if unmatched_debit_count > 0 %}border-info{% endif %}">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Unmatched (Debit side)</h6>
+            <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ total_unmatched_debit|format_number }}</h3>
+            <div class="small text-muted">{{ unmatched_debit_count }} without credit confirmation</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Match Rate</h6>
+            <h3 class="card-title mb-1">{{ match_rate|floatformat:1 }}%</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly trend -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Monthly Credit Payments</h6>
+        <div id="trendChart"></div>
+      </div>
+    </div>
+
+    <!-- Unmatched credit side (payments from other sources) -->
+    {% if unmatched_credit %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold"><span class="text-warning">⚠</span> Unmatched — Credit Side ({{ unmatched_credit_count }})</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Account</th>
+              <th>Description</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in unmatched_credit %}
+            <tr>
+              <td class="text-nowrap">{{ u.date }}</td>
+              <td><span class="badge bg-primary">{{ u.account_name }}</span></td>
+              <td>{{ u.description }}</td>
+              <td class="text-end text-warning" data-sensitive>{{ currency_symbol }}{{ u.abs_amount|format_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Unmatched debit side (no credit confirmation) -->
+    {% if unmatched_debit %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold"><span class="text-info">ℹ</span> Unmatched — Debit Side ({{ unmatched_debit_count }})</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Account</th>
+              <th>Description</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in unmatched_debit %}
+            <tr>
+              <td class="text-nowrap">{{ u.date }}</td>
+              <td><span class="badge bg-secondary">{{ u.account_name }}</span></td>
+              <td>{{ u.description }}</td>
+              <td class="text-end" data-sensitive>{{ currency_symbol }}{{ u.abs_amount|format_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Matched pairs table (sortable) -->
+    {% if pairs %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold">Matched Payments ({{ pair_count }})</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0" id="pairsTable">
+          <thead class="table-light">
+            <tr>
+              <th role="button" onclick="sortTable(0, 'str')">Date <span class="text-muted">⇅</span></th>
+              <th role="button" onclick="sortTable(1, 'str')">From Account <span class="text-muted">⇅</span></th>
+              <th role="button" onclick="sortTable(2, 'str')">To Account <span class="text-muted">⇅</span></th>
+              <th role="button" onclick="sortTable(3, 'num')" class="text-end">Amount <span class="text-muted">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in pairs %}
+            <tr>
+              <td class="text-nowrap">{{ p.debit.date }}</td>
+              <td><span class="badge bg-secondary">{{ p.debit.account_name }}</span></td>
+              <td><span class="badge bg-primary">{{ p.credit.account_name }}</span></td>
+              <td class="text-end text-success" data-sensitive data-sort-value="{{ p.credit.abs_amount }}">{{ currency_symbol }}{{ p.credit.abs_amount|format_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info text-center mb-4">No matched credit payments found.</div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script id="trendData" type="application/json">{{ trend_data|escapejson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var isPrivacy = dashboardPrivacy.isOn();
+  window._dashCharts = [];
+  var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
+
+  var trend = JSON.parse(document.getElementById('trendData').textContent);
+
+  var trendChart = new ApexCharts(document.getElementById('trendChart'), {
+    chart: { type: 'bar', height: 320, toolbar: { show: false } },
+    series: [
+      { name: 'Credit (received)', data: trend.credit || [] },
+      { name: 'Debit (paid)', data: trend.debit || [] },
+      { name: 'Unmatched (other source)', data: trend.unmatched || [] },
+    ],
+    colors: [CHART_COLORS.salaryGreen, CHART_COLORS.carBlue, '#f0ad4e'],
+    plotOptions: { bar: { borderRadius: 2, columnWidth: '70%' } },
+    xaxis: { categories: trend.labels || [] },
+    yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: { enabled: !isPrivacy, shared: true, intersect: false, y: { formatter: fmtNum } },
+    grid: { borderColor: '#e9ecef' },
+  });
+  trendChart.render();
+  window._dashCharts.push(trendChart);
+
+  dashboardPrivacy.apply(window._dashCharts);
+})();
+
+var _sortDir = {};
+function sortTable(colIdx, type) {
+  var table = document.getElementById('pairsTable');
+  var tbody = table.querySelector('tbody');
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+  _sortDir[colIdx] = !_sortDir[colIdx];
+  var dir = _sortDir[colIdx] ? 1 : -1;
+  rows.sort(function(a, b) {
+    var aCell = a.cells[colIdx];
+    var bCell = b.cells[colIdx];
+    var aVal, bVal;
+    if (type === 'num') {
+      aVal = parseFloat(aCell.getAttribute('data-sort-value') || '0');
+      bVal = parseFloat(bCell.getAttribute('data-sort-value') || '0');
+    } else {
+      aVal = aCell.textContent.trim();
+      bVal = bCell.textContent.trim();
+    }
+    if (aVal < bVal) return -dir;
+    if (aVal > bVal) return dir;
+    return 0;
+  });
+  rows.forEach(function(r) { tbody.appendChild(r); });
+}
+</script>
+{% endblock %}
