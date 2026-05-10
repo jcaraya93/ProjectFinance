@@ -45,13 +45,12 @@
     </div>
     <div class="card mb-2">
       <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-transfers">Transfers</div>
-      <div class="collapse {% if active_dashboard == 'internal_transfers' or active_dashboard == 'credit_transfers' or active_dashboard == 'external_transfers' or active_dashboard == 'transfer_flow' or active_dashboard == 'transfer_graph' %}show{% endif %}" id="nav-transfers">
+      <div class="collapse {% if active_dashboard == 'transfer_flow' or active_dashboard == 'internal_transfers' or active_dashboard == 'credit_transfers' or active_dashboard == 'external_transfers' %}show{% endif %}" id="nav-transfers">
       <div class="list-group list-group-flush">
+        <a href="{% url 'core:transfer_flow_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transfer_flow' %} active{% endif %}">Flow Overview</a>
         <a href="{% url 'core:internal_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'internal_transfers' %} active{% endif %}">Internal Transfers</a>
         <a href="{% url 'core:credit_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'credit_transfers' %} active{% endif %}">Credit Transfers</a>
         <a href="{% url 'core:external_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'external_transfers' %} active{% endif %}">External Transfers</a>
-        <a href="{% url 'core:transfer_flow_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transfer_flow' %} active{% endif %}">Flow Overview</a>
-        <a href="{% url 'core:transfer_graph_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transfer_graph' %} active{% endif %}">Graph</a>
       </div>
       </div>
     </div>

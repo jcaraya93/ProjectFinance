@@ -32,7 +32,6 @@ __all__ = [
     'credit_transfers_dashboard',
     'external_transfers_dashboard',
     'transfer_flow_dashboard',
-    'transfer_graph_dashboard',
     'category_stats_dashboard',
 ]
 
