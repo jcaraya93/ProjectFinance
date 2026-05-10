@@ -1,76 +1,42 @@
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-financial">Financial</div>
-      <div class="collapse {% if active_dashboard == 'overview' or active_dashboard == 'spending_income' or active_dashboard == 'category_stats' %}show{% endif %}" id="nav-financial">
+    <div class="card">
+      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3">
+        {% if dashboard_category == 'overview' %}Overview
+        {% elif dashboard_category == 'income' %}Income
+        {% elif dashboard_category == 'transfers' %}Transfers
+        {% elif dashboard_category == 'expense' %}Expense
+        {% elif dashboard_category == 'data_quality' %}Data Quality
+        {% endif %}
+      </div>
       <div class="list-group list-group-flush">
+        {% if dashboard_category == 'overview' %}
         <a href="{% url 'core:dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'overview' %} active{% endif %}">Overview</a>
         <a href="{% url 'core:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Spending & Income</a>
         <a href="{% url 'core:category_stats_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'category_stats' %} active{% endif %}">Category Stats</a>
-      </div>
-      </div>
-    </div>
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-income">Income</div>
-      <div class="collapse {% if active_dashboard == 'income_overview' %}show{% endif %}" id="nav-income">
-      <div class="list-group list-group-flush">
+
+        {% elif dashboard_category == 'income' %}
         <a href="{% url 'core:income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_overview' %} active{% endif %}">Overview</a>
-      </div>
-      </div>
-    </div>
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-income-work">Income Work</div>
-      <div class="collapse {% if active_dashboard == 'income_salary' or active_dashboard == 'income_bonus' %}show{% endif %}" id="nav-income-work">
-      <div class="list-group list-group-flush">
         <a href="{% url 'core:income_salary_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_salary' %} active{% endif %}">Work Salary</a>
         <a href="{% url 'core:income_bonus_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_bonus' %} active{% endif %}">Work Extras</a>
-      </div>
-      </div>
-    </div>
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-income-reimb">Income Reimbursement</div>
-      <div class="collapse {% if active_dashboard == 'reimbursement_overview' or active_dashboard == 'income_txn' %}show{% endif %}" id="nav-income-reimb">
-      <div class="list-group list-group-flush">
-        <a href="{% url 'core:reimbursement_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'reimbursement_overview' %} active{% endif %}">Overview</a>
-        <a href="{% url 'core:income_txn_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_txn' %} active{% endif %}">Detail</a>
-      </div>
-      </div>
-    </div>
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-income-bank">Income Bank</div>
-      <div class="collapse {% if active_dashboard == 'bank_income_overview' or active_dashboard == 'bank_income_detail' %}show{% endif %}" id="nav-income-bank">
-      <div class="list-group list-group-flush">
-        <a href="{% url 'core:bank_income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_overview' %} active{% endif %}">Overview</a>
-        <a href="{% url 'core:bank_income_detail_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_detail' %} active{% endif %}">Detail</a>
-      </div>
-      </div>
-    </div>
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-transfers">Transfers</div>
-      <div class="collapse {% if active_dashboard == 'transfer_flow' or active_dashboard == 'internal_transfers' or active_dashboard == 'credit_transfers' or active_dashboard == 'external_transfers' %}show{% endif %}" id="nav-transfers">
-      <div class="list-group list-group-flush">
+        <a href="{% url 'core:reimbursement_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'reimbursement_overview' %} active{% endif %}">Reimbursement Overview</a>
+        <a href="{% url 'core:income_txn_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_txn' %} active{% endif %}">Reimbursement Detail</a>
+        <a href="{% url 'core:bank_income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_overview' %} active{% endif %}">Bank Income Overview</a>
+        <a href="{% url 'core:bank_income_detail_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_detail' %} active{% endif %}">Bank Income Detail</a>
+
+        {% elif dashboard_category == 'transfers' %}
         <a href="{% url 'core:transfer_flow_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transfer_flow' %} active{% endif %}">Flow Overview</a>
         <a href="{% url 'core:internal_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'internal_transfers' %} active{% endif %}">Internal Transfers</a>
         <a href="{% url 'core:credit_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'credit_transfers' %} active{% endif %}">Credit Transfers</a>
         <a href="{% url 'core:external_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'external_transfers' %} active{% endif %}">External Transfers</a>
-      </div>
-      </div>
-    </div>
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-category">Expense Category</div>
-      <div class="collapse {% if active_dashboard == 'car' or active_dashboard == 'car_gas' or active_dashboard == 'car_parking' %}show{% endif %}" id="nav-category">
-      <div class="list-group list-group-flush">
+
+        {% elif dashboard_category == 'expense' %}
         <a href="{% url 'core:car_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car' %} active{% endif %}">Car</a>
         <a href="{% url 'core:car_gas_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car_gas' %} active{% endif %}">Car Gas</a>
         <a href="{% url 'core:car_parking_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car_parking' %} active{% endif %}">Car Parking</a>
-      </div>
-      </div>
-    </div>
-    <div class="card mb-2">
-      <div class="card-header fw-bold small text-uppercase text-muted p-2 px-3" role="button" data-bs-toggle="collapse" data-bs-target="#nav-quality">Data Quality</div>
-      <div class="collapse {% if active_dashboard == 'transaction_health' or active_dashboard == 'rule_matching' or active_dashboard == 'default_buckets' %}show{% endif %}" id="nav-quality">
-      <div class="list-group list-group-flush">
+
+        {% elif dashboard_category == 'data_quality' %}
         <a href="{% url 'core:transaction_health_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transaction_health' %} active{% endif %}">Classification Method</a>
         <a href="{% url 'core:rule_matching_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'rule_matching' %} active{% endif %}">Rule Matching</a>
         <a href="{% url 'core:default_buckets_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'default_buckets' %} active{% endif %}">Default Buckets</a>
-      </div>
+        {% endif %}
       </div>
     </div>

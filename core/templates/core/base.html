@@ -21,8 +21,15 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           {% if user.is_authenticated %}
-          <li class="nav-item">
-            <a class="nav-link" href="{% url 'core:dashboard' %}">Dashboard</a>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Dashboards</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="{% url 'core:dashboard' %}">Overview</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:income_overview_dashboard' %}">Income</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:transfer_flow_dashboard' %}">Transfers</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:car_dashboard' %}">Expense</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:transaction_health_dashboard' %}">Data Quality</a></li>
+            </ul>
           </li>
           <li class="nav-item">
             <a class="nav-link" href="{% url 'core:transaction_list' %}">Transactions</a>

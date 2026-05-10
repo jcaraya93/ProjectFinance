@@ -65,6 +65,19 @@ CREDIT_PAYMENT_CATEGORY = 'Credit'
 PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
 
+DASHBOARD_CATEGORIES = {
+    'overview': 'overview', 'spending_income': 'overview', 'category_stats': 'overview',
+    'income_overview': 'income', 'income_salary': 'income', 'income_bonus': 'income',
+    'reimbursement_overview': 'income', 'income_txn': 'income',
+    'bank_income_overview': 'income', 'bank_income_detail': 'income',
+    'transfer_flow': 'transfers', 'internal_transfers': 'transfers',
+    'credit_transfers': 'transfers', 'external_transfers': 'transfers',
+    'car': 'expense', 'car_gas': 'expense', 'car_parking': 'expense',
+    'transaction_health': 'data_quality', 'rule_matching': 'data_quality',
+    'default_buckets': 'data_quality',
+}
+
+
 def dashboard_view(name, template, default_time_group='monthly'):
     """Decorator that handles common dashboard boilerplate:
     - login_required
@@ -84,6 +97,7 @@ def dashboard_view(name, template, default_time_group='monthly'):
 
                 context.setdefault('display_currency', display_currency)
                 context.setdefault('time_group', time_group)
+                context.setdefault('dashboard_category', DASHBOARD_CATEGORIES.get(name, 'overview'))
 
                 elapsed_ms = (time.monotonic() - t0) * 1000
                 span.set_attribute("dashboard.type", name)
