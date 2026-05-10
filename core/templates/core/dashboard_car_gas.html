@@ -168,6 +168,15 @@
     yaxis: {
       labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
+    annotations: {
+      yaxis: [{
+        y: Math.round(gas.spend_median || 0),
+        borderColor: CHART_COLORS.averageRed,
+        strokeDashArray: 6,
+        borderWidth: 2,
+        label: { text: 'Median: ' + Math.round(gas.spend_median || 0).toLocaleString(), position: 'left', style: { fontSize: '11px', color: '#fff', background: CHART_COLORS.averageRed } },
+      }],
+    },
     dataLabels: { enabled: false },
     legend: { show: false },
     markers: { size: 0 },
@@ -177,50 +186,60 @@
     grid: { borderColor: '#e9ecef' },
   }).render();
 
-  // Fill-ups count split by threshold (stacked bar)
+  // Fill-ups count per month
+  var totalCounts = (gas.count_above || []).map(function(v, i) { return Math.round(v) + Math.round((gas.count_below || [])[i] || 0); });
   new ApexCharts(document.getElementById('gasFreqChart'), {
-    chart: { type: 'bar', height: 280, stacked: true, toolbar: { show: false } },
+    chart: { type: 'bar', height: 280, toolbar: { show: false } },
     series: [
-      { name: '\u2265 ' + sym + thr.toLocaleString(), data: (gas.count_above || []).map(Math.round) },
-      { name: '< ' + sym + thr.toLocaleString(), data: (gas.count_below || []).map(Math.round) },
+      { name: 'Fill-ups', data: totalCounts },
     ],
-    colors: [CHART_COLORS.carBlue, CHART_COLORS.carBlueLight],
+    colors: [CHART_COLORS.carBlue],
     xaxis: { categories: gas.labels || [] },
     yaxis: {
       min: 0,
-      tickAmount: undefined,
       labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
+    annotations: {
+      yaxis: [{
+        y: Math.round(gas.count_median || 0),
+        borderColor: CHART_COLORS.averageRed,
+        strokeDashArray: 6,
+        borderWidth: 2,
+        label: { text: 'Median: ' + Math.round(gas.count_median || 0), position: 'left', style: { fontSize: '11px', color: '#fff', background: CHART_COLORS.averageRed } },
+      }],
+    },
     dataLabels: { enabled: false },
-    legend: { position: 'bottom' },
+    legend: { show: false },
     markers: { size: 0 },
     tooltip: {
-      shared: true,
-      intersect: false,
       y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
     grid: { borderColor: '#e9ecef' },
   }).render();
 
-  // Cost per fill-up: band chart (4 line series: Max, Min with fill, Average, Median)
+  // Cost per fill-up: band chart with min-max range, average & median
+  var maxData = (gas.max_per_fillup || []).map(Math.round);
+  var minData = (gas.min_per_fillup || []).map(Math.round);
+  var avgData = (gas.avg_per_fillup || []).map(Math.round);
+  var medData = (gas.median_per_fillup || []).map(Math.round);
+  var gasLabels = gas.labels || [];
+  var rangeData = maxData.map(function(mx, i) { return { x: gasLabels[i], y: [minData[i] || 0, mx] }; });
+  var avgPoints = avgData.map(function(v, i) { return { x: gasLabels[i], y: v }; });
+  var medPoints = medData.map(function(v, i) { return { x: gasLabels[i], y: v }; });
+
   new ApexCharts(document.getElementById('gasBandChart'), {
-    chart: { type: 'line', height: 280, toolbar: { show: false } },
+    chart: { type: 'rangeArea', height: 280, toolbar: { show: false } },
     series: [
-      { name: 'Max', data: (gas.max_per_fillup || []).map(Math.round) },
-      { name: 'Min', data: (gas.min_per_fillup || []).map(Math.round) },
-      { name: 'Average', data: (gas.avg_per_fillup || []).map(Math.round) },
-      { name: 'Median', data: (gas.median_per_fillup || []).map(Math.round) },
+      { name: 'Min-Max Range', type: 'rangeArea', data: rangeData },
+      { name: 'Average', type: 'line', data: avgPoints },
+      { name: 'Median', type: 'line', data: medPoints },
     ],
-    colors: ['transparent', 'transparent', '#e67e22', CHART_COLORS.darkGray],
-    stroke: { width: [0, 0, 2, 2], dashArray: [0, 0, 0, 5], curve: 'smooth' },
-    fill: {
-      type: ['solid', 'solid', 'solid', 'solid'],
-      opacity: [0.15, 0, 0, 0],
-    },
-    markers: { size: [0, 0, 3, 3], strokeWidth: 0 },
-    xaxis: { categories: gas.labels || [] },
+    colors: [CHART_COLORS.carBlue, '#e67e22', CHART_COLORS.darkGray],
+    stroke: { width: [0, 2, 2], dashArray: [0, 0, 5], curve: 'smooth' },
+    fill: { opacity: [0.2, 1, 1] },
+    markers: { size: [0, 3, 3], strokeWidth: 0 },
+    xaxis: { type: 'category' },
     yaxis: {
-      min: 0,
       labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
     dataLabels: { enabled: false },
@@ -228,7 +247,7 @@
     tooltip: {
       shared: true,
       intersect: false,
-      y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
+      y: { formatter: function(v) { return v != null ? Math.round(v).toLocaleString() : ''; } },
     },
     grid: { borderColor: '#e9ecef' },
   }).render();

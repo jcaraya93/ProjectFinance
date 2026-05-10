@@ -22,21 +22,13 @@
         <ul class="navbar-nav ms-auto">
           {% if user.is_authenticated %}
           <li class="nav-item">
-            <a class="nav-link" href="{% url 'core:dashboard' %}">Dashboards</a>
+            <a class="nav-link" href="{% url 'core:dashboard' %}">Dashboard</a>
           </li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Data</a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{% url 'core:statement_list' %}">Statements</a></li>
-              <li><a class="dropdown-item" href="{% url 'core:transaction_list' %}">Transactions</a></li>
-            </ul>
+          <li class="nav-item">
+            <a class="nav-link" href="{% url 'core:transaction_list' %}">Transactions</a>
           </li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Configuration</a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{% url 'core:category_list' %}">Categories</a></li>
-              <li><a class="dropdown-item" href="{% url 'core:yaml_rule_list' %}">Rules</a></li>
-            </ul>
+          <li class="nav-item">
+            <a class="nav-link" href="{% url 'core:statement_list' %}">Statements</a>
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
@@ -48,6 +40,9 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
               <li><a class="dropdown-item" href="{% url 'core:account_page' %}">Account</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="{% url 'core:category_list' %}">Categories</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:yaml_rule_list' %}">Rules</a></li>
               <li><hr class="dropdown-divider"></li>
               <li>
                 <form method="post" action="{% url 'logout' %}">

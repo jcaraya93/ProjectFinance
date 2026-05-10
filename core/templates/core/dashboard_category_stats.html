@@ -13,19 +13,45 @@
       {% include "core/_currency_toggle.html" %}
     </div>
 
-    <!-- EXPENSES SECTION -->
-    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expenses</h5>
-    <div class="card mb-4">
-      <div class="card-body">
-        <div id="expenseStatsChart"></div>
+    <!-- ═══ CHART STYLE COMPARISON ═══ -->
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expenses — Chart Options</h5>
+
+    <div class="row g-3 mb-4">
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Option A: Bullet Chart (range + marker)</h6>
+            <div id="option2Chart"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Option B: Deviation from Median</h6>
+            <div id="option4Chart"></div>
+          </div>
+        </div>
       </div>
     </div>
-
-    <!-- INCOME SECTION -->
-    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Income</h5>
-    <div class="card mb-4">
-      <div class="card-body">
-        <div id="incomeStatsChart"></div>
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Option C: Heatmap — Deviation from Median (Last 12 Months)</h6>
+            <div id="option6Chart"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row g-3 mb-4">
+      <div class="col-lg-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-title text-muted">Option D: Radar / Spider</h6>
+            <div id="option7Chart"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -62,105 +88,167 @@
       </div>
     </div>
 
-    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Income Details</h5>
-    <div class="card mb-4">
-      <div class="card-body table-responsive">
-        <table class="table table-sm table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th class="text-end">Last Month</th>
-              <th class="text-end">Min</th>
-              <th class="text-end">Median</th>
-              <th class="text-end">Average</th>
-              <th class="text-end">Max</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for cat in income_categories %}
-            <tr>
-              <td><span class="badge rounded-pill me-1" style="background-color: {{ cat.color }}">⠀</span>{{ cat.name }}</td>
-              <td class="text-end">{{ currency_symbol }}{{ cat.last_month|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.min|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.median|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.avg|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.max|format_number }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="6" class="text-muted">No income data</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
     </div>
   </div>
 </div>
 
 <script id="expenseData" type="application/json">{{ expense_data|escapejson }}</script>
-<script id="incomeData" type="application/json">{{ income_data|escapejson }}</script>
+<script id="monthLabels" type="application/json">{{ month_labels_json|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 (function () {
   var expenseRaw = DashboardCharts.parseJSON('expenseData');
-  var incomeRaw = DashboardCharts.parseJSON('incomeData');
+  if (!expenseRaw || !expenseRaw.length) return;
 
-  function renderStatsChart(elementId, categories) {
-    if (!categories || !categories.length) return;
+  var cats = expenseRaw;
+  var catNames = cats.map(function(c) { return c.name; });
+  var chartHeight = Math.max(300, cats.length * 45);
 
-    var catNames = categories.map(function(c) { return c.name; });
-    var lastMonthData = categories.map(function(c) { return c.last_month; });
-    var avgData = categories.map(function(c) { return c.avg; });
-    var medianData = categories.map(function(c) { return c.median; });
-
-    var chartHeight = Math.max(300, categories.length * 45);
-
-    new ApexCharts(document.getElementById(elementId), {
-      chart: { type: 'bar', height: chartHeight, toolbar: { show: false } },
-      series: [
-        { name: 'Last Month', data: lastMonthData },
-        { name: 'Average', data: avgData },
-        { name: 'Median', data: medianData },
-      ],
-      colors: ['#0d6efd', '#6c757d', '#adb5bd'],
-      plotOptions: {
-        bar: {
-          horizontal: true,
-          barHeight: '60%',
-          borderRadius: 2,
-        },
-      },
-      xaxis: {
-        categories: catNames,
-        labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
-      },
-      yaxis: {
-        labels: { maxWidth: 200 },
-      },
-      dataLabels: { enabled: false },
-      legend: { position: 'top' },
-      tooltip: {
-        shared: true,
-        intersect: false,
-        custom: function(opts) {
-          var cat = categories[opts.dataPointIndex];
-          return '<div style="padding: 8px 12px; font-size: 13px;">' +
-            '<strong>' + cat.name + '</strong><br>' +
-            'Last Month: <strong>' + Math.round(cat.last_month).toLocaleString() + '</strong><br>' +
-            '<span style="color:#999">Min: ' + Math.round(cat.min).toLocaleString() +
-            ' · Median: ' + Math.round(cat.median).toLocaleString() +
-            ' · Avg: ' + Math.round(cat.avg).toLocaleString() +
-            ' · Max: ' + Math.round(cat.max).toLocaleString() + '</span>' +
-            '</div>';
-        },
-      },
-      grid: { borderColor: '#e9ecef' },
-    }).render();
+  function customTooltip(cats) {
+    return {
+      custom: function(opts) {
+        var cat = cats[opts.dataPointIndex];
+        if (!cat) return '';
+        return '<div style="padding:8px 12px;font-size:13px">' +
+          '<strong>' + cat.name + '</strong><br>' +
+          'Last Month: <strong>' + Math.round(cat.last_month).toLocaleString() + '</strong><br>' +
+          '<span style="color:#999">Min: ' + Math.round(cat.min).toLocaleString() +
+          ' · Median: ' + Math.round(cat.median).toLocaleString() +
+          ' · Avg: ' + Math.round(cat.avg).toLocaleString() +
+          ' · Max: ' + Math.round(cat.max).toLocaleString() + '</span></div>';
+      }
+    };
   }
 
-  renderStatsChart('expenseStatsChart', expenseRaw);
-  renderStatsChart('incomeStatsChart', incomeRaw);
+  // ── Option 2: Bullet Chart (range bar for min→max + scatter for last month) ──
+  new ApexCharts(document.getElementById('option2Chart'), {
+    chart: { type: 'rangeBar', height: chartHeight, toolbar: { show: false }, zoom: { enabled: false }, selection: { enabled: false } },
+    series: [
+      {
+        name: 'Historical Range (min–max)',
+        type: 'rangeBar',
+        data: cats.map(function(c) { return { x: c.name, y: [c.min, c.max] }; }),
+      },
+    ],
+    colors: ['#dee2e6'],
+    plotOptions: { bar: { horizontal: true, barHeight: '40%', borderRadius: 2 } },
+    xaxis: { labels: { formatter: function(v) { return Math.round(v).toLocaleString(); } } },
+    yaxis: { labels: { maxWidth: 200 } },
+    dataLabels: { enabled: false },
+    legend: { position: 'top' },
+    annotations: {
+      points: cats.map(function(c) {
+        return {
+          x: c.last_month,
+          y: c.name,
+          marker: { size: 7, fillColor: '#0d6efd', strokeColor: '#fff', strokeWidth: 2 },
+          label: { text: 'Last: ' + Math.round(c.last_month).toLocaleString(), borderColor: '#0d6efd',
+            style: { color: '#fff', background: '#0d6efd', fontSize: '10px', padding: { left: 4, right: 4, top: 2, bottom: 2 } } },
+        };
+      }),
+    },
+    tooltip: customTooltip(cats),
+    grid: { borderColor: '#e9ecef' },
+  }).render();
+
+  // ── Option 4: Deviation from Median (sorted by deviation) ──
+  var devCats = cats.map(function(c) {
+    return {
+      name: c.name,
+      dev: c.median > 0 ? Math.round((c.last_month - c.median) / c.median * 100) : 0,
+      last_month: c.last_month, min: c.min, median: c.median, avg: c.avg, max: c.max,
+    };
+  }).sort(function(a, b) { return b.dev - a.dev; });
+  var devChartHeight = Math.max(300, devCats.length * 45);
+  new ApexCharts(document.getElementById('option4Chart'), {
+    chart: { type: 'bar', height: devChartHeight, toolbar: { show: false } },
+    series: [{ name: '% vs Median', data: devCats.map(function(c) { return c.dev; }) }],
+    colors: ['#0d6efd'],
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        barHeight: '50%',
+        borderRadius: 3,
+        colors: {
+          ranges: [
+            { from: -999, to: 0, color: CHART_COLORS.income },
+            { from: 0, to: 999, color: CHART_COLORS.expenseLine },
+          ],
+        },
+      },
+    },
+    xaxis: { categories: devCats.map(function(c) { return c.name; }), labels: { formatter: function(v) { return v + '%'; } } },
+    yaxis: { labels: { maxWidth: 200 } },
+    dataLabels: { enabled: true, formatter: function(v) { return v + '%'; }, style: { fontSize: '11px' } },
+    legend: { show: false },
+    tooltip: customTooltip(devCats),
+    grid: { borderColor: '#e9ecef' },
+  }).render();
+
+  // ── Option 6: Heatmap (categories × months, % deviation from median) ──
+  var monthLabels = DashboardCharts.parseJSON('monthLabels') || [];
+  var heatCats = cats.slice(0, 20).sort(function(a, b) {
+    return b.avg - a.avg;
+  });
+  var heatSeries = heatCats.map(function(c) {
+    return {
+      name: c.name,
+      data: monthLabels.map(function(m, i) {
+        return { x: m, y: (c.monthly_dev && c.monthly_dev[i]) || 0 };
+      }),
+    };
+  }).reverse();
+  var heatHeight = Math.max(250, heatCats.length * 30);
+  new ApexCharts(document.getElementById('option6Chart'), {
+    chart: { type: 'heatmap', height: heatHeight, toolbar: { show: false } },
+    series: heatSeries,
+    plotOptions: {
+      heatmap: {
+        colorScale: {
+          ranges: [
+            { from: -99999, to: -30, color: '#198754', name: 'Well below median' },
+            { from: -30, to: -10, color: '#8ec9a8', name: 'Below median' },
+            { from: -10, to: 10, color: '#e9ecef', name: 'Normal' },
+            { from: 10, to: 30, color: '#f5a0a0', name: 'Above median' },
+            { from: 30, to: 99999, color: '#dc3545', name: 'Well above median' },
+          ],
+        },
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      formatter: function(v) { return (v > 0 ? '+' : '') + v + '%'; },
+      style: { fontSize: '10px', colors: ['#333'] },
+    },
+    tooltip: {
+      y: {
+        formatter: function(v) { return (v > 0 ? '+' : '') + v + '% vs median'; },
+      },
+    },
+    grid: { borderColor: '#e9ecef' },
+  }).render();
+
+  // ── Option 7: Radar / Spider ──
+  // Normalize values to % of max for each category so radar is meaningful
+  var radarCats = cats.slice(0, 10); // limit to top 10
+  new ApexCharts(document.getElementById('option7Chart'), {
+    chart: { type: 'radar', height: 400, toolbar: { show: false } },
+    series: [
+      { name: 'Last Month', data: radarCats.map(function(c) { return c.last_month; }) },
+      { name: 'Median', data: radarCats.map(function(c) { return c.median; }) },
+    ],
+    colors: ['#0d6efd', '#adb5bd'],
+    xaxis: { categories: radarCats.map(function(c) { return c.name; }) },
+    yaxis: { show: false },
+    stroke: { width: 2 },
+    fill: { opacity: 0.15 },
+    markers: { size: 3 },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: { y: { formatter: function(v) { return Math.round(v).toLocaleString(); } } },
+  }).render();
 })();
 </script>
 {% endblock %}

@@ -11,6 +11,7 @@ urlpatterns = [
     path('car/gas/', views.car_gas_dashboard, name='car_gas_dashboard'),
     path('car/parking/', views.car_parking_dashboard, name='car_parking_dashboard'),
     path('income/salary/', views.income_salary_dashboard, name='income_salary_dashboard'),
+    path('income/bonuses/', views.income_bonus_dashboard, name='income_bonus_dashboard'),
     path('transaction-health/', views.transaction_health_dashboard, name='transaction_health_dashboard'),
     path('rule-matching/', views.rule_matching_dashboard, name='rule_matching_dashboard'),
     path('default-buckets/', views.default_buckets_dashboard, name='default_buckets_dashboard'),

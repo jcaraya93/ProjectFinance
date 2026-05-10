@@ -22,6 +22,7 @@ __all__ = [
     'car_gas_dashboard',
     'car_parking_dashboard',
     'income_salary_dashboard',
+    'income_bonus_dashboard',
     'category_stats_dashboard',
 ]
 
@@ -882,6 +883,8 @@ def car_gas_dashboard(request, display_currency, time_group):
             'count_above': [above_count.get(m, 0) for m in sorted_months],
             'count_below': [below_count.get(m, 0) for m in sorted_months],
             'threshold': threshold,
+            'spend_median': float(gas_median),
+            'count_median': float(gas_median_count_monthly),
         }, cls=DecimalEncoder),
     }
     return context
@@ -986,9 +989,10 @@ def car_parking_dashboard(request, display_currency, time_group):
     return context
 
 
-@dashboard_view("income_salary", "core/dashboard_income_salary.html")
+@dashboard_view("income_salary", "core/dashboard_income_salary.html", default_time_group="biweekly")
 def income_salary_dashboard(request, display_currency, time_group):
     """Dashboard focused on Salary Main income."""
+    from collections import defaultdict
     from django.db.models import Sum, Count, Avg
     from django.db.models.functions import TruncMonth
 
@@ -1000,52 +1004,93 @@ def income_salary_dashboard(request, display_currency, time_group):
         **{f'{amount_field}__isnull': False},
     )
 
-    # Monthly aggregation
-    monthly = (
+    # --- Always compute monthly summary cards ---
+    monthly_agg = (
         salary_qs
         .annotate(month=TruncMonth('date'))
         .values('month')
         .annotate(total=Sum(amount_field), cnt=Count('id'))
         .order_by('month')
     )
-    months_data = {}
-    for r in monthly:
+    monthly_map = {}
+    for r in monthly_agg:
         m = r['month'].strftime('%Y-%m')
-        months_data[m] = float(r['total'] or 0)
+        monthly_map[m] = float(r['total'] or 0)
 
-    sorted_months = sorted(months_data.keys())
-    monthly_totals = [months_data[m] for m in sorted_months]
+    sorted_month_keys = sorted(monthly_map.keys())
+    monthly_totals_list = [monthly_map[m] for m in sorted_month_keys]
 
-    # Summary cards
-    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
-    sorted_totals = sorted(monthly_totals)
+    avg_monthly = sum(monthly_totals_list) / len(monthly_totals_list) if monthly_totals_list else 0
+    sorted_totals = sorted(monthly_totals_list)
     n = len(sorted_totals)
     median_monthly = (sorted_totals[n // 2] if n % 2 else
                       (sorted_totals[n // 2 - 1] + sorted_totals[n // 2]) / 2) if n else 0
 
-    last_month = sorted_months[-1] if sorted_months else ''
-    last_month_total = months_data.get(last_month, 0)
+    last_month = sorted_month_keys[-1] if sorted_month_keys else ''
+    last_month_total = monthly_map.get(last_month, 0)
     median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
 
-    # 12-month total
-    last_12 = monthly_totals[-12:] if len(monthly_totals) >= 12 else monthly_totals
+    last_12 = monthly_totals_list[-12:] if len(monthly_totals_list) >= 12 else monthly_totals_list
     salary_last_year = sum(last_12)
 
-    # Chart data
+    # --- Chart data grouped by time_group ---
+    if time_group == 'biweekly':
+        def _semi_month_key(d):
+            return date(d.year, d.month, 1 if d.day < 15 else 15)
+
+        salary_txns = salary_qs.values_list('date', amount_field)
+        period_totals = defaultdict(float)
+        for d, amt in salary_txns:
+            if amt:
+                period_totals[_semi_month_key(d)] += float(amt)
+
+        sorted_periods = sorted(period_totals.keys())
+        chart_labels = [p.strftime('%Y-%m-%d') for p in sorted_periods]
+        chart_values = [period_totals[p] for p in sorted_periods]
+    else:
+        chart_labels = sorted_month_keys
+        chart_values = monthly_totals_list
+
+    chart_avg = sum(chart_values) / len(chart_values) if chart_values else 0
+    sorted_chart = sorted(chart_values)
+    cn = len(sorted_chart)
+    chart_median = (sorted_chart[cn // 2] if cn % 2 else
+                    (sorted_chart[cn // 2 - 1] + sorted_chart[cn // 2]) / 2) if cn else 0
+
     trend_data = json.dumps({
-        'labels': sorted_months,
-        'values': monthly_totals,
-        'average': avg_monthly,
+        'labels': chart_labels,
+        'values': chart_values,
+        'average': chart_avg,
+        'median': chart_median,
     }, cls=DecimalEncoder)
 
-    # ── BONUSES & NON-RECURRING SECTION ──
+    context = {
+        'currency_symbol': currency_symbol,
+        'last_month': last_month,
+        'last_month_total': last_month_total,
+        'avg_monthly': avg_monthly,
+        'median_monthly': median_monthly,
+        'median_pct': median_pct,
+        'salary_last_year': salary_last_year,
+        'sorted_months': sorted_month_keys,
+        'trend_data': trend_data,
+    }
+    return context
+
+
+@dashboard_view("income_bonus", "core/dashboard_income_bonus.html")
+def income_bonus_dashboard(request, display_currency, time_group):
+    """Dashboard focused on bonuses and non-recurring income."""
+    from django.db.models import Sum
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+
     extra_qs = Transaction.objects.filter(user=request.user).filter(
         category__name__in=EXTRA_INCOME_CATEGORIES,
         **{f'{amount_field}__isnull': False},
     )
 
-    # Per-category 12-month totals
-    from django.db.models.functions import Abs
     bonus_total = float(
         extra_qs.filter(category__name='Salary Bonuses')
         .aggregate(t=Sum(amount_field))['t'] or 0
@@ -1056,7 +1101,6 @@ def income_salary_dashboard(request, display_currency, time_group):
     )
     extra_combined = bonus_total + nonrecurring_total
 
-    # Event timeline
     extra_events = list(
         extra_qs.order_by('-date')
         .values('date', 'description', 'category__name', 'category__color', amount_field)
@@ -1066,21 +1110,22 @@ def income_salary_dashboard(request, display_currency, time_group):
         e['category'] = e.pop('category__name')
         e['color'] = e.pop('category__color') or '#6c757d'
 
+    extra_events_json = json.dumps([
+        {'date': e['date'].isoformat() if hasattr(e['date'], 'isoformat') else str(e['date']),
+         'description': e['description'],
+         'category': e['category'],
+         'color': e['color'],
+         'amount': e['amount']}
+        for e in extra_events
+    ], cls=DecimalEncoder)
+
     context = {
         'currency_symbol': currency_symbol,
-        'last_month': last_month,
-        'last_month_total': last_month_total,
-        'avg_monthly': avg_monthly,
-        'median_monthly': median_monthly,
-        'median_pct': median_pct,
-        'salary_last_year': salary_last_year,
-        'sorted_months': sorted_months,
-        'trend_data': trend_data,
-        # Bonuses & Non-recurring
         'bonus_total': bonus_total,
         'nonrecurring_total': nonrecurring_total,
         'extra_combined': extra_combined,
         'extra_events': extra_events,
+        'extra_events_json': extra_events_json,
     }
     return context
 
@@ -1110,16 +1155,19 @@ def category_stats_dashboard(request, display_currency, time_group):
         .order_by('category__group__slug', 'category__name', 'month')
     )
 
-    cat_months = defaultdict(lambda: {'months': [], 'group': '', 'color': '#6c757d'})
+    cat_months = defaultdict(lambda: {'month_data': {}, 'group': '', 'color': '#6c757d'})
     all_months = set()
     for r in monthly_cat:
         key = r['category__name']
-        cat_months[key]['months'].append(float(r['total'] or 0))
+        m = r['month'].strftime('%Y-%m')
+        cat_months[key]['month_data'][m] = float(r['total'] or 0)
         cat_months[key]['group'] = r['category__group__slug']
         cat_months[key]['color'] = r['category__color'] or '#6c757d'
         all_months.add(r['month'])
 
     sorted_months = sorted(all_months)
+    last_12_months = sorted_months[-12:] if len(sorted_months) >= 12 else sorted_months
+    month_labels = [m.strftime('%Y-%m') for m in last_12_months]
     last_month = sorted_months[-1] if sorted_months else None
     last_month_name = last_month.strftime('%B %Y') if last_month else 'N/A'
 
@@ -1149,8 +1197,14 @@ def category_stats_dashboard(request, display_currency, time_group):
     income_categories = []
 
     for cat_name, data in sorted(cat_months.items(), key=lambda x: x[0]):
-        stats = compute_stats(data['months'])
+        all_vals = list(data['month_data'].values())
+        stats = compute_stats(all_vals)
         last_val = last_month_totals.get(cat_name, 0)
+        # Monthly values for the last 12 months (0 if no data)
+        monthly_vals = [round(data['month_data'].get(m, 0)) for m in month_labels]
+        # Deviation from median per month
+        med = stats['median']
+        monthly_dev = [round((v - med) / med * 100) if med > 0 else 0 for v in monthly_vals]
         entry = {
             'name': cat_name,
             'color': data['color'],
@@ -1159,6 +1213,7 @@ def category_stats_dashboard(request, display_currency, time_group):
             'median': round(stats['median']),
             'avg': round(stats['avg']),
             'max': round(stats['max']),
+            'monthly_dev': monthly_dev,
         }
         if data['group'] == 'expense':
             expense_categories.append(entry)
@@ -1171,9 +1226,11 @@ def category_stats_dashboard(request, display_currency, time_group):
     context = {
         'currency_symbol': currency_symbol,
         'last_month_name': last_month_name,
+        'month_labels': month_labels,
         'expense_categories': expense_categories,
         'income_categories': income_categories,
         'expense_data': json.dumps(expense_categories, cls=DecimalEncoder),
         'income_data': json.dumps(income_categories, cls=DecimalEncoder),
+        'month_labels_json': json.dumps(month_labels),
     }
     return context
