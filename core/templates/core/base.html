@@ -31,11 +31,13 @@
               <li><a class="dropdown-item" href="{% url 'core:transaction_health_dashboard' %}">Data Quality</a></li>
             </ul>
           </li>
-          <li class="nav-item">
-            <a class="nav-link" href="{% url 'core:transaction_list' %}">Transactions</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="{% url 'core:statement_list' %}">Statements</a>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Transactions</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="{% url 'core:statement_list' %}">Statements</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:transaction_list' %}">Transactions</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:transaction_pairing_dashboard' %}">Transaction Pairing</a></li>
+            </ul>
           </li>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
