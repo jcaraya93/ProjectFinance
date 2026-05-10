@@ -6,7 +6,7 @@ from decimal import Decimal
 from core.models import (
     User, CategoryGroup, Category, CreditAccount, DebitAccount,
     StatementImport, CurrencyLedger, RawTransaction, LogicalTransaction,
-    ClassificationRule, ExchangeRate,
+    ClassificationRule, ExchangeRate, TransactionPair,
 )
 
 
@@ -109,3 +109,13 @@ class ExchangeRateFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ('date',)
     date = date(2025, 2, 1)
     usd_to_crc = Decimal('510.50')
+
+
+class TransactionPairFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = TransactionPair
+    user = factory.SubFactory(UserFactory)
+    outgoing = factory.SubFactory(RawTransactionFactory)
+    incoming = factory.SubFactory(RawTransactionFactory)
+    match_method = 'auto'
+    status = 'paired'

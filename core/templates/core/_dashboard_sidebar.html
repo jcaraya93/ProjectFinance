@@ -27,6 +27,7 @@
         <a href="{% url 'core:internal_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'internal_transfers' %} active{% endif %}">Internal Transfers</a>
         <a href="{% url 'core:credit_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'credit_transfers' %} active{% endif %}">Credit Transfers</a>
         <a href="{% url 'core:external_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'external_transfers' %} active{% endif %}">External Transfers</a>
+        <a href="{% url 'core:transaction_pairing_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transaction_pairing' %} active{% endif %}">Transaction Pairing</a>
 
         {% elif dashboard_category == 'expense' %}
         <a href="{% url 'core:car_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car' %} active{% endif %}">Car</a>

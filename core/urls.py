@@ -21,6 +21,7 @@ urlpatterns = [
     path('credit-transfers/', views.credit_transfers_dashboard, name='credit_transfers_dashboard'),
     path('external-transfers/', views.external_transfers_dashboard, name='external_transfers_dashboard'),
     path('transfer-flow/', views.transfer_flow_dashboard, name='transfer_flow_dashboard'),
+    path('transaction-pairing/', views.transaction_pairing_dashboard, name='transaction_pairing_dashboard'),
     path('transaction-health/', views.transaction_health_dashboard, name='transaction_health_dashboard'),
     path('rule-matching/', views.rule_matching_dashboard, name='rule_matching_dashboard'),
     path('default-buckets/', views.default_buckets_dashboard, name='default_buckets_dashboard'),

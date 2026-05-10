@@ -32,6 +32,7 @@ __all__ = [
     'credit_transfers_dashboard',
     'external_transfers_dashboard',
     'transfer_flow_dashboard',
+    'transaction_pairing_dashboard',
     'category_stats_dashboard',
 ]
 
@@ -72,6 +73,7 @@ DASHBOARD_CATEGORIES = {
     'bank_income_overview': 'income', 'bank_income_detail': 'income',
     'transfer_flow': 'transfers', 'internal_transfers': 'transfers',
     'credit_transfers': 'transfers', 'external_transfers': 'transfers',
+    'transaction_pairing': 'transfers',
     'car': 'expense', 'car_gas': 'expense', 'car_parking': 'expense',
     'transaction_health': 'data_quality', 'rule_matching': 'data_quality',
     'default_buckets': 'data_quality',
@@ -2566,6 +2568,98 @@ def transfer_graph_dashboard(request, display_currency, time_group):
     context = {
         'currency_symbol': currency_symbol,
         'graph_data': graph_data,
+    }
+    return context
+
+
+@dashboard_view("transaction_pairing", "core/dashboard_transaction_pairing.html")
+def transaction_pairing_dashboard(request, display_currency, time_group):
+    """Dashboard for managing transfer transaction pairs."""
+    from django.views.decorators.http import require_POST
+    from core.models import TransactionPair
+    from core.services.pair_matcher import auto_match_transfers
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+
+    # Handle clear pairs POST
+    if request.method == 'POST' and 'clear_pairs' in request.POST:
+        from django.contrib import messages
+        count = TransactionPair.objects.filter(user=request.user).count()
+        TransactionPair.objects.filter(user=request.user).delete()
+        messages.success(request, f'Cleared {count} pairs.')
+
+    # Handle auto-match POST
+    if request.method == 'POST' and 'run_auto_match' in request.POST:
+        result = auto_match_transfers(request.user)
+        from django.contrib import messages
+        messages.success(request, f'Auto-match complete: {result.paired} paired, {result.unmatched} unmatched, {result.skipped} skipped.')
+
+    # Fetch all pairs
+    pairs_qs = TransactionPair.objects.filter(user=request.user).select_related(
+        'outgoing__ledger__statement_import__account',
+        'incoming__ledger__statement_import__account',
+    )
+
+    paired = []
+    unmatched = []
+    for p in pairs_qs:
+        entry = {'id': p.id, 'status': p.status, 'created_at': p.created_at}
+
+        if p.outgoing:
+            out_lt = p.outgoing.logical_transactions.select_related('category').first()
+            out_acct = p.outgoing.ledger.statement_import.account
+            entry['out_date'] = p.outgoing.date
+            entry['out_account'] = str(out_acct)
+            entry['out_currency'] = p.outgoing.ledger.currency
+            entry['out_description'] = p.outgoing.description
+            entry['out_amount'] = abs(float(getattr(out_lt, amount_field) or 0)) if out_lt else 0
+            entry['out_category'] = out_lt.category.name if out_lt and out_lt.category else ''
+        else:
+            entry['out_date'] = None
+            entry['out_account'] = '—'
+            entry['out_description'] = '—'
+            entry['out_amount'] = 0
+            entry['out_category'] = ''
+            entry['out_currency'] = ''
+
+        if p.incoming:
+            in_lt = p.incoming.logical_transactions.select_related('category').first()
+            in_acct = p.incoming.ledger.statement_import.account
+            entry['in_date'] = p.incoming.date
+            entry['in_account'] = str(in_acct)
+            entry['in_currency'] = p.incoming.ledger.currency
+            entry['in_description'] = p.incoming.description
+            entry['in_amount'] = abs(float(getattr(in_lt, amount_field) or 0)) if in_lt else 0
+            entry['in_category'] = in_lt.category.name if in_lt and in_lt.category else ''
+        else:
+            entry['in_date'] = None
+            entry['in_account'] = '—'
+            entry['in_description'] = '—'
+            entry['in_amount'] = 0
+            entry['in_category'] = ''
+            entry['in_currency'] = ''
+
+        if p.status == 'paired':
+            paired.append(entry)
+        else:
+            unmatched.append(entry)
+
+    # Sort by date descending
+    paired.sort(key=lambda e: e['out_date'] or e['in_date'] or '', reverse=True)
+    unmatched.sort(key=lambda e: e['out_date'] or e['in_date'] or '', reverse=True)
+
+    total = len(paired) + len(unmatched)
+    match_rate = (len(paired) / total * 100) if total else 0
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'paired': paired,
+        'unmatched': unmatched,
+        'paired_count': len(paired),
+        'unmatched_count': len(unmatched),
+        'total_count': total,
+        'match_rate': match_rate,
     }
     return context
 

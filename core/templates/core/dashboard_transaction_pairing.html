@@ -1,0 +1,136 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}Transaction Pairing — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="transaction_pairing" %}
+  </div>
+
+  <div class="col-md-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Transaction Pairing</h4>
+      <div class="d-flex gap-2">
+        <form method="post">
+          {% csrf_token %}
+          <button type="submit" name="clear_pairs" class="btn btn-outline-danger"
+                  onclick="return confirm('This will delete all existing pairs. Continue?')">Clear All Pairs</button>
+        </form>
+        <form method="post">
+          {% csrf_token %}
+          <button type="submit" name="run_auto_match" class="btn btn-primary">Run Auto-Match</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Paired</h6>
+            <h3 class="card-title mb-1 text-success">{{ paired_count }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100 {% if unmatched_count > 0 %}border-warning{% endif %}">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Unmatched</h6>
+            <h3 class="card-title mb-1 {% if unmatched_count > 0 %}text-warning{% endif %}">{{ unmatched_count }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Match Rate</h6>
+            <h3 class="card-title mb-1">{{ match_rate|floatformat:1 }}%</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Total</h6>
+            <h3 class="card-title mb-1">{{ total_count }}</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unmatched transactions -->
+    {% if unmatched %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold"><span class="text-warning">⚠</span> Unmatched Transactions ({{ unmatched_count }})</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Account</th>
+              <th>Currency</th>
+              <th>Category</th>
+              <th>Description</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in unmatched %}
+            <tr>
+              <td class="text-nowrap">{{ u.out_date|default:u.in_date }}</td>
+              <td><span class="badge bg-secondary">{{ u.out_account|default:u.in_account }}</span></td>
+              <td>{{ u.out_currency|default:u.in_currency }}</td>
+              <td>{{ u.out_category|default:u.in_category }}</td>
+              <td>{{ u.out_description|default:u.in_description }}</td>
+              <td class="text-end text-warning" data-sensitive>{{ currency_symbol }}{{ u.out_amount|default:u.in_amount|format_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Paired transactions -->
+    {% if paired %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold">Paired Transactions ({{ paired_count }})</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>From Account</th>
+              <th></th>
+              <th>To Account</th>
+              <th>Category</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in paired %}
+            <tr>
+              <td class="text-nowrap">{{ p.out_date }}</td>
+              <td><span class="badge bg-secondary">{{ p.out_account }}</span> <small class="text-muted">{{ p.out_currency }}</small></td>
+              <td class="text-center text-muted">→</td>
+              <td><span class="badge bg-primary">{{ p.in_account }}</span> <small class="text-muted">{{ p.in_currency }}</small></td>
+              <td>{{ p.out_category }}</td>
+              <td class="text-end text-success" data-sensitive>{{ currency_symbol }}{{ p.out_amount|format_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if not paired and not unmatched %}
+    <div class="alert alert-info text-center mb-4">No transfer pairs found. Click "Run Auto-Match" to scan for pairs.</div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

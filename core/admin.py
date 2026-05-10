@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Account, CreditAccount, DebitAccount, Category, CategoryGroup, CurrencyLedger, StatementImport, RawTransaction, LogicalTransaction, Transaction
+from .models import User, Account, CreditAccount, DebitAccount, Category, CategoryGroup, CurrencyLedger, StatementImport, RawTransaction, LogicalTransaction, Transaction, TransactionPair
 
 
 @admin.register(User)
@@ -77,3 +77,10 @@ class StatementImportAdmin(admin.ModelAdmin):
     list_display = ['filename', 'account', 'statement_date', 'points_assigned', 'imported_at']
     list_filter = ['account__account_type', 'account']
     inlines = [CurrencyLedgerInline]
+
+
+@admin.register(TransactionPair)
+class TransactionPairAdmin(admin.ModelAdmin):
+    list_display = ['status', 'match_method', 'outgoing', 'incoming', 'created_at']
+    list_filter = ['status', 'match_method']
+    raw_id_fields = ['outgoing', 'incoming']

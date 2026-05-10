@@ -288,6 +288,41 @@ class LogicalTransaction(models.Model):
 Transaction = LogicalTransaction
 
 
+class TransactionPair(models.Model):
+    """Links two RawTransaction records that represent opposite sides of the same transfer."""
+    MATCH_METHODS = [
+        ('auto', 'Auto-matched'),
+    ]
+    STATUS_CHOICES = [
+        ('paired', 'Paired'),
+        ('unmatched', 'Unmatched'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='transaction_pairs')
+    outgoing = models.OneToOneField(
+        RawTransaction, on_delete=models.CASCADE,
+        related_name='pair_as_outgoing', null=True, blank=True,
+        help_text='The outgoing (debit) side of the transfer',
+    )
+    incoming = models.OneToOneField(
+        RawTransaction, on_delete=models.CASCADE,
+        related_name='pair_as_incoming', null=True, blank=True,
+        help_text='The incoming (credit/deposit) side of the transfer',
+    )
+    match_method = models.CharField(max_length=10, choices=MATCH_METHODS, default='auto')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='paired')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        out_desc = self.outgoing.description[:30] if self.outgoing else '?'
+        in_desc = self.incoming.description[:30] if self.incoming else '?'
+        return f"{self.status}: {out_desc} ↔ {in_desc}"
+
+
 class ClassificationRule(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='classification_rules')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='classification_rules')
