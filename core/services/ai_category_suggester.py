@@ -1,0 +1,157 @@
+"""AI-powered category suggestion service using Gemini."""
+import json
+import logging
+import os
+import time
+
+import google.generativeai as genai
+
+from core.models import LogicalTransaction, Category, CategoryGroup
+from core.views.categories import DEFAULT_CATEGORIES
+
+logger = logging.getLogger(__name__)
+
+
+def suggest_categories(user, max_descriptions=200):
+    """Use Gemini AI to suggest new categories based on unclassified transactions.
+
+    Returns a list of dicts:
+    [
+        {
+            "name": "Coffee & Cafes",
+            "group": "expense",
+            "color": "#795548",
+            "reason": "Multiple coffee shop transactions",
+            "source": "new" | "default",
+            "matching_descriptions": ["STARBUCKS", "CAFE BRITT"],
+        },
+        ...
+    ]
+    """
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        raise ValueError('GEMINI_API_KEY not set in .env')
+
+    genai.configure(api_key=api_key)
+
+    # Gather user's existing categories
+    existing_cats = []
+    existing_names = set()
+    for cat in Category.objects.filter(user=user).select_related('group').order_by('group__slug', 'name'):
+        if cat.name == 'Default':
+            continue
+        existing_cats.append(f'{cat.group.slug} > {cat.name}')
+        existing_names.add(cat.name.lower())
+
+    # Gather default categories not yet loaded
+    default_cats = []
+    for group_slug, cats in DEFAULT_CATEGORIES.items():
+        for name, color in cats:
+            if name.lower() not in existing_names:
+                default_cats.append(f'{group_slug} > {name}')
+
+    # Gather unclassified transaction descriptions
+    unclassified_qs = LogicalTransaction.objects.filter(
+        user=user,
+        category__name='Default',
+        category__group__slug='unclassified',
+    ).values_list('description', flat=True)
+
+    unique_descs = sorted(set(unclassified_qs))[:max_descriptions]
+
+    if not unique_descs:
+        return []
+
+    prompt = f"""You are a personal finance categorization expert for a Costa Rican bank account.
+
+The application has these FIXED groups (cannot be changed):
+- expense: money going out (purchases, bills, fees, subscriptions)
+- income: money coming in (salary, reimbursements, interest, refunds)
+- transaction: money moving between accounts (internal transfers, credit card payments)
+
+The user currently has these categories loaded:
+{chr(10).join(f'- {c}' for c in existing_cats) if existing_cats else '(none)'}
+
+These default categories are available but NOT yet loaded by the user:
+{chr(10).join(f'- {c}' for c in default_cats) if default_cats else '(none)'}
+
+Here are {len(unique_descs)} uncategorized transaction descriptions:
+{chr(10).join(f'- "{d}"' for d in unique_descs)}
+
+Based on the transaction descriptions, suggest categories that would help organize them.
+You can:
+1. RECOMMEND loading specific default categories (set source="default")
+2. SUGGEST entirely new categories (set source="new")
+
+Rules:
+- Do NOT suggest categories the user already has loaded
+- Each category MUST belong to one of: expense, income, transaction
+- Suggest a color hex code for each new category
+- Group similar transactions under one category
+- Costa Rican context: SINPE=mobile payments, TEF=bank transfers, common merchants
+- Keep category names concise and consistent with existing naming patterns
+- Return ONLY valid JSON, no markdown
+
+Return a JSON array of objects with these fields:
+- name: category name (string)
+- group: one of "expense", "income", "transaction" (string)
+- color: hex color code (string)
+- reason: brief explanation (string)
+- source: "new" or "default" (string)
+- matching_descriptions: list of 2-5 example transaction descriptions that match (array of strings)
+"""
+
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    t0 = time.monotonic()
+
+    try:
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type='application/json',
+                temperature=0.3,
+            ),
+        )
+        elapsed = time.monotonic() - t0
+        logger.info('AI category suggestion took %.1fs', elapsed)
+
+        raw_text = response.text.strip()
+        suggestions = json.loads(raw_text)
+
+        if not isinstance(suggestions, list):
+            logger.warning('AI returned non-list: %s', type(suggestions))
+            return []
+
+        # Validate and clean suggestions
+        valid = []
+        seen_names = set()
+        for s in suggestions:
+            name = s.get('name', '').strip()
+            group = s.get('group', '').strip()
+            if not name or not group:
+                continue
+            if group not in ('expense', 'income', 'transaction'):
+                continue
+            if name.lower() in existing_names:
+                continue
+            if name.lower() in seen_names:
+                continue
+            seen_names.add(name.lower())
+
+            valid.append({
+                'name': name,
+                'group': group,
+                'color': s.get('color', '#6c757d'),
+                'reason': s.get('reason', ''),
+                'source': s.get('source', 'new'),
+                'matching_descriptions': s.get('matching_descriptions', [])[:5],
+            })
+
+        return valid
+
+    except json.JSONDecodeError as e:
+        logger.error('AI returned invalid JSON: %s', e)
+        raise ValueError(f'AI returned invalid response: {e}')
+    except Exception as e:
+        logger.error('AI category suggestion failed: %s', e)
+        raise

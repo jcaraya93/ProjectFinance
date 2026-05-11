@@ -1,0 +1,142 @@
+{% extends "core/base.html" %}
+{% block title %}AI Category Suggestions — Project Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">AI Category Suggestions</h2>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="card h-100 {% if unclassified_count > 0 %}border-warning{% endif %}">
+        <div class="card-body text-center">
+          <h6 class="card-subtitle text-muted">Unclassified Transactions</h6>
+          <h3 class="card-title mb-0 {% if unclassified_count > 0 %}text-warning{% else %}text-success{% endif %}">{{ unclassified_count }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h6 class="card-subtitle text-muted">Your Categories</h6>
+          <h3 class="card-title mb-0">{{ existing_count }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h6 class="card-subtitle text-muted">Defaults Not Loaded</h6>
+          <h3 class="card-title mb-0">{{ default_not_loaded }}</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if unclassified_count == 0 %}
+  <div class="alert alert-success mb-4">
+    All transactions are classified. No suggestions needed.
+  </div>
+  {% else %}
+
+  <!-- Context info -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h6 class="card-title">What the AI will analyze</h6>
+      <ul class="mb-3">
+        <li><strong>{{ existing_count }}</strong> existing categories in your account</li>
+        <li><strong>{{ default_not_loaded }}</strong> default categories available but not loaded</li>
+        <li><strong>{{ unclassified_count }}</strong> unclassified transaction descriptions (up to 200 sent)</li>
+      </ul>
+      <p class="text-muted small mb-0">The AI will suggest new categories or recommend loading defaults based on your transaction patterns.</p>
+    </div>
+  </div>
+
+  <!-- Generate button -->
+  {% if not suggestions %}
+  <form method="post" class="mb-4">
+    {% csrf_token %}
+    <button type="submit" name="generate" class="btn btn-primary btn-lg" id="generateBtn"
+            onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm me-2\'></span>Analyzing transactions...'; this.form.submit();">
+      Generate AI Suggestions
+    </button>
+  </form>
+  {% endif %}
+
+  {% endif %}
+
+  <!-- Error -->
+  {% if error %}
+  <div class="alert alert-danger mb-4">
+    <strong>Error:</strong> {{ error }}
+  </div>
+  {% endif %}
+
+  <!-- Suggestions -->
+  {% if suggestions %}
+  <form method="post">
+    {% csrf_token %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0">Suggested Categories ({{ suggestions|length }})</h5>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSuggestions(true)">Select All</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSuggestions(false)">Deselect All</button>
+        <button type="submit" name="load_suggestions" class="btn btn-primary">
+          Load Selected (<span id="sugCount">{{ suggestions|length }}</span>)
+        </button>
+      </div>
+    </div>
+
+    {% for s in suggestions %}
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <label class="d-flex align-items-center gap-2 mb-0">
+            <input type="checkbox" name="selected_suggestions" value="{{ s.group }}:{{ s.name }}" checked
+                   class="sug-checkbox form-check-input" onchange="updateSugCount()">
+            <input type="hidden" name="color_{{ s.group }}:{{ s.name }}" value="{{ s.color }}">
+            <span class="badge me-1" style="background-color: {{ s.color }};">&nbsp;</span>
+            <strong>{{ s.name }}</strong>
+          </label>
+          <div class="d-flex gap-2">
+            {% if s.group == 'expense' %}<span class="badge bg-danger">Expense</span>
+            {% elif s.group == 'income' %}<span class="badge bg-success">Income</span>
+            {% elif s.group == 'transaction' %}<span class="badge bg-info">Transfer</span>{% endif %}
+            {% if s.source == 'default' %}<span class="badge bg-secondary">From Defaults</span>
+            {% else %}<span class="badge bg-primary">New</span>{% endif %}
+          </div>
+        </div>
+        <p class="text-muted small mt-2 mb-2">{{ s.reason }}</p>
+        {% if s.matching_descriptions %}
+        <div class="small">
+          <strong>Example transactions:</strong>
+          {% for desc in s.matching_descriptions %}
+          <span class="badge bg-light text-dark me-1">{{ desc|truncatechars:40 }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </form>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateSugCount() {
+  var count = document.querySelectorAll('.sug-checkbox:checked').length;
+  var el = document.getElementById('sugCount');
+  if (el) el.textContent = count;
+}
+function toggleSuggestions(checked) {
+  document.querySelectorAll('.sug-checkbox').forEach(function(cb) { cb.checked = checked; });
+  updateSugCount();
+}
+</script>
+{% endblock %}
