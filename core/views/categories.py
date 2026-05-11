@@ -12,7 +12,6 @@ __all__ = [
     'export_categories',
     'import_categories',
     'category_suggestions',
-    'ai_category_suggestions',
 ]
 
 
@@ -307,65 +306,4 @@ def category_suggestions(request):
         'new_count': new_count,
         'existing_count': existing_count,
         'total_count': new_count + existing_count,
-    })
-
-
-@login_required
-def ai_category_suggestions(request):
-    """Page for AI-powered category suggestions based on unclassified transactions."""
-    from ..models import LogicalTransaction
-
-    # Count transactions in Default categories (any group)
-    unclassified_count = LogicalTransaction.objects.filter(
-        user=request.user,
-        category__name='Default',
-    ).count()
-
-    existing_count = Category.objects.filter(user=request.user).exclude(name='Default').count()
-
-    suggestions = None
-    error = None
-
-    # Handle generate suggestions
-    if request.method == 'POST' and 'generate' in request.POST:
-        try:
-            from ..services.ai_category_suggester import suggest_categories
-            suggestions = suggest_categories(request.user)
-            if not suggestions:
-                messages.info(request, 'No new categories suggested. All transactions may already be well-covered.')
-        except ValueError as e:
-            error = str(e)
-        except Exception as e:
-            error = f'AI suggestion failed: {e}'
-
-    # Handle load selected suggestions
-    if request.method == 'POST' and 'load_suggestions' in request.POST:
-        selected = request.POST.getlist('selected_suggestions')
-        created = 0
-        skipped = 0
-        for item in selected:
-            parts = item.split(':', 1)
-            if len(parts) != 2:
-                continue
-            group_slug, name = parts
-            if group_slug not in ('expense', 'income', 'transaction'):
-                continue
-            group = CategoryGroup.get_group(group_slug)
-            color = request.POST.get(f'color_{group_slug}:{name}', '#6c757d')
-            _, was_created = Category.objects.get_or_create(
-                name=name, group=group, user=request.user,
-                defaults={'color': color},
-            )
-            if was_created:
-                created += 1
-            else:
-                skipped += 1
-        messages.success(request, f'Created {created} categories. {skipped} already existed.')
-        return redirect('core:ai_category_suggestions')
-
-    return render(request, 'core/ai_category_suggestions.html', {
-        'unclassified_count': unclassified_count,
-        'existing_count': existing_count,
-        'suggestions': suggestions,
-        'error': error,
     })
