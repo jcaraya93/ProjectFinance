@@ -12,7 +12,7 @@ from core.views.categories import DEFAULT_CATEGORIES
 logger = logging.getLogger(__name__)
 
 
-def suggest_categories(user, max_descriptions=1000):
+def suggest_categories(user, max_patterns=50):
     """Use Gemini AI to suggest new categories based on unclassified transactions.
 
     Returns a list of dicts:
@@ -57,9 +57,36 @@ def suggest_categories(user, max_descriptions=1000):
         category__group__slug='unclassified',
     ).values_list('description', flat=True)
 
-    unique_descs = sorted(set(unclassified_qs))[:max_descriptions]
+    # Deduplicate and group similar descriptions into patterns
+    from collections import Counter
+    import re
 
-    if not unique_descs:
+    raw_descs = list(unclassified_qs)
+    total_unclassified = len(raw_descs)
+
+    def _normalize(desc):
+        """Strip numbers, locations, trailing codes to find patterns."""
+        s = desc.upper().strip()
+        s = re.sub(r'\\[A-Z0-9 ]+$', '', s)  # trailing backslash location codes
+        s = re.sub(r'[#*]\S+', '', s)  # ticket/reference numbers
+        s = re.sub(r'\d{3,}', '', s)  # numbers with 3+ digits
+        s = re.sub(r'\s+', ' ', s).strip()
+        # Take only the first 30 chars to group similar merchants
+        return s[:30].strip()
+
+    pattern_counts = Counter(_normalize(d) for d in raw_descs)
+    # Sort by frequency (most common first), cap at max_patterns
+    top_patterns = pattern_counts.most_common(max_patterns)
+
+    # Format as "pattern (N transactions)" for the prompt
+    desc_lines = []
+    for pattern, count in top_patterns:
+        if count > 1:
+            desc_lines.append(f'- "{pattern}" ({count} transactions)')
+        else:
+            desc_lines.append(f'- "{pattern}"')
+
+    if not desc_lines:
         return []
 
     prompt = f"""You are a personal finance categorization expert for a Costa Rican bank account.
@@ -75,8 +102,8 @@ The user currently has these categories loaded:
 These default categories are available but NOT yet loaded by the user:
 {chr(10).join(f'- {c}' for c in default_cats) if default_cats else '(none)'}
 
-Here are {len(unique_descs)} uncategorized transaction descriptions:
-{chr(10).join(f'- "{d}"' for d in unique_descs)}
+Here are {len(desc_lines)} uncategorized transaction patterns ({total_unclassified} total transactions):
+{chr(10).join(desc_lines)}
 
 Based on the transaction descriptions, suggest categories that would help organize them.
 You can:
@@ -117,6 +144,7 @@ Return a JSON array of objects with these fields:
 
         raw_text = response.text.strip()
         suggestions = json.loads(raw_text)
+        logger.info('AI raw response: %d items', len(suggestions) if isinstance(suggestions, list) else 0)
 
         if not isinstance(suggestions, list):
             logger.warning('AI returned non-list: %s', type(suggestions))
@@ -129,10 +157,13 @@ Return a JSON array of objects with these fields:
             name = s.get('name', '').strip()
             group = s.get('group', '').strip()
             if not name or not group:
+                logger.debug('Skipping empty name/group: %s', s)
                 continue
             if group not in ('expense', 'income', 'transaction'):
+                logger.debug('Skipping invalid group %s for %s', group, name)
                 continue
             if name.lower() in existing_names:
+                logger.debug('Skipping existing category: %s', name)
                 continue
             if name.lower() in seen_names:
                 continue
