@@ -22,7 +22,7 @@
           </div>
           <div class="col-md-2">
             <div class="small text-muted">Amount</div>
-            <div class="fw-bold">{% if raw.currency == 'CRC' %}₡{{ raw.amount|floatformat:0 }}{% else %}${{ raw.amount|floatformat:2 }}{% endif %}</div>
+            <div class="fw-bold">{% if raw.currency == 'CRC' %}₡{{ raw.normalized_amount|floatformat:0 }}{% else %}${{ raw.normalized_amount|floatformat:2 }}{% endif %}</div>
           </div>
           <div class="col-md-2">
             <div class="small text-muted">Account</div>
@@ -98,7 +98,7 @@
 {% block extra_js %}
 <script>
 (function() {
-  var rawAmount = parseFloat('{{ raw.amount }}');
+  var rawAmount = parseFloat('{{ raw.normalized_amount }}');
   var catOptions = document.querySelector('.split-row select[name="split_category"]').innerHTML;
 
   function updateRemaining() {

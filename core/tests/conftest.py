@@ -96,7 +96,7 @@ def sample_data(user, expense_category, transfer_category, income_category, exch
         )
         logical = LogicalTransactionFactory(
             raw_transaction=raw, user=user,
-            date=raw.date, description=raw.description, amount=raw.amount,
+            date=raw.date, description=raw.description, amount=raw.normalized_amount,
             category=expense_category,
             classification_method='rule',
         )

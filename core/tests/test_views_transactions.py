@@ -84,7 +84,7 @@ class TestSplitTransaction:
     def test_split_and_unsplit(self, auth_client, sample_data, expense_category, exchange_rates):
         txn = sample_data['transactions'][0]
         raw = txn.raw_transaction
-        half = raw.amount / 2
+        half = raw.normalized_amount / 2
 
         # Split into 2
         resp = auth_client.post(reverse('core:edit_transaction', args=[raw.pk]), {

@@ -50,7 +50,7 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(RawTransaction)
 class RawTransactionAdmin(admin.ModelAdmin):
-    list_display = ['date', 'description', 'amount']
+    list_display = ['date', 'description', 'amount', 'normalized_amount']
     search_fields = ['description']
     date_hierarchy = 'date'
     list_per_page = 50

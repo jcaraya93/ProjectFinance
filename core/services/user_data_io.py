@@ -136,6 +136,7 @@ def export_user_data(user):
                         'date': str(raw.date),
                         'description': raw.description,
                         'amount': _dec(raw.amount),
+                        'normalized_amount': _dec(raw.normalized_amount),
                         'account_metadata': raw.account_metadata,
                         'logical_transactions': [],
                     }
@@ -353,6 +354,7 @@ def import_user_data(user, data):
                             date=_to_date(raw_data['date']),
                             description=raw_data['description'],
                             amount=_to_decimal(raw_data['amount']),
+                            normalized_amount=_to_decimal(raw_data.get('normalized_amount', raw_data['amount'])),
                             account_metadata=raw_data.get('account_metadata', {}),
                         )
                         counts['raw_transactions'] += 1

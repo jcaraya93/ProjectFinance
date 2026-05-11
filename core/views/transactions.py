@@ -378,7 +378,7 @@ def unsplit_transaction(request, raw_id):
     unclassified = Category.get_unclassified(request.user)
     first.date = raw.date
     first.description = raw.description
-    first.amount = raw.amount
+    first.amount = raw.normalized_amount
     first.category = unclassified
     first.classification_method = 'unclassified'
     first.matched_rule = None
