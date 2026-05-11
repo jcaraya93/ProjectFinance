@@ -262,20 +262,22 @@ DEFAULT_CATEGORIES = {
 @login_required
 def category_suggestions(request):
     """Page for loading default category templates."""
-    if request.method == 'POST' and 'load_defaults' in request.POST:
+    if request.method == 'POST' and 'load_selected' in request.POST:
+        selected = request.POST.getlist('selected_cats')
         created = 0
         skipped = 0
-        for group_slug, cats in DEFAULT_CATEGORIES.items():
+        for item in selected:
+            group_slug, name = item.split(':', 1)
             group = CategoryGroup.get_group(group_slug)
-            for name, color in cats:
-                _, was_created = Category.objects.get_or_create(
-                    name=name, group=group, user=request.user,
-                    defaults={'color': color},
-                )
-                if was_created:
-                    created += 1
-                else:
-                    skipped += 1
+            color = dict(DEFAULT_CATEGORIES.get(group_slug, [])).get(name, '#6c757d')
+            _, was_created = Category.objects.get_or_create(
+                name=name, group=group, user=request.user,
+                defaults={'color': color},
+            )
+            if was_created:
+                created += 1
+            else:
+                skipped += 1
         messages.success(request, f'Created {created} categories. {skipped} already existed.')
         return redirect('core:category_suggestions')
 
