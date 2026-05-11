@@ -222,7 +222,7 @@ DEFAULT_CATEGORIES = {
         ('Pet Care', '#00bcd4'),
         ('Shopping', '#e67e22'),
         ('Shopping Clothing', '#f39c12'),
-        ('Shopping Groceries', '#27ae60'),
+        ('Food Groceries', '#27ae60'),
         ('Shopping Internet', '#ff9800'),
         ('Bank Transactions', '#78909c'),
         ('Transport', '#546e7a'),
