@@ -60,7 +60,7 @@ RUNNING_CATEGORIES = ['Car Gas', 'Car Parking & Toll', 'Car Wash']
 OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
 SALARY_CATEGORIES = ['Work Salary', 'Work Bonuses']
 EXTRA_INCOME_CATEGORIES = ['Work Bonuses', 'Work Association', 'Work Government']
-TXN_INCOME_CATEGORIES = ['Reimbursement Default']
+TXN_INCOME_CATEGORIES = ['Reimbursement General']
 BANK_INCOME_CATEGORIES = ['Bank Interest CDP', 'Bank Interest Cashback', 'Bank Interest Reversals', 'Bank Interest Credit']
 CREDIT_PAYMENT_CATEGORY = 'Credit'
 PERSONAL_ACCOUNT_CATEGORY = 'Internal'
@@ -1384,7 +1384,7 @@ def income_txn_dashboard(request, display_currency, time_group):
     return context
 
 
-REIMBURSEMENT_CATEGORIES = ['Reimbursement Default', 'Reimbursement Housing', 'Reimbursement Insurance', 'Reimbursement Partner']
+REIMBURSEMENT_CATEGORIES = ['Reimbursement General', 'Reimbursement Housing', 'Reimbursement Insurance', 'Reimbursement Partner']
 
 
 @dashboard_view("reimbursement_overview", "core/dashboard_reimbursement_overview.html")
