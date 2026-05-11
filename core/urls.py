@@ -37,6 +37,7 @@ urlpatterns = [
     path('transactions/<int:raw_id>/unsplit/', views.unsplit_transaction, name='unsplit_transaction'),
     # Categories management
     path('categories/', views.category_list, name='category_list'),
+    path('categories/suggestions/', views.category_suggestions, name='category_suggestions'),
     path('categories/export/', views.export_categories, name='export_categories'),
     path('categories/import/', views.import_categories, name='import_categories'),
     path('categories/add/', views.yaml_category_add, name='yaml_category_add'),

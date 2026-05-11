@@ -1,0 +1,86 @@
+{% extends "core/base.html" %}
+{% block title %}Category Suggestions — Project Finance{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Category Suggestions</h2>
+  </div>
+
+  <!-- Summary -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h6 class="card-subtitle text-muted">New Categories</h6>
+          <h3 class="card-title mb-0 text-success">{{ new_count }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h6 class="card-subtitle text-muted">Already Exist</h6>
+          <h3 class="card-title mb-0 text-muted">{{ existing_count }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h6 class="card-subtitle text-muted">Total in Template</h6>
+          <h3 class="card-title mb-0">{{ total_count }}</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if new_count > 0 %}
+  <form method="post" class="mb-4">
+    {% csrf_token %}
+    <button type="submit" name="load_defaults" class="btn btn-primary btn-lg">
+      Load {{ new_count }} New Categories
+    </button>
+    <span class="text-muted ms-2">Existing categories will be skipped.</span>
+  </form>
+  {% else %}
+  <div class="alert alert-success mb-4">
+    All default categories are already loaded in your account.
+  </div>
+  {% endif %}
+
+  <!-- Category Preview -->
+  <div class="row g-4">
+    {% for group_slug, cats in preview.items %}
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-header fw-bold">
+          {% if group_slug == 'expense' %}<span class="badge bg-danger">Expense</span>
+          {% elif group_slug == 'income' %}<span class="badge bg-success">Income</span>
+          {% elif group_slug == 'transaction' %}<span class="badge bg-info">Transfer</span>
+          {% else %}<span class="badge bg-secondary">{{ group_slug|title }}</span>{% endif %}
+          <span class="text-muted small ms-2">{{ cats|length }} categories</span>
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for cat in cats %}
+          <li class="list-group-item d-flex justify-content-between align-items-center{% if cat.exists %} bg-light{% endif %}">
+            <span>
+              <span class="badge me-2" style="background-color: {{ cat.color }};">&nbsp;</span>
+              {{ cat.name }}
+            </span>
+            {% if cat.exists %}
+            <span class="badge bg-secondary">Exists</span>
+            {% else %}
+            <span class="badge bg-success">New</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

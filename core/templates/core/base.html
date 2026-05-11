@@ -32,9 +32,17 @@
             </ul>
           </li>
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Transactions</a>
+            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Data Management</a>
             <ul class="dropdown-menu">
+              <li><h6 class="dropdown-header">Import</h6></li>
               <li><a class="dropdown-item" href="{% url 'core:statement_list' %}">Statements</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><h6 class="dropdown-header">Classification</h6></li>
+              <li><a class="dropdown-item" href="{% url 'core:category_list' %}">Categories</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:category_suggestions' %}">Category Suggestions</a></li>
+              <li><a class="dropdown-item" href="{% url 'core:yaml_rule_list' %}">Rules</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><h6 class="dropdown-header">Transactions</h6></li>
               <li><a class="dropdown-item" href="{% url 'core:transaction_list' %}">Transactions</a></li>
               <li><a class="dropdown-item" href="{% url 'core:transaction_pairing_dashboard' %}">Transaction Pairing</a></li>
             </ul>
