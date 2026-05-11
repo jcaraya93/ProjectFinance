@@ -220,7 +220,7 @@ def bulk_update_category(request):
         return redirect(next_url or 'core:transaction_list')
 
     cat = get_object_or_404(Category.objects.filter(user=request.user).select_related('group'), pk=category_id)
-    is_unclassified = cat.group.slug == 'unclassified' and cat.name == 'Default'
+    is_unclassified = cat.group.slug == 'unclassified' and cat.name == 'Unclassified Unclassified'
     method = 'unclassified' if is_unclassified else 'manual'
 
     if select_all_matching:

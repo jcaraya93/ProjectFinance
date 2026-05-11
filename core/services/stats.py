@@ -47,7 +47,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
 
     # Monthly average
     from django.db.models.functions import TruncMonth as _TM
-    EXCLUDED_INCOME = ['Work Association', 'Work Bonuses', 'Work Government', 'Default']
+    EXCLUDED_INCOME = ['Work Association', 'Work Bonuses', 'Work Government', 'Unclassified Unclassified']
     income_filter = dict(category__group__slug='income')
     income_exclude = dict(category__name__in=EXCLUDED_INCOME)
 

@@ -171,7 +171,7 @@ def _rule_phase(rule_obj):
     Return the classification phase for a rule:
       0 = transfer group (highest priority)
       1 = specific categories (not transfer, not Default)
-      2 = fallback categories (expense/Default, income/Default)
+      2 = fallback categories (expense/Unclassified, income/Unclassified)
     Accepts either a ClassificationRule object or a flat dict.
     """
     if hasattr(rule_obj, 'category'):
@@ -182,7 +182,7 @@ def _rule_phase(rule_obj):
         category = rule_obj.get('category', '')
     if group == 'transaction':
         return 0
-    if category == 'Default':
+    if category == 'Unclassified Unclassified':
         return 2
     return 1
 
@@ -190,7 +190,7 @@ def _rule_phase(rule_obj):
 def classify_transaction_yaml(transaction):
     """
     Classify a single transaction using classification rules with phase ordering.
-    Phase 0: transfer rules, Phase 1: specific categories, Phase 2: Default.
+    Phase 0: transfer rules, Phase 1: specific categories, Phase 2: Unclassified.
     Returns (Category, ClassificationRule_or_None).
     """
     rule_objects = load_rules()

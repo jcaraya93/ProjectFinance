@@ -37,7 +37,7 @@ def suggest_categories(user, max_patterns=50):
     existing_cats = []
     existing_names = set()
     for cat in Category.objects.filter(user=user).select_related('group').order_by('group__slug', 'name'):
-        if cat.name == 'Default':
+        if cat.name == 'Unclassified Unclassified':
             continue
         existing_cats.append(f'{cat.group.slug} > {cat.name}')
         existing_names.add(cat.name.lower())
@@ -45,7 +45,7 @@ def suggest_categories(user, max_patterns=50):
     # Gather transactions in Default categories (any group) — these need categorization
     unclassified_qs = LogicalTransaction.objects.filter(
         user=user,
-        category__name='Default',
+        category__name='Unclassified Unclassified',
     ).values_list('description', flat=True)
 
     # Deduplicate and group similar descriptions into patterns
@@ -94,7 +94,7 @@ Based on the transaction descriptions, suggest NEW categories that would help or
 
 Rules:
 - Do NOT suggest categories the user already has loaded
-- Do NOT suggest generic names like "Other", "Default", "Miscellaneous", or "General"
+- Do NOT suggest generic names like "Other", "Unclassified", "Miscellaneous", or "General"
 - Each category MUST belong to one of: expense, income, transaction
 - Suggest a color hex code for each category
 - Group similar transactions under one category
