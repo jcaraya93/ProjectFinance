@@ -13,7 +13,7 @@
     <div class="col-sm-6">
       <div class="card h-100 {% if unclassified_count > 0 %}border-warning{% endif %}">
         <div class="card-body text-center">
-          <h6 class="card-subtitle text-muted">Transactions in Default Category</h6>
+          <h6 class="card-subtitle text-muted">Uncategorized Transactions</h6>
           <h3 class="card-title mb-0 {% if unclassified_count > 0 %}text-warning{% else %}text-success{% endif %}">{{ unclassified_count }}</h3>
         </div>
       </div>
@@ -40,7 +40,7 @@
       <h6 class="card-title">What the AI will analyze</h6>
       <ul class="mb-3">
         <li><strong>{{ existing_count }}</strong> existing categories in your account</li>
-        <li><strong>{{ unclassified_count }}</strong> transactions in Default category (top 50 patterns sent)</li>
+        <li><strong>{{ unclassified_count }}</strong> uncategorized transactions (top 50 patterns sent)</li>
       </ul>
       <p class="text-muted small mb-0">The AI will suggest new categories based on your transaction patterns. It will not suggest categories you already have, or generic names like "Other" or "Default".</p>
     </div>
