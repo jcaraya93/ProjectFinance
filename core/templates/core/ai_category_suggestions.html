@@ -59,7 +59,8 @@
   {% if not suggestions %}
   <form method="post" class="mb-4">
     {% csrf_token %}
-    <button type="submit" name="generate" class="btn btn-primary btn-lg" id="generateBtn"
+    <input type="hidden" name="generate" value="1">
+    <button type="submit" class="btn btn-primary btn-lg" id="generateBtn"
             onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm me-2\'></span>Analyzing transactions...'; this.form.submit();">
       Generate AI Suggestions
     </button>
