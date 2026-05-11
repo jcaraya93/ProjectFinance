@@ -10,27 +10,19 @@
 
   <!-- Summary cards -->
   <div class="row g-3 mb-4">
-    <div class="col-sm-4">
+    <div class="col-sm-6">
       <div class="card h-100 {% if unclassified_count > 0 %}border-warning{% endif %}">
         <div class="card-body text-center">
-          <h6 class="card-subtitle text-muted">Unclassified Transactions</h6>
+          <h6 class="card-subtitle text-muted">Transactions in Default Category</h6>
           <h3 class="card-title mb-0 {% if unclassified_count > 0 %}text-warning{% else %}text-success{% endif %}">{{ unclassified_count }}</h3>
         </div>
       </div>
     </div>
-    <div class="col-sm-4">
+    <div class="col-sm-6">
       <div class="card h-100">
         <div class="card-body text-center">
           <h6 class="card-subtitle text-muted">Your Categories</h6>
           <h3 class="card-title mb-0">{{ existing_count }}</h3>
-        </div>
-      </div>
-    </div>
-    <div class="col-sm-4">
-      <div class="card h-100">
-        <div class="card-body text-center">
-          <h6 class="card-subtitle text-muted">Defaults Not Loaded</h6>
-          <h3 class="card-title mb-0">{{ default_not_loaded }}</h3>
         </div>
       </div>
     </div>
@@ -48,10 +40,9 @@
       <h6 class="card-title">What the AI will analyze</h6>
       <ul class="mb-3">
         <li><strong>{{ existing_count }}</strong> existing categories in your account</li>
-        <li><strong>{{ default_not_loaded }}</strong> default categories available but not loaded</li>
-        <li><strong>{{ unclassified_count }}</strong> unclassified transactions (top 100 patterns sent)</li>
+        <li><strong>{{ unclassified_count }}</strong> transactions in Default category (top 50 patterns sent)</li>
       </ul>
-      <p class="text-muted small mb-0">The AI will suggest new categories or recommend loading defaults based on your transaction patterns.</p>
+      <p class="text-muted small mb-0">The AI will suggest new categories based on your transaction patterns. It will not suggest categories you already have, or generic names like "Other" or "Default".</p>
     </div>
   </div>
 
@@ -106,8 +97,6 @@
             {% if s.group == 'expense' %}<span class="badge bg-danger">Expense</span>
             {% elif s.group == 'income' %}<span class="badge bg-success">Income</span>
             {% elif s.group == 'transaction' %}<span class="badge bg-info">Transfer</span>{% endif %}
-            {% if s.source == 'default' %}<span class="badge bg-secondary">From Defaults</span>
-            {% else %}<span class="badge bg-primary">New</span>{% endif %}
           </div>
         </div>
         <p class="text-muted small mt-2 mb-2">{{ s.reason }}</p>

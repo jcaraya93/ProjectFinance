@@ -7,7 +7,6 @@ import time
 import google.generativeai as genai
 
 from core.models import LogicalTransaction, Category, CategoryGroup
-from core.views.categories import DEFAULT_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -43,18 +42,10 @@ def suggest_categories(user, max_patterns=50):
         existing_cats.append(f'{cat.group.slug} > {cat.name}')
         existing_names.add(cat.name.lower())
 
-    # Gather default categories not yet loaded
-    default_cats = []
-    for group_slug, cats in DEFAULT_CATEGORIES.items():
-        for name, color in cats:
-            if name.lower() not in existing_names:
-                default_cats.append(f'{group_slug} > {name}')
-
-    # Gather unclassified transaction descriptions
+    # Gather transactions in Default categories (any group) — these need categorization
     unclassified_qs = LogicalTransaction.objects.filter(
         user=user,
         category__name='Default',
-        category__group__slug='unclassified',
     ).values_list('description', flat=True)
 
     # Deduplicate and group similar descriptions into patterns
@@ -71,14 +62,11 @@ def suggest_categories(user, max_patterns=50):
         s = re.sub(r'[#*]\S+', '', s)  # ticket/reference numbers
         s = re.sub(r'\d{3,}', '', s)  # numbers with 3+ digits
         s = re.sub(r'\s+', ' ', s).strip()
-        # Take only the first 30 chars to group similar merchants
         return s[:30].strip()
 
     pattern_counts = Counter(_normalize(d) for d in raw_descs)
-    # Sort by frequency (most common first), cap at max_patterns
     top_patterns = pattern_counts.most_common(max_patterns)
 
-    # Format as "pattern (N transactions)" for the prompt
     desc_lines = []
     for pattern, count in top_patterns:
         if count > 1:
@@ -99,21 +87,16 @@ The application has these FIXED groups (cannot be changed):
 The user currently has these categories loaded:
 {chr(10).join(f'- {c}' for c in existing_cats) if existing_cats else '(none)'}
 
-These default categories are available but NOT yet loaded by the user:
-{chr(10).join(f'- {c}' for c in default_cats) if default_cats else '(none)'}
-
 Here are {len(desc_lines)} uncategorized transaction patterns ({total_unclassified} total transactions):
 {chr(10).join(desc_lines)}
 
-Based on the transaction descriptions, suggest categories that would help organize them.
-You can:
-1. RECOMMEND loading specific default categories (set source="default")
-2. SUGGEST entirely new categories (set source="new")
+Based on the transaction descriptions, suggest NEW categories that would help organize them.
 
 Rules:
 - Do NOT suggest categories the user already has loaded
+- Do NOT suggest generic names like "Other", "Default", "Miscellaneous", or "General"
 - Each category MUST belong to one of: expense, income, transaction
-- Suggest a color hex code for each new category
+- Suggest a color hex code for each category
 - Group similar transactions under one category
 - Costa Rican context: SINPE=mobile payments, TEF=bank transfers, common merchants
 - Keep category names concise and consistent with existing naming patterns
@@ -124,7 +107,6 @@ Return a JSON array of objects with these fields:
 - group: one of "expense", "income", "transaction" (string)
 - color: hex color code (string)
 - reason: brief explanation (string)
-- source: "new" or "default" (string)
 - matching_descriptions: list of 2-5 example transaction descriptions that match (array of strings)
 """
 
@@ -165,6 +147,9 @@ Return a JSON array of objects with these fields:
             if name.lower() in existing_names:
                 logger.debug('Skipping existing category: %s', name)
                 continue
+            if name.lower() in ('other', 'default', 'miscellaneous', 'general', 'uncategorized', 'unclassified'):
+                logger.debug('Skipping generic category: %s', name)
+                continue
             if name.lower() in seen_names:
                 continue
             seen_names.add(name.lower())
@@ -174,7 +159,6 @@ Return a JSON array of objects with these fields:
                 'group': group,
                 'color': s.get('color', '#6c757d'),
                 'reason': s.get('reason', ''),
-                'source': s.get('source', 'new'),
                 'matching_descriptions': s.get('matching_descriptions', [])[:5],
             })
 

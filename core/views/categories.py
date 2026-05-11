@@ -315,22 +315,13 @@ def ai_category_suggestions(request):
     """Page for AI-powered category suggestions based on unclassified transactions."""
     from ..models import LogicalTransaction
 
-    # Count unclassified
+    # Count transactions in Default categories (any group)
     unclassified_count = LogicalTransaction.objects.filter(
         user=request.user,
         category__name='Default',
-        category__group__slug='unclassified',
     ).count()
 
     existing_count = Category.objects.filter(user=request.user).exclude(name='Default').count()
-    default_not_loaded = 0
-    existing_names = set(
-        Category.objects.filter(user=request.user).values_list('name', flat=True)
-    )
-    for cats in DEFAULT_CATEGORIES.values():
-        for name, _ in cats:
-            if name not in existing_names:
-                default_not_loaded += 1
 
     suggestions = None
     error = None
@@ -375,7 +366,6 @@ def ai_category_suggestions(request):
     return render(request, 'core/ai_category_suggestions.html', {
         'unclassified_count': unclassified_count,
         'existing_count': existing_count,
-        'default_not_loaded': default_not_loaded,
         'suggestions': suggestions,
         'error': error,
     })
