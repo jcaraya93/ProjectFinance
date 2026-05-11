@@ -59,7 +59,7 @@ CAR_CATEGORIES = ['Car Gas', 'Car Insurance', 'Car Maintenance', 'Car Parking & 
 RUNNING_CATEGORIES = ['Car Gas', 'Car Parking & Toll', 'Car Wash']
 OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
 SALARY_CATEGORIES = ['Work Salary', 'Work Bonuses']
-EXTRA_INCOME_CATEGORIES = ['Work Bonuses', 'Work Association', 'Work Goverment']
+EXTRA_INCOME_CATEGORIES = ['Work Bonuses', 'Work Association', 'Work Government']
 TXN_INCOME_CATEGORIES = ['Reimbursement Default']
 BANK_INCOME_CATEGORIES = ['Bank Interest CDP', 'Bank Interest Cashback', 'Bank Interest Reversals', 'Bank Interest Credit']
 CREDIT_PAYMENT_CATEGORY = 'Credit'
@@ -1129,7 +1129,7 @@ def income_bonus_dashboard(request, display_currency, time_group):
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     goverment_total = float(
-        extra_qs.filter(category__name='Work Goverment')
+        extra_qs.filter(category__name='Work Government')
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     extra_combined = bonus_total + association_total + goverment_total
@@ -2354,7 +2354,7 @@ def transfer_flow_dashboard(request, display_currency, time_group):
 
     # Map income categories to unified labels
     income_label_map = {}
-    for cat_name in ['Work Salary', 'Work Bonuses', 'Work Association', 'Work Goverment']:
+    for cat_name in ['Work Salary', 'Work Bonuses', 'Work Association', 'Work Government']:
         income_label_map[cat_name] = 'Work Income'
     for cat_name in REIMBURSEMENT_CATEGORIES:
         income_label_map[cat_name] = 'Reimbursement Income'

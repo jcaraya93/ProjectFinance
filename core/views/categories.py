@@ -245,7 +245,7 @@ DEFAULT_CATEGORIES = {
         ('Reimbursement Partner', '#b39ddb'),
         ('Work Association', '#388e3c'),
         ('Work Bonuses', '#2e7d32'),
-        ('Work Goverment', '#43a047'),
+        ('Work Government', '#43a047'),
         ('Work Salary', '#28a745'),
     ],
     'transaction': [
