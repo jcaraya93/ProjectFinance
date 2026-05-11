@@ -12,7 +12,7 @@ from core.views.categories import DEFAULT_CATEGORIES
 logger = logging.getLogger(__name__)
 
 
-def suggest_categories(user, max_descriptions=200):
+def suggest_categories(user, max_descriptions=1000):
     """Use Gemini AI to suggest new categories based on unclassified transactions.
 
     Returns a list of dicts:
