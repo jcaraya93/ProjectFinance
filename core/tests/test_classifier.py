@@ -122,7 +122,7 @@ class TestMatchRule:
 
 class TestRulePhase:
     def test_transfer_phase_0(self):
-        assert _rule_phase({'group': 'transaction', 'category': 'Transfer'}) == 0
+        assert _rule_phase({'group': 'transfer', 'category': 'Transfer'}) == 0
 
     def test_specific_phase_1(self):
         assert _rule_phase({'group': 'expense', 'category': 'Groceries'}) == 1

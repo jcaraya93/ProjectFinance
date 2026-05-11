@@ -103,7 +103,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     last_month_cashflow = last_month_income - last_month_expenses
     last_month_name = last_month_start.strftime('%b %Y')
 
-    total_transfers = qs.filter(category__group__slug='transaction').count()
+    total_transfers = qs.filter(category__group__slug='transfer').count()
 
     def _pct_change(current, median):
         if not median:

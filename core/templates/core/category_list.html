@@ -13,7 +13,7 @@
     <span class="fw-bold">
       {% if grp_slug == 'expense' %}<span class="badge bg-danger">{{ grp_info.name }}</span>
       {% elif grp_slug == 'income' %}<span class="badge bg-success">{{ grp_info.name }}</span>
-      {% elif grp_slug == 'transaction' %}<span class="badge bg-info">{{ grp_info.name }}</span>
+      {% elif grp_slug == 'transfer' %}<span class="badge bg-info">{{ grp_info.name }}</span>
       {% else %}<span class="badge bg-secondary">{{ grp_info.name }}</span>{% endif %}
     </span>
     {% if grp_slug != 'unclassified' %}

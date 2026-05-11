@@ -64,7 +64,7 @@ def expense_category(user, category_groups):
 @pytest.fixture
 def transfer_category(user, category_groups):
     cat, _ = Category.objects.get_or_create(
-        name='Transfer', group=category_groups['transaction'], user=user,
+        name='Transfer', group=category_groups['transfer'], user=user,
         defaults={'color': '#36a2eb'},
     )
     return cat

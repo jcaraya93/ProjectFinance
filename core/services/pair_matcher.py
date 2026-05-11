@@ -47,7 +47,7 @@ def auto_match_transfers(user, dry_run=False):
     logical_txns = (
         LogicalTransaction.objects.filter(
             user=user,
-            category__group__slug='transaction',
+            category__group__slug='transfer',
             category__name__in=PAIRABLE_CATEGORIES,
         )
         .select_related(

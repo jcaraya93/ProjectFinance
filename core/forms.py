@@ -26,7 +26,7 @@ ACCOUNT_TYPE_CHOICES = [
 GROUP_CHOICES = [
     ('expense', 'Expense'),
     ('income', 'Income'),
-    ('transaction', 'Transfer'),
+    ('transfer', 'Transfer'),
 ]
 
 

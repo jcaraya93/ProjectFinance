@@ -104,7 +104,7 @@ Rules:
 
 Return a JSON array of objects with these fields:
 - name: category name (string)
-- group: one of "expense", "income", "transaction" (string)
+- group: one of "expense", "income", "transfer" (string)
 - color: hex color code (string)
 - reason: brief explanation (string)
 - matching_descriptions: list of 2-5 example transaction descriptions that match (array of strings)
@@ -141,7 +141,7 @@ Return a JSON array of objects with these fields:
             if not name or not group:
                 logger.debug('Skipping empty name/group: %s', s)
                 continue
-            if group not in ('expense', 'income', 'transaction'):
+            if group not in ('expense', 'income', 'transfer'):
                 logger.debug('Skipping invalid group %s for %s', group, name)
                 continue
             if name.lower() in existing_names:

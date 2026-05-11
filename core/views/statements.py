@@ -104,7 +104,7 @@ def statement_list(request):
             ),
             total_payments=Abs(Sum(
                 'raw_transactions__logical_transactions__amount',
-                filter=Q(raw_transactions__logical_transactions__category__group__slug='transaction'),
+                filter=Q(raw_transactions__logical_transactions__category__group__slug='transfer'),
             )),
             total_income=Sum(
                 'raw_transactions__logical_transactions__amount',

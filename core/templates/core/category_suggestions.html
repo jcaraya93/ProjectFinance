@@ -60,7 +60,7 @@
         <div class="card-header fw-bold">
           {% if group_slug == 'expense' %}<span class="badge bg-danger">Expense</span>
           {% elif group_slug == 'income' %}<span class="badge bg-success">Income</span>
-          {% elif group_slug == 'transaction' %}<span class="badge bg-info">Transfer</span>
+          {% elif group_slug == 'transfer' %}<span class="badge bg-info">Transfer</span>
           {% else %}<span class="badge bg-secondary">{{ group_slug|title }}</span>{% endif %}
           <span class="text-muted small ms-2">{{ cats|length }} categories</span>
         </div>

@@ -47,7 +47,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 class CategoryGroup(models.Model):
     EXPENSE = 'expense'
     INCOME = 'income'
-    TRANSACTION = 'transaction'
+    TRANSACTION = 'transfer'
     UNCLASSIFIED = 'unclassified'
 
     SLUG_CHOICES = [

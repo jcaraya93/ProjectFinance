@@ -240,10 +240,10 @@ def rule_matching_dashboard(request, display_currency, time_group):
     avg_matches = (total_rule_matched / active_rules) if active_rules else 0
 
     # Rules by group doughnut
-    GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transaction': 'Transfer', 'unclassified': 'Unclassified'}
+    GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transfer': 'Transfer', 'unclassified': 'Unclassified'}
     GROUP_CHART_COLORS = {
         'expense': CHART_COLORS['expense'], 'income': CHART_COLORS['income'],
-        'transaction': CHART_COLORS['primary'], 'unclassified': CHART_COLORS['warning'],
+        'transfer': CHART_COLORS['primary'], 'unclassified': CHART_COLORS['warning'],
     }
     group_counts = (
         rules_qs.values('category__group__slug')
@@ -319,8 +319,8 @@ def default_buckets_dashboard(request, display_currency, time_group):
     total_default = qs.count()
 
     # Per-group summary
-    GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transaction': 'Transfer', 'unclassified': 'Unclassified'}
-    GROUP_COLORS = {'expense': 'danger', 'income': 'success', 'transaction': 'primary', 'unclassified': 'warning'}
+    GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transfer': 'Transfer', 'unclassified': 'Unclassified'}
+    GROUP_COLORS = {'expense': 'danger', 'income': 'success', 'transfer': 'primary', 'unclassified': 'warning'}
     group_stats_raw = (
         qs.values('category__group__slug')
         .annotate(count=Count('id'), total_amount=Sum(Abs(amount_field)))
@@ -343,7 +343,7 @@ def default_buckets_dashboard(request, display_currency, time_group):
         'values': [g['count'] for g in group_stats],
         'colors': [
             {'expense': 'rgba(220,53,69,0.8)', 'income': 'rgba(25,135,84,0.8)',
-             'transaction': 'rgba(13,110,253,0.8)', 'unclassified': 'rgba(255,193,7,0.8)'
+             'transfer': 'rgba(13,110,253,0.8)', 'unclassified': 'rgba(255,193,7,0.8)'
              }.get(g['slug'], 'rgba(108,117,125,0.8)')
             for g in group_stats
         ],
@@ -2208,7 +2208,7 @@ def external_transfers_dashboard(request, display_currency, time_group):
     ext_qs = Transaction.objects.filter(
         user=request.user,
         category__name='External',
-        category__group__slug='transaction',
+        category__group__slug='transfer',
         **{f'{amount_field}__isnull': False},
     )
 
@@ -2272,7 +2272,7 @@ def transfer_flow_dashboard(request, display_currency, time_group):
 
     transfer_qs = Transaction.objects.filter(
         user=request.user,
-        category__group__slug='transaction',
+        category__group__slug='transfer',
         **{f'{amount_field}__isnull': False},
     ).select_related(
         'raw_transaction__ledger__statement_import__account',
@@ -2478,7 +2478,7 @@ def transfer_graph_dashboard(request, display_currency, time_group):
 
     transfer_qs = Transaction.objects.filter(
         user=request.user,
-        category__group__slug='transaction',
+        category__group__slug='transfer',
         **{f'{amount_field}__isnull': False},
     ).select_related(
         'raw_transaction__ledger__statement_import__account',

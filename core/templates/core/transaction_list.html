@@ -266,7 +266,7 @@
           </td>
           <td>
             {% if txn.category %}
-            <span class="badge {% if txn.category.group.slug == 'expense' %}bg-danger{% elif txn.category.group.slug == 'income' %}bg-success{% elif txn.category.group.slug == 'transaction' %}bg-info{% else %}bg-secondary{% endif %}">{{ txn.category.group.name }}</span>
+            <span class="badge {% if txn.category.group.slug == 'expense' %}bg-danger{% elif txn.category.group.slug == 'income' %}bg-success{% elif txn.category.group.slug == 'transfer' %}bg-info{% else %}bg-secondary{% endif %}">{{ txn.category.group.name }}</span>
             {% endif %}
           </td>
           <td>

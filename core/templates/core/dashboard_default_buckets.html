@@ -91,7 +91,7 @@
                 <td>
                   {% if d.group_slug == 'expense' %}<span class="badge bg-danger">{{ d.group }}</span>
                   {% elif d.group_slug == 'income' %}<span class="badge bg-success">{{ d.group }}</span>
-                  {% elif d.group_slug == 'transaction' %}<span class="badge bg-primary">{{ d.group }}</span>
+                  {% elif d.group_slug == 'transfer' %}<span class="badge bg-primary">{{ d.group }}</span>
                   {% else %}<span class="badge bg-warning">{{ d.group }}</span>
                   {% endif %}
                 </td>
@@ -122,7 +122,7 @@
   var GROUP_COLORS = {
     expense: CHART_COLORS.expense,
     income: CHART_COLORS.income,
-    transaction: CHART_COLORS.primary,
+    transfer: CHART_COLORS.primary,
     unclassified: CHART_COLORS.warning,
   };
 

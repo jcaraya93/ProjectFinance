@@ -180,7 +180,7 @@ def _rule_phase(rule_obj):
     else:
         group = rule_obj.get('group', '')
         category = rule_obj.get('category', '')
-    if group == 'transaction':
+    if group == 'transfer':
         return 0
     if category == 'Unclassified Unclassified':
         return 2

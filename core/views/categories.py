@@ -252,7 +252,7 @@ DEFAULT_CATEGORIES = {
         ('Work Government', '#43a047'),
         ('Work Salary', '#28a745'),
     ],
-    'transaction': [
+    'transfer': [
         ('CDP', '#8d6e63'),
         ('Cash Withdrawal', '#795548'),
         ('Credit', '#27ae60'),

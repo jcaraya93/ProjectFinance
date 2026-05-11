@@ -96,7 +96,7 @@
           <div class="d-flex gap-2">
             {% if s.group == 'expense' %}<span class="badge bg-danger">Expense</span>
             {% elif s.group == 'income' %}<span class="badge bg-success">Income</span>
-            {% elif s.group == 'transaction' %}<span class="badge bg-info">Transfer</span>{% endif %}
+            {% elif s.group == 'transfer' %}<span class="badge bg-info">Transfer</span>{% endif %}
           </div>
         </div>
         <p class="text-muted small mt-2 mb-2">{{ s.reason }}</p>
