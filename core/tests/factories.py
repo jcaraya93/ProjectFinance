@@ -81,6 +81,7 @@ class RawTransactionFactory(factory.django.DjangoModelFactory):
     date = date(2025, 2, 1)
     description = 'TEST TRANSACTION'
     amount = Decimal('5000.00')
+    normalized_amount = factory.LazyAttribute(lambda o: o.amount)
     ledger = factory.SubFactory(CurrencyLedgerFactory)
     user = factory.SubFactory(UserFactory)
 

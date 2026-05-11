@@ -2367,12 +2367,9 @@ def transfer_flow_dashboard(request, display_currency, time_group):
         stmt = ledger.statement_import if ledger else None
         acct = stmt.account if stmt else None
         acct_name = str(acct) if acct else 'Unknown'
-        is_credit = hasattr(acct, 'creditaccount') if acct else False
         cat = t.category.name
         amt = float(getattr(t, amount_field) or 0)
-        # Debit: income is positive; Credit card: income is negative (credit to balance)
-        is_income = (not is_credit and amt > 0) or (is_credit and amt < 0)
-        if is_income:
+        if amt > 0:
             if cat in REIMBURSEMENT_CATEGORIES:
                 label = 'Reimbursement Income'
             elif cat in BANK_INCOME_CATEGORIES:
@@ -2397,10 +2394,8 @@ def transfer_flow_dashboard(request, display_currency, time_group):
         stmt = ledger.statement_import if ledger else None
         acct = stmt.account if stmt else None
         acct_name = str(acct) if acct else 'Unknown'
-        is_credit = hasattr(acct, 'creditaccount') if acct else False
         amt = float(getattr(t, amount_field) or 0)
-        # Debit: expenses are negative; Credit card: expenses are positive
-        if (not is_credit and amt < 0) or (is_credit and amt > 0):
+        if amt < 0:
             flows[(acct_name, 'Expenses')] += abs(amt)
             flow_counts[(acct_name, 'Expenses')] += 1
 

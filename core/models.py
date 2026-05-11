@@ -116,6 +116,10 @@ class Account(models.Model):
     nickname = models.CharField(max_length=100, blank=True, help_text='Optional friendly name')
     account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPES)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='accounts')
+    sign_factor = models.SmallIntegerField(
+        default=1,
+        help_text='1 for debit (standard signs), -1 for credit (flip signs on LogicalTransaction)',
+    )
 
     class Meta:
         ordering = ['-account_type']
@@ -131,6 +135,8 @@ class CreditAccount(Account):
     def save(self, *args, **kwargs):
         if not self.account_type:
             self.account_type = 'credit_account'
+        if self.sign_factor == 1:
+            self.sign_factor = -1
         if not self.nickname and self.card_number_last4:
             self.nickname = f"Credit {self.card_number_last4}"
         super().save(*args, **kwargs)
@@ -212,7 +218,11 @@ class RawTransaction(models.Model):
     """Immutable record from the bank statement."""
     date = models.DateField()
     description = models.CharField(max_length=255)
-    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, help_text='Original amount from bank statement')
+    normalized_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text='Standardized amount: negative=out, positive=in (amount × account.sign_factor)',
+    )
     ledger = models.ForeignKey(
         CurrencyLedger, on_delete=models.CASCADE, related_name='raw_transactions'
     )

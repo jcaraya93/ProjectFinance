@@ -272,7 +272,7 @@ def edit_transaction(request, raw_id):
                 unclassified = Category.get_unclassified(request.user)
                 first.date = raw.date
                 first.description = raw.description
-                first.amount = raw.amount
+                first.amount = raw.normalized_amount
                 first.category = unclassified
                 first.classification_method = 'unclassified'
                 first.matched_rule = None
@@ -302,8 +302,8 @@ def edit_transaction(request, raw_id):
             return redirect('core:edit_transaction', raw_id=raw_id)
 
         total = sum(a for _, a, _ in parsed)
-        if total != raw.amount:
-            messages.error(request, f'Amounts ({total}) must equal the original amount ({raw.amount}).')
+        if total != raw.normalized_amount:
+            messages.error(request, f'Amounts ({total}) must equal the original amount ({raw.normalized_amount}).')
             return redirect('core:edit_transaction', raw_id=raw_id)
 
         first_logical = logical_txns[0] if logical_txns else None

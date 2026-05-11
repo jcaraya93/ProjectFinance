@@ -77,7 +77,6 @@ def auto_match_transfers(user, dry_run=False):
             'description': lt.description,
             'account_id': acct.id if acct else None,
             'account_name': str(acct) if acct else 'Unknown',
-            'is_credit_account': hasattr(acct, 'creditaccount') if acct else False,
             'category': lt.category.name,
         })
 
@@ -99,22 +98,9 @@ def auto_match_transfers(user, dry_run=False):
             # Must be different accounts
             if ci['account_id'] == cj['account_id']:
                 continue
-            # Must be opposite signs in CRC — except Credit category
-            # where both sides are negative (debit payment + credit card receipt)
-            same_sign = ci['amount_crc'] * cj['amount_crc'] > 0
-            opposite_sign = ci['amount_crc'] * cj['amount_crc'] < 0
-            is_credit_pair = (ci['category'] == 'Credit' or cj['category'] == 'Credit')
-
-            if is_credit_pair:
-                # Credit pairs: same sign (both negative), different account types
-                if not same_sign:
-                    continue
-                if ci['is_credit_account'] == cj['is_credit_account']:
-                    continue
-            else:
-                # Internal pairs: opposite signs
-                if not opposite_sign:
-                    continue
+            # Must be opposite signs (negative=out, positive=in — standardized)
+            if ci['amount_crc'] * cj['amount_crc'] >= 0:
+                continue
 
             # Date tolerance: Internal ±1 day, Credit ±2 days
             day_diff = abs((ci['date'] - cj['date']).days)
@@ -137,19 +123,11 @@ def auto_match_transfers(user, dry_run=False):
             matched.add(ci['raw_id'])
             matched.add(cj['raw_id'])
 
-            # Determine outgoing and incoming
-            if is_credit_pair:
-                # For credit pairs: debit account is outgoing, credit account is incoming
-                if ci['is_credit_account']:
-                    out_raw, in_raw = cj['raw'], ci['raw']
-                else:
-                    out_raw, in_raw = ci['raw'], cj['raw']
+            # Negative CRC = outgoing, positive CRC = incoming
+            if ci['amount_crc'] < 0:
+                out_raw, in_raw = ci['raw'], cj['raw']
             else:
-                # For internal: negative CRC is outgoing
-                if ci['amount_crc'] < 0:
-                    out_raw, in_raw = ci['raw'], cj['raw']
-                else:
-                    out_raw, in_raw = cj['raw'], ci['raw']
+                out_raw, in_raw = cj['raw'], ci['raw']
 
             pairs_to_create.append(TransactionPair(
                 user=user,

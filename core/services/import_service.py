@@ -172,10 +172,13 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
                     balance_at_cutoff=pl.balance_at_cutoff,
                 )
 
+                sign_factor = account.sign_factor
+
                 raw_objects = []
                 for pt in pl.transactions:
                     raw_objects.append(RawTransaction(
                         date=pt.date, description=pt.description, amount=pt.amount,
+                        normalized_amount=pt.amount * sign_factor,
                         ledger=ledger, user=user, account_metadata=pt.account_metadata,
                     ))
 
@@ -187,7 +190,7 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
                     txn = LogicalTransaction(
                         raw_transaction=raw, user=user,
                         date=raw.date, description=raw.description,
-                        amount=raw.amount, category=unclassified,
+                        amount=raw.normalized_amount, category=unclassified,
                     )
 
                     if _convert_in_memory(txn, pl.currency, rates_cache):
