@@ -58,6 +58,17 @@ def backfill_sign_factor_and_normalized_amount(apps, schema_editor):
         amount_usd=-F('amount_usd'),
     )
 
+    # Step 4: Fix classification rules for credit card accounts
+    # Old convention: expenses positive (min=0), income negative (max=0)
+    # New convention: expenses negative (max=0), income positive (min=0)
+    ClassificationRule = apps.get_model('core', 'ClassificationRule')
+    for rule in ClassificationRule.objects.filter(account_type='credit_account'):
+        old_min = rule.amount_min
+        old_max = rule.amount_max
+        rule.amount_min = -old_max if old_max is not None else None
+        rule.amount_max = -old_min if old_min is not None else None
+        rule.save(update_fields=['amount_min', 'amount_max'])
+
 
 def reverse_backfill(apps, schema_editor):
     """Reverse: flip credit card signs back and reset normalized_amount."""
@@ -91,6 +102,15 @@ def reverse_backfill(apps, schema_editor):
         amount_crc=-F('amount_crc'),
         amount_usd=-F('amount_usd'),
     )
+
+    # Reverse classification rule fixes
+    ClassificationRule = apps.get_model('core', 'ClassificationRule')
+    for rule in ClassificationRule.objects.filter(account_type='credit_account'):
+        old_min = rule.amount_min
+        old_max = rule.amount_max
+        rule.amount_min = -old_max if old_max is not None else None
+        rule.amount_max = -old_min if old_min is not None else None
+        rule.save(update_fields=['amount_min', 'amount_max'])
 
     # Reset normalized_amount
     RawTransaction.objects.all().update(normalized_amount=None)
