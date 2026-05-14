@@ -2076,7 +2076,7 @@ def internal_transfers_dashboard(request, display_currency, time_group):
 
     # Assign colors per route
     route_colors = {}
-    palette = ['#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#9b59b6', '#1abc9c']
+    palette = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#1abc9c', '#34495e']
     for i, r in enumerate(routes):
         route_colors[r] = palette[i % len(palette)]
 
