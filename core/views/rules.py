@@ -17,6 +17,7 @@ __all__ = [
     'yaml_rule_edit',
     'yaml_rule_delete',
     'delete_all_rules',
+    'delete_unused_rules',
     'reclassify_all',
     'classify_unclassified',
     'clear_classifications',
@@ -302,6 +303,25 @@ def delete_all_rules(request):
 
     messages.success(request, f'Deleted {rule_count} rules. Affected transactions moved to Unclassified.')
     return redirect('core:account_page')
+
+
+@login_required
+@require_POST
+def delete_unused_rules(request):
+    """Delete all classification rules that have zero matched transactions."""
+    from django.db.models import Count
+
+    unused = (
+        ClassificationRule.objects.filter(user=request.user)
+        .annotate(match_count=Count('matched_transactions'))
+        .filter(match_count=0)
+    )
+    count = unused.count()
+    unused.delete()
+    _reload_yaml()
+
+    messages.success(request, f'Deleted {count} unused rules.')
+    return redirect('core:yaml_rule_list')
 
 
 @login_required

@@ -1,0 +1,214 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}Expense Range — Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="expense_range" %}
+  </div>
+  <div class="col-md-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Expense Range</h4>
+      <div class="d-flex align-items-center gap-2">
+        <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
+          <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
+          <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
+        </button>
+        {% include "core/_currency_toggle.html" %}
+      </div>
+    </div>
+
+    <!-- Controls: range, compare, sort -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+      <div>
+        <span class="small text-muted me-1">Range:</span>
+        <div class="btn-group btn-group-sm" role="group">
+          {% for key, label, start in time_frames %}
+          <a href="?display_currency={{ display_currency }}&time_frame={{ key }}&compare_month={{ selected_month }}" class="btn {% if selected_frame == key %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <span class="small text-muted me-1">Compare:</span>
+        <select class="form-select form-select-sm d-inline-block" style="width:auto" onchange="location.href='?display_currency={{ display_currency }}&time_frame={{ selected_frame }}&compare_month='+this.value">
+          {% for m in range_months reversed %}
+          <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <span class="small text-muted me-1">Sort:</span>
+        <div class="btn-group btn-group-sm" role="group">
+          <button type="button" class="btn btn-primary sort-btn" data-sort="deviation">Deviation</button>
+          <button type="button" class="btn btn-outline-secondary sort-btn" data-sort="compare">Selected Month</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overall summary cards -->
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">{{ selected_month }}</h6>
+            <h3 class="card-title mb-1 {% if compare_total > overall_p75 %}text-danger{% elif compare_total < overall_p25 %}text-success{% endif %}" data-sensitive>{{ currency_symbol }}{{ compare_total|format_number }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Period Median</h6>
+            <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ overall_median|format_number }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Typical Low (P25)</h6>
+            <h3 class="card-title mb-1 text-muted" data-sensitive>{{ currency_symbol }}{{ overall_p25|format_number }}</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Typical High (P75)</h6>
+            <h3 class="card-title mb-1 text-muted" data-sensitive>{{ currency_symbol }}{{ overall_p75|format_number }}</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="d-flex gap-3 mb-3 small text-muted">
+      <span><span style="display:inline-block;width:12px;height:12px;background:#dee2e6;border-radius:2px;vertical-align:middle"></span> Min–Max range</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#6c757d;transform:rotate(45deg);vertical-align:middle"></span> Median</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#198754;border-radius:50%;vertical-align:middle"></span> Selected month (below median)</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#dc3545;border-radius:50%;vertical-align:middle"></span> Selected month (above median)</span>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <div id="rangeChart"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script id="expenseData" type="application/json">{{ expense_data|escapejson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var isPrivacy = dashboardPrivacy.isOn();
+  window._dashCharts = [];
+  var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
+
+  var allCats = DashboardCharts.parseJSON('expenseData');
+  if (!allCats || !allCats.length) return;
+
+  // Add deviation field
+  allCats.forEach(function(c) {
+    c.deviation = c.median > 0 ? Math.round((c.compare - c.median) / c.median * 100) : 0;
+  });
+
+  var sortFns = {
+    median: function(a, b) { return b.median - a.median; },
+    compare: function(a, b) { return b.compare - a.compare; },
+    name: function(a, b) { return a.name.localeCompare(b.name); },
+    max: function(a, b) { return b.max - a.max; },
+    deviation: function(a, b) { return b.deviation - a.deviation; },
+  };
+
+  var rangeChart = null;
+
+  function renderChart(cats) {
+    var chartHeight = Math.max(300, cats.length * 40);
+    var opts = {
+      chart: { type: 'rangeBar', height: chartHeight, toolbar: { show: false }, zoom: { enabled: false }, selection: { enabled: false } },
+      series: [{
+        name: 'Range (min–max)',
+        type: 'rangeBar',
+        data: cats.map(function(c) { return { x: c.name, y: [c.min, c.max] }; }),
+      }],
+      colors: ['#dee2e6'],
+      plotOptions: { bar: { horizontal: true, barHeight: '45%', borderRadius: 2 } },
+      xaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
+      yaxis: { labels: { maxWidth: 200 } },
+      dataLabels: { enabled: false },
+      legend: { show: false },
+      annotations: {
+        points: cats.flatMap(function(c) {
+          var points = [{
+            x: c.median, y: c.name,
+            marker: { size: 6, fillColor: '#6c757d', strokeColor: '#fff', strokeWidth: 2, shape: 'diamond' },
+            label: { text: '', borderWidth: 0 },
+          }];
+          if (c.compare > 0) {
+            var color = c.compare > c.median ? '#dc3545' : '#198754';
+            points.push({
+              x: c.compare, y: c.name,
+              marker: { size: 7, fillColor: color, strokeColor: '#fff', strokeWidth: 2 },
+              label: { text: '', borderWidth: 0 },
+            });
+          }
+          return points;
+        }),
+      },
+      tooltip: {
+        enabled: !isPrivacy,
+        custom: function(opts) {
+          var c = cats[opts.dataPointIndex];
+          if (!c) return '';
+          var color = c.compare > c.median ? '#dc3545' : '#198754';
+          return '<div style="padding:8px 12px;font-size:13px">' +
+            '<strong>' + c.name + '</strong><br>' +
+            'Selected Month: <strong style="color:' + color + '">' + fmtNum(c.compare) + '</strong> (' + (c.deviation >= 0 ? '+' : '') + c.deviation + '%)<br>' +
+            '<span style="color:#999">P25: ' + fmtNum(c.p25) +
+            ' · Median: ' + fmtNum(c.median) +
+            ' · P75: ' + fmtNum(c.p75) +
+            ' · Min: ' + fmtNum(c.min) +
+            ' · Max: ' + fmtNum(c.max) + '</span></div>';
+        }
+      },
+      grid: { borderColor: '#e9ecef' },
+    };
+
+    if (rangeChart) {
+      rangeChart.destroy();
+      window._dashCharts = window._dashCharts.filter(function(c) { return c !== rangeChart; });
+    }
+    rangeChart = new ApexCharts(document.getElementById('rangeChart'), opts);
+    rangeChart.render();
+    window._dashCharts.push(rangeChart);
+  }
+
+  // Initial render
+  var sorted = allCats.slice().sort(sortFns.deviation);
+  renderChart(sorted);
+
+  // Sort button handlers
+  document.querySelectorAll('.sort-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.sort-btn').forEach(function(b) {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline-secondary');
+      });
+      this.classList.remove('btn-outline-secondary');
+      this.classList.add('btn-primary');
+      var key = this.dataset.sort;
+      var fn = sortFns[key] || sortFns.median;
+      renderChart(allCats.slice().sort(fn));
+    });
+  });
+
+  dashboardPrivacy.apply(window._dashCharts);
+})();
+</script>
+{% endblock %}

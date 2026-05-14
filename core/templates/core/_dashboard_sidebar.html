@@ -10,7 +10,9 @@
       <div class="list-group list-group-flush">
         {% if dashboard_category == 'overview' %}
         <a href="{% url 'core:dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'overview' %} active{% endif %}">Overview</a>
-        <a href="{% url 'core:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Spending & Income</a>
+        <a href="{% url 'core:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Expense & Income</a>
+        <a href="{% url 'core:expense_details_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'expense_details' %} active{% endif %}">Expense Details</a>
+        <a href="{% url 'core:expense_range_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'expense_range' %} active{% endif %}">Expense Range</a>
         <a href="{% url 'core:category_stats_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'category_stats' %} active{% endif %}">Category Stats</a>
 
         {% elif dashboard_category == 'income' %}
@@ -35,6 +37,7 @@
         {% elif dashboard_category == 'data_quality' %}
         <a href="{% url 'core:transaction_health_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transaction_health' %} active{% endif %}">Classification Method</a>
         <a href="{% url 'core:rule_matching_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'rule_matching' %} active{% endif %}">Rule Matching</a>
+        <a href="{% url 'core:manual_classification_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'manual_classification' %} active{% endif %}">Manual Classification</a>
         <a href="{% url 'core:default_buckets_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'default_buckets' %} active{% endif %}">Default Buckets</a>
         {% endif %}
       </div>

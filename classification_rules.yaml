@@ -1,0 +1,550 @@
+# Classification Rules — hierarchical format
+# groups -> categories -> rules
+# Each rule specifies conditions (all must match). Most specific rule wins.
+
+groups:
+  expense:
+    name: Expense
+    categories:
+      Bank Fees & Charges:
+        color: '#c0392b'
+        rules:
+        - description: CARGO POR CUENTA INACTIVA
+          account_type: debit_account
+        - description: COMISION CD SINPE A
+        - description: COMISION PIN-SINPE
+          metadata.transaction_code: '59'
+        - description: COMISION RETIRO CAJAS
+          metadata.transaction_code: MD
+        - description: COMISION SINPE MOVIL
+          metadata.transaction_code: '59'
+        - description: I/T-
+          account_type: debit_account
+          metadata.transaction_code: 3V
+          detail: Receive Money Fee
+        - description: RETENCION CDS
+          account_type: debit_account
+          amount_max: 0.0
+          metadata.transaction_code: 3Q
+          detail: CDP Tax
+        - description: W/T-
+          account_type: debit_account
+          metadata.transaction_code: 3V
+          detail: Send Money Fee
+      Bank Insurance:
+        color: '#b71c1c'
+        rules:
+        - description: SEG.PRF
+        - description: SEGURO PRF
+      Bank Interest Charges:
+        color: '#a93226'
+        rules:
+        - description: INTERESES DEL MES
+          account_type: credit_account
+      Bank Transactions:
+        color: '#78909c'
+        rules:
+        - description: SINPE MOVIL
+          account_type: debit_account
+          amount_max: 0.0
+        - description: SINPE Móvil
+          account_type: debit_account
+          amount_max: 0.0
+        - description: TEF A
+          account_type: debit_account
+          amount_max: 0.0
+      Car Gas:
+        color: '#2980b9'
+        rules:
+        - description: BOMBA CASAQUE
+        - description: DELTA
+        - description: DELTA LA ROTONDA
+        - description: ESTACION AUTOPISTA
+        - description: ESTACION DE SERVICIO
+        - description: ESTACION SERVICIO
+        - description: ESTACION SERVICIOS
+        - description: GASOLINERA
+        - description: GASOLINERA LOS REYES
+        - description: INVERSIONES CASSOL
+        - description: SC GAS
+        - description: SERVICENTRO
+        - description: UNOPETROL
+      Car Insurance:
+        color: '#d35400'
+        rules:
+        - description: 'PIN-SINPE A: 15100-01**-****-7221'
+          detail: Insurance Account
+        - description: 'PIN-SINPE A: 15201-00**-****-9681'
+          account_type: debit_account
+          detail: Insurance Account
+      Car Maintenance:
+        color: '#5dade2'
+        rules:
+        - description: AUTO GLASS TEC
+        - description: DEKRA
+        - description: FACO
+        - description: FACO CURRIDABAT
+        - description: FACO URUCA
+      Car Parking & Toll:
+        color: '#607d8b'
+        rules:
+        - description: CENTRO COMERCIAL CURRIDABAT
+        - description: COBRO ADMINISTR ADM COMPASS
+        - description: COMPASS
+        - description: DEBITO COMPASS
+        - description: MUNICIPALIDAD
+        - description: OXIGEN HUMAN PLAY GROUND COMPA
+        - description: PARQUEO
+        - description: TORRE UNIVERSAL
+      Car Tax:
+        color: '#8e44ad'
+        rules:
+        - description: INS GUAPILES POCOCI
+      Car Wash:
+        color: '#3498db'
+        rules:
+        - description: LAVACAR ALFA Y OMEGA
+      Family Pet:
+        color: '#00bcd4'
+        rules:
+        - description: ASISTENCIA VETERINARIAPOCOCI
+        - description: CLINICA VETERINAR
+        - description: DR JIMMY CENTRO VETERI
+        - description: GATTOS CENTRO VETERINA
+        - description: INTENSIVET
+        - description: LA VETE
+      Food Delivery:
+        color: '#ff6b6b'
+        rules:
+        - description: DLC*UBER EATS
+        - description: UBER EATS
+      Food Eating Out:
+        color: '#e74c3c'
+        rules:
+        - description: AROMIA
+        - description: BATANGA
+        - description: BOCA TICA
+        - description: BREAKFAST CLUB
+        - description: BULALI
+        - description: BURGA
+        - description: CAFE PROVERDE
+        - description: CASA AGUIZOTES
+        - description: CHARLES BBQ
+        - description: CHEF ILLIG
+        - description: CHOLOS
+        - description: COSI
+        - description: DELICIAS DEL MAIZ JR
+        - description: EL CALLEJON
+        - description: EL ESTADERO
+        - description: EL SOCIAL
+        - description: ENTRE - NOUS
+        - description: FIK LINDORA
+        - description: FINCA LA VAQUITA
+        - description: FOOD HUNTERS
+        - description: FRANCO NUNCIATURA
+        - description: FREDDO FRESAS
+        - description: FUSION ARENAL
+        - description: GASTROINLINE
+        - description: HELADOS POPS
+        - description: HOJA DE PLATANO
+        - description: HOOLIGAN
+        - description: HOOLIGANS
+        - description: IL MERCATO
+        - description: KAWAH CAFE
+        - description: KFC
+        - description: KFC OXIGENO
+        - description: LA CARPA
+        - description: LA EMPANATTA
+        - description: LA LUNA SUL MARE
+        - description: LA NONNA
+        - description: LA PLAZITA
+        - description: LA TORTILLERIA
+        - description: LA TORTUGA LOCA
+        - description: LAMUYMUY
+        - description: LAS DELICIAS
+        - description: LENO Y CARBON
+        - description: LOLA SODA
+        - description: MC DONALD
+        - description: MC DONALDS
+        - description: MCDONALD
+        - description: MOOSE
+        - description: NACION SUSHI
+        - description: NEWREST
+        - description: NIIU
+        - description: ONVO*Hooligan
+        - description: OUI OUI LA CREPE
+        - description: PANADERIA COME PAN
+        - description: PASTA PRONTO
+        - description: PICCOLA ITALIA
+        - description: PIZZA
+        - description: PIZZERIA Y POLLO
+        - description: POPS
+        - description: PRANA
+        - description: PROTEIN BAR
+        - description: Q TOKE
+        - description: QUIZNOS
+        - description: RAMEN
+        - description: REST SENOR PATACON
+        - description: RESTAURANTE
+        - description: ROSTI POLLOS
+        - description: SANTERIA
+        - description: SANTO PECADO
+        - description: SENCHA
+        - description: SENOR PARRILLA
+        - description: SOBERANOS BREWERS
+        - description: SPOON
+        - description: STARBUCKS
+        - description: SUBWAY
+        - description: SULA CAFETERIA
+        - description: TACO BELL
+        - description: TACOS LOCOS
+        - description: TERIYAKI
+        - description: THE BLACK TAP
+        - description: TIN JO
+        - description: TOTEM FOODCOURT
+        - description: W COFFEE BAR
+        - description: WAFFLES Y MAPLE
+      Food Groceries:
+        color: '#27ae60'
+        rules:
+        - description: 7 ELEVEN
+        - description: AM PM
+        - description: AUTO MERCADO
+        - description: BIMBO
+        - description: EXPENDOMAX
+        - description: FRESH MARKET
+        - description: GIACOMIN
+        - description: GO MARKET
+        - description: MAXIPALI
+        - description: MINI MARKET
+        - description: MINI SUPER
+        - description: MXM
+        - description: MXM GUAPILES
+        - description: MXM HEREDIA
+        - description: OXXO
+        - description: PRICE SMART
+        - description: SUPER SAN LA LUCHA
+        - description: SUPER SANTA ROSA
+        - description: SUPERMERCADO
+        - description: UNISUPER
+        - description: VIDA MARKET
+        - description: VINDI
+        - description: WALMART
+      Health Dental:
+        color: '#6c757d'
+        rules:
+        - description: DRA.CAROLINA NAVARRO
+      Health Fitness:
+        color: '#1abc9c'
+        rules:
+        - description: CALISTHENICS WEIGHT
+        - description: GOLDS GYM
+        - description: SABANA FITNESS
+        - description: SINPE MOVIL Pilates
+        - description: Smartfit
+      Health Labs:
+        color: '#6c757d'
+        rules:
+        - description: LABIN
+        - description: LABORATORIO NAOS
+      Health Medical:
+        color: '#6c757d'
+        rules:
+        - description: BLUE MEDICAL
+        - description: DRM DERMATOLOGIA
+        - description: HOSPITAL CIMA
+        - description: HOSPITAL METROPOLIT
+      Health Pharmacy:
+        color: '#16a085'
+        rules:
+        - description: CENTRO DE BIOSALUD
+        - description: FARMACIA
+        - description: FARMAVALUE
+        - description: FISCHEL
+        - description: GNC SMART FIT
+        - description: LA BOTICA
+        - description: PIEL BOUTIQUE
+      Health Vision:
+        color: '#6c757d'
+        rules:
+        - description: OPTICA MUNKEL OXIGENO
+      Health Wellness:
+        color: '#17becf'
+        rules:
+        - description: INPUTS SALUD
+        - description: SINPE MOVIL Masaje
+        - description: VITA SPA
+      Housing General:
+        color: '#6610f2'
+        rules:
+        - description: 'TEF A : 955393962'
+          amount_max: -400000.0
+          detail: Landlord rent
+      Lifestyle Entertainment:
+        color: '#ff5722'
+        rules:
+        - description: CINEMARK
+        - description: EL MURO
+        - description: ESPRESSIVO BISTRO
+        - description: EXPO POCOCI
+      Lifestyle Gifts & Donations:
+        color: '#e91e63'
+        rules: []
+      Lifestyle Personal Services:
+        color: '#ab47bc'
+        rules:
+        - description: KLASSIEK
+      Lifestyle Subscriptions:
+        color: '#9c27b0'
+        rules:
+        - description: AMAZON PRIME
+        - description: APPLE.COM/BILL
+        - description: Audible
+        - description: Google One
+        - description: HOLAFLY
+        - description: Kindle
+        - description: LEETCODE
+        - description: LINKEDIN
+        - description: NETFLIX
+        - description: SPOTIFY
+        - description: STEAMGAMES
+        - description: YOUTUBE
+      Shopping Clothing:
+        color: '#f39c12'
+        rules:
+        - description: American Eagle
+        - description: PIERRE CARDIN
+      Shopping General:
+        color: '#e67e22'
+        rules:
+        - description: ALMACENES SIMAN
+        - description: DRYCLEAN USA
+        - description: FERRETERIA EPA
+        - description: JOME CR
+        - description: MERCADO 83 MALL
+        - description: PEQUENO MUNDO
+        - description: UNIVERSAL OXIGENO
+        - description: UNO SPORTS
+        - description: WAL MART
+        - description: ZARA
+      Shopping Online:
+        color: '#ff9800'
+        rules:
+        - description: AMAZON
+          account_type: credit_account
+          amount_max: 0.0
+        - description: PAYPAL
+          account_type: credit_account
+          amount_max: 0.0
+        - description: 'TEF A : 950519595'
+          detail: Circle Logistic
+      Transport General:
+        color: '#546e7a'
+        rules: []
+      Transport Uber:
+        color: '#3498db'
+        rules:
+        - description: UBER
+          account_type: credit_account
+          amount_max: 0.0
+      Travel Activities:
+        color: '#6c757d'
+        rules: []
+      Travel Agency:
+        color: '#fd7e14'
+        rules:
+        - description: 'TEF A : 952890135'
+          detail: Deseos Viajeros
+      Travel Flights:
+        color: '#6c757d'
+        rules: []
+      Travel Food:
+        color: '#6c757d'
+        rules: []
+      Travel General:
+        color: '#6c757d'
+        rules: []
+      Travel Lodging:
+        color: '#6c757d'
+        rules:
+        - description: AIRBNB
+          account_type: credit_account
+          amount_max: 0.0
+      Unclassified:
+        color: '#adb5bd'
+        rules:
+        - account_type: credit_account
+          amount_max: 0.0
+        - account_type: debit_account
+          amount_max: 0.0
+      Utilities Electricity:
+        color: '#ffc107'
+        rules:
+        - description: Pago ESPH
+        - description: Pago ICE Sector Electricidad
+      Utilities General:
+        color: '#34495e'
+        rules:
+        - description: 'TEF A : 955393962'
+          amount_max: 35000.0
+          detail: Landlord - Utilities
+      Utilities Internet:
+        color: '#0097a7'
+        rules:
+        - description: TELECABLE
+      Utilities Phone:
+        color: '#5c6bc0'
+        rules:
+        - description: I.C.E.
+        - description: Pago ICE Teléfono
+      Utilities Water:
+        color: '#0288d1'
+        rules:
+        - description: Pago AYA
+  income:
+    name: Income
+    categories:
+      Bank Interest CDP:
+        color: '#66bb6a'
+        rules: []
+      Bank Interest Cashback:
+        color: '#43a047'
+        rules:
+        - description: REDENCION
+          account_type: debit_account
+          amount_min: 0.0
+          metadata.transaction_code: CR
+          detail: Cashback
+      Bank Interest Credit:
+        color: '#6c757d'
+        rules:
+        - description: INTERESES
+          account_type: debit_account
+          amount_min: 0.0
+          metadata.transaction_code: 3O
+      Bank Interest Reversals:
+        color: '#81c784'
+        rules:
+        - description: REVERSION INTERES
+      Reimbursement General:
+        color: '#80cbc4'
+        rules:
+        - description: AIRBNB
+          account_type: credit_account
+          amount_min: 0.0
+        - description: AMAZON
+          account_type: credit_account
+          amount_min: 0.0
+        - description: SINPE MOVIL
+        - description: SINPE Móvil
+          amount_min: 0.0
+        - description: TEF DE
+          account_type: debit_account
+          amount_min: 0.0
+          detail: Default Income Transaction
+        - description: UBER
+          account_type: credit_account
+          amount_min: 0.0
+      Reimbursement Housing:
+        color: '#7e57c2'
+        rules:
+        - description: TEF DE:RUTH MERRY ULLOA BONILL
+          account_type: debit_account
+          amount_min: 225000.0
+          amount_max: 225000.0
+      Reimbursement Insurance:
+        color: '#9575cd'
+        rules:
+        - description: PAN AMERICAN LIFE INSURANCE
+          account_type: debit_account
+      Reimbursement Partner:
+        color: '#6c757d'
+        rules:
+        - description: TEF DE:RUTH MERRY ULLOA BONILL
+          account_type: debit_account
+      Unclassified:
+        color: '#adb5bd'
+        rules:
+        - account_type: debit_account
+          amount_min: 0.0
+        - account_type: credit_account
+          amount_min: 0.0
+      Work Association:
+        color: '#388e3c'
+        rules:
+        - description: DTR SINPE CARVAJAL ARAYA JORG
+          account_type: debit_account
+          amount_min: 0.0
+          metadata.reference_number: '301429195'
+          detail: ASOHPE
+        - description: DTR SINPE CARVAJAL ARAYA JORG
+          account_type: debit_account
+          amount_min: 0.0
+          metadata.reference_number: '301443806'
+          detail: ASOHPE
+        - description: 'SINPE-PIN DE: OPC-CCSS'
+      Work Bonuses:
+        color: '#2e7d32'
+        rules: []
+      Work Government:
+        color: '#6c757d'
+        rules: []
+      Work Salary:
+        color: '#28a745'
+        rules:
+        - description: CD SINPE MICROSOFT REGIONAL
+        - description: 'SINPE-PIN DE: MICROSOFT REGION'
+  transfer:
+    name: Transfer
+    categories:
+      Account BAC CDP:
+        color: '#8d6e63'
+        rules:
+        - metadata.transaction_code: 3X
+      Account BAC Credit:
+        color: '#6c757d'
+        rules:
+        - description: PAGO
+          metadata.transaction_code: PT
+        - description: SU PAGO RECIBIDO GRACIAS
+          account_type: credit_account
+          detail: Credit Card Payment
+      Account BAC Debit:
+        color: '#5c6bc0'
+        rules:
+        - description: 'TEF A : 949332456'
+          account_type: debit_account
+          detail: USD Account
+        - description: 'TEF DE: 929990265'
+          account_type: debit_account
+          detail: CRC Account
+      Account COOPENAE:
+        color: '#6c757d'
+        rules: []
+      Account MultiMoney:
+        color: '#6c757d'
+        rules:
+        - description: INVERSI N VISTA SMART
+      Broker Etoro:
+        color: '#6c757d'
+        rules:
+        - description: eToro
+      Broker Interactive Brokers:
+        color: '#6c757d'
+        rules:
+        - description: INTERACTIVE BROK
+          account_type: debit_account
+      External Cash:
+        color: '#795548'
+        rules:
+        - description: RET. S/TARJETA ATM
+        - description: RETIRO EN EFECTIVO
+      Unclassified:
+        color: '#adb5bd'
+        rules: []
+  unclassified:
+    name: Unclassified
+    categories:
+      Unclassified:
+        color: '#adb5bd'
+        rules: []

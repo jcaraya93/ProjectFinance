@@ -290,8 +290,8 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
 
         monthly_data = {
             'labels': [date_fmt_fn(p) for p in periods_set],
-            'income': [float(income_lookup.get(p, 0)) for p in periods_set],
-            'expenses': [float(expense_lookup.get(p, 0)) for p in periods_set],
+            'income': [float(income_lookup.get(p) or 0) for p in periods_set],
+            'expenses': [float(expense_lookup.get(p) or 0) for p in periods_set],
         }
 
     # ── Expense category breakdown (doughnut) ─────────────────

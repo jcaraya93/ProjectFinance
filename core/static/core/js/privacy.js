@@ -14,7 +14,7 @@
     return localStorage.getItem(STORAGE_KEY) !== 'off';
   }
 
-  function applyPrivacy(charts) {
+  function applyPrivacy(charts, isToggle) {
     var on = isPrivacyOn();
 
     // Mask or reveal [data-sensitive] elements
@@ -29,27 +29,29 @@
       }
     });
 
-    // Update chart instances (supports both Chart.js and ApexCharts)
-    (charts || []).forEach(function (chart) {
-      if (chart.update && chart.options && chart.options.plugins) {
-        // Chart.js instance
-        chart.options.plugins.tooltip.enabled = !on;
-        if (chart.options.scales && chart.options.scales.y) {
-          if (on) {
-            chart.options.scales.y.ticks.callback = function () { return ''; };
-          } else {
-            delete chart.options.scales.y.ticks.callback;
+    // Update chart instances only on toggle (not initial load) to preserve animations
+    if (isToggle) {
+      (charts || []).forEach(function (chart) {
+        if (chart.update && chart.options && chart.options.plugins) {
+          // Chart.js instance
+          chart.options.plugins.tooltip.enabled = !on;
+          if (chart.options.scales && chart.options.scales.y) {
+            if (on) {
+              chart.options.scales.y.ticks.callback = function () { return ''; };
+            } else {
+              delete chart.options.scales.y.ticks.callback;
+            }
           }
+          chart.update('none');
+        } else if (chart.updateOptions) {
+          // ApexCharts instance
+          chart.updateOptions({
+            yaxis: { labels: { show: !on } },
+            tooltip: { enabled: !on },
+          }, false, false);
         }
-        chart.update('none');
-      } else if (chart.updateOptions) {
-        // ApexCharts instance
-        chart.updateOptions({
-          yaxis: { labels: { show: !on } },
-          tooltip: { enabled: !on },
-        }, false, false);
-      }
-    });
+      });
+    }
 
     // Update toggle button appearance
     var btn = document.getElementById('privacyToggle');
@@ -67,7 +69,7 @@
   function toggle(charts) {
     var on = isPrivacyOn();
     localStorage.setItem(STORAGE_KEY, on ? 'off' : 'on');
-    applyPrivacy(charts);
+    applyPrivacy(charts, true);
   }
 
   // Expose globally

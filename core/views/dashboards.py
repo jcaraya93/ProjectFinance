@@ -16,7 +16,10 @@ __all__ = [
     'transaction_health_dashboard',
     'rule_matching_dashboard',
     'default_buckets_dashboard',
+    'manual_classification_dashboard',
     'spending_income_dashboard',
+    'expense_details_dashboard',
+    'expense_range_dashboard',
     'chart_comparison',
     'car_dashboard',
     'car_gas_dashboard',
@@ -66,6 +69,8 @@ PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
 DASHBOARD_CATEGORIES = {
     'overview': 'overview', 'spending_income': 'overview', 'category_stats': 'overview',
+    'expense_details': 'overview',
+    'expense_range': 'overview',
     'income_overview': 'income', 'income_salary': 'income', 'income_bonus': 'income',
     'reimbursement_overview': 'income',
     'bank_income_overview': 'income',
@@ -74,7 +79,7 @@ DASHBOARD_CATEGORIES = {
     'transaction_pairing': 'transfers',
     'car': 'expense', 'car_gas': 'expense', 'car_parking': 'expense',
     'transaction_health': 'data_quality', 'rule_matching': 'data_quality',
-    'default_buckets': 'data_quality',
+    'default_buckets': 'data_quality', 'manual_classification': 'data_quality',
 }
 
 
@@ -403,6 +408,112 @@ def default_buckets_dashboard(request, display_currency, time_group):
     return context
 
 
+@dashboard_view("manual_classification", "core/dashboard_manual_classification.html")
+def manual_classification_dashboard(request, display_currency, time_group):
+    """Dashboard for transactions that were manually classified."""
+    from collections import defaultdict
+    from django.db.models import Count, Sum
+    from django.db.models.functions import TruncMonth, Abs
+
+    user = request.user
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    manual_qs = LogicalTransaction.objects.filter(
+        user=user, classification_method='manual',
+    ).select_related('category__group')
+
+    total_all = LogicalTransaction.objects.filter(user=user).count()
+    total_manual = manual_qs.count()
+    manual_pct = (total_manual / total_all * 100) if total_all else 0
+
+    # By category group
+    GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transfer': 'Transfer', 'unclassified': 'Unclassified'}
+    group_breakdown = list(
+        manual_qs.values('category__group__slug')
+        .annotate(count=Count('id'), total_amount=Sum(abs_field))
+        .order_by('-count')
+    )
+    group_stats = []
+    for r in group_breakdown:
+        slug = r['category__group__slug']
+        group_stats.append({
+            'slug': slug,
+            'label': GROUP_LABELS.get(slug, slug),
+            'count': r['count'],
+            'amount': float(r['total_amount'] or 0),
+        })
+
+    # By category (top 20)
+    cat_breakdown = list(
+        manual_qs.values('category__name', 'category__color', 'category__group__slug')
+        .annotate(count=Count('id'), total_amount=Sum(abs_field))
+        .order_by('-count')[:20]
+    )
+    cat_data = {
+        'labels': [r['category__name'] for r in cat_breakdown],
+        'values': [r['count'] for r in cat_breakdown],
+        'colors': [r['category__color'] or '#6c757d' for r in cat_breakdown],
+    }
+
+    # Monthly trend
+    monthly_raw = (
+        manual_qs.annotate(month=TruncMonth('date'))
+        .values('month')
+        .annotate(count=Count('id'))
+        .order_by('month')
+    )
+    sorted_months = sorted(r['month'] for r in monthly_raw)
+    month_map = {r['month']: r['count'] for r in monthly_raw}
+    monthly_data = {
+        'labels': [m.strftime('%Y-%m') for m in sorted_months],
+        'values': [month_map.get(m, 0) for m in sorted_months],
+    }
+
+    # Top repeated descriptions (candidates for new rules)
+    desc_counts = list(
+        manual_qs.values('description', 'category__name', 'category__color', 'category__group__slug')
+        .annotate(count=Count('id'), total_amount=Sum(abs_field))
+        .filter(count__gte=2)
+        .order_by('-count')[:20]
+    )
+    rule_candidates = [
+        {
+            'description': r['description'],
+            'category': r['category__name'],
+            'color': r['category__color'] or '#6c757d',
+            'group': GROUP_LABELS.get(r['category__group__slug'], r['category__group__slug']),
+            'count': r['count'],
+            'amount': float(r['total_amount'] or 0),
+        }
+        for r in desc_counts
+    ]
+
+    # Recent manual transactions
+    recent = list(
+        manual_qs.order_by('-date')[:30]
+        .values('date', 'description', 'category__name', 'category__color', amount_field)
+    )
+    for r in recent:
+        r['amount'] = abs(float(r.pop(amount_field) or 0))
+        r['category'] = r.pop('category__name')
+        r['color'] = r.pop('category__color') or '#6c757d'
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'total_all': total_all,
+        'total_manual': total_manual,
+        'manual_pct': manual_pct,
+        'group_stats': group_stats,
+        'cat_data': json.dumps(cat_data, cls=DecimalEncoder),
+        'monthly_data': json.dumps(monthly_data, cls=DecimalEncoder),
+        'rule_candidates': rule_candidates,
+        'recent': recent,
+    }
+    return context
+
+
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
 def spending_income_dashboard(request, display_currency, time_group):
     """Spending & Income breakdown dashboard with selectable time frames."""
@@ -431,10 +542,12 @@ def spending_income_dashboard(request, display_currency, time_group):
         return date(y, m, 1)
 
     ref_month_label = ref_first.strftime('%b %Y')
+    ytd_start = date(ref_date.year, 1, 1)
     time_frames = [
         ('month', ref_month_label, ref_first),
         ('quarter', 'Last Quarter', _months_ago(2)),
         ('semester', 'Last 6 Months', _months_ago(5)),
+        ('ytd', 'Year to Date', ytd_start),
         ('year', 'Last Year', _months_ago(11)),
         ('all', 'All Time', None),
     ]
@@ -2738,6 +2851,247 @@ def transaction_pairing_dashboard(request, display_currency, time_group):
         'external_count': external_count,
         'total_count': total,
         'match_rate': match_rate,
+    }
+    return context
+
+
+@dashboard_view("expense_details", "core/dashboard_expense_details.html")
+def expense_details_dashboard(request, display_currency, time_group):
+    """Expense category breakdown: last month vs historical min/median/avg/max."""
+    from collections import defaultdict
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth, Abs
+
+    user = request.user
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    qs = LogicalTransaction.objects.filter(
+        user=user,
+        category__isnull=False,
+        category__group__slug='expense',
+        **{f'{amount_field}__isnull': False},
+    ).exclude(category__name='Unclassified')
+
+    monthly_cat = (
+        qs.annotate(month=TruncMonth('date'))
+        .values('month', 'category__name', 'category__color')
+        .annotate(total=Sum(abs_field))
+        .order_by('category__name', 'month')
+    )
+
+    cat_months = defaultdict(lambda: {'month_data': {}, 'color': '#6c757d'})
+    all_months = set()
+    for r in monthly_cat:
+        key = r['category__name']
+        m = r['month'].strftime('%Y-%m')
+        cat_months[key]['month_data'][m] = float(r['total'] or 0)
+        cat_months[key]['color'] = r['category__color'] or '#6c757d'
+        all_months.add(r['month'])
+
+    sorted_months = sorted(all_months)
+    last_month = sorted_months[-1] if sorted_months else None
+    last_month_name = last_month.strftime('%B %Y') if last_month else 'N/A'
+
+    last_month_totals = {}
+    if last_month:
+        last_month_qs = (
+            qs.filter(date__year=last_month.year, date__month=last_month.month)
+            .values('category__name')
+            .annotate(total=Sum(abs_field))
+        )
+        for r in last_month_qs:
+            last_month_totals[r['category__name']] = float(r['total'] or 0)
+
+    def compute_stats(values):
+        if not values:
+            return {'min': 0, 'max': 0, 'avg': 0, 'median': 0}
+        s = sorted(values)
+        n = len(s)
+        return {
+            'min': s[0],
+            'max': s[-1],
+            'avg': sum(s) / n,
+            'median': s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2,
+        }
+
+    expense_categories = []
+    for cat_name, data in sorted(cat_months.items(), key=lambda x: x[0]):
+        all_vals = list(data['month_data'].values())
+        stats = compute_stats(all_vals)
+        last_val = last_month_totals.get(cat_name, 0)
+        entry = {
+            'name': cat_name,
+            'color': data['color'],
+            'last_month': round(last_val),
+            'min': round(stats['min']),
+            'median': round(stats['median']),
+            'avg': round(stats['avg']),
+            'max': round(stats['max']),
+        }
+        expense_categories.append(entry)
+
+    expense_categories.sort(key=lambda x: x['last_month'], reverse=True)
+
+    total_last_month = sum(c['last_month'] for c in expense_categories)
+    total_median = sum(c['median'] for c in expense_categories)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'last_month_name': last_month_name,
+        'expense_categories': expense_categories,
+        'expense_data': json.dumps(expense_categories, cls=DecimalEncoder),
+        'total_last_month': total_last_month,
+        'total_median': total_median,
+    }
+    return context
+
+
+@dashboard_view("expense_range", "core/dashboard_expense_range.html")
+def expense_range_dashboard(request, display_currency, time_group):
+    """Expense range chart: min/median/max per category with selected month marker."""
+    from collections import defaultdict
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth, Abs
+    from core.models import StatementImport
+
+    user = request.user
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    # Get all expense data first (unfiltered) to know available months
+    base_qs = LogicalTransaction.objects.filter(
+        user=user, category__isnull=False, category__group__slug='expense',
+        **{f'{amount_field}__isnull': False},
+    ).exclude(category__name='Unclassified')
+
+    all_monthly = (
+        base_qs.annotate(month=TruncMonth('date'))
+        .values('month', 'category__name', 'category__color')
+        .annotate(total=Sum(abs_field))
+        .order_by('category__name', 'month')
+    )
+
+    # Build full month→category→amount map
+    full_cat_months = defaultdict(lambda: defaultdict(float))
+    cat_colors = {}
+    all_month_set = set()
+    for r in all_monthly:
+        key = r['category__name']
+        m_key = r['month'].strftime('%Y-%m')
+        full_cat_months[key][m_key] = float(r['total'] or 0)
+        cat_colors[key] = r['category__color'] or '#6c757d'
+        all_month_set.add(r['month'])
+
+    sorted_all_months = sorted(all_month_set)
+    all_month_labels = [m.strftime('%Y-%m') for m in sorted_all_months]
+
+    # Determine reference month for latest statement
+    latest_stmt = (
+        StatementImport.objects.filter(user=user)
+        .order_by('-statement_date').first()
+    )
+    if latest_stmt and latest_stmt.statement_date:
+        ref_first = latest_stmt.statement_date.replace(day=1)
+    else:
+        ref_first = date.today().replace(day=1)
+
+    def _months_ago(n):
+        y, m = ref_first.year, ref_first.month - n
+        while m < 1:
+            m += 12
+            y -= 1
+        return date(y, m, 1)
+
+    # Time range filter
+    ref_month_label = ref_first.strftime('%b %Y')
+    time_frames = [
+        ('quarter', 'Last Quarter', _months_ago(2)),
+        ('semester', 'Last 6 Months', _months_ago(5)),
+        ('year', 'Last Year', _months_ago(11)),
+        ('all', 'All Time', None),
+    ]
+    frame_map = {key: (label, start) for key, label, start in time_frames}
+
+    selected_frame = request.GET.get('time_frame', 'all')
+    if selected_frame not in frame_map:
+        selected_frame = 'all'
+    frame_label, range_start = frame_map[selected_frame]
+
+    # Filter months within the selected range
+    if range_start:
+        range_months = [m for m in sorted_all_months if m >= range_start]
+    else:
+        range_months = sorted_all_months
+
+    range_month_labels = [m.strftime('%Y-%m') for m in range_months]
+
+    # Selected comparison month (default: latest in range)
+    selected_month = request.GET.get('compare_month', '')
+    if selected_month not in range_month_labels and range_month_labels:
+        selected_month = range_month_labels[-1]
+
+    # Build stats from the range, compare against selected month
+    def compute_stats(values):
+        if not values:
+            return {'min': 0, 'max': 0, 'avg': 0, 'median': 0, 'p25': 0, 'p75': 0}
+        s = sorted(values)
+        n = len(s)
+        def percentile(pct):
+            k = (n - 1) * pct / 100
+            f = int(k)
+            c = f + 1 if f + 1 < n else f
+            return s[f] + (k - f) * (s[c] - s[f])
+        return {
+            'min': s[0], 'max': s[-1], 'avg': sum(s) / n,
+            'median': percentile(50),
+            'p25': percentile(25),
+            'p75': percentile(75),
+        }
+
+    expense_categories = []
+    for cat_name in sorted(full_cat_months.keys()):
+        range_vals = [full_cat_months[cat_name].get(m, 0) for m in range_month_labels if full_cat_months[cat_name].get(m, 0) > 0]
+        if not range_vals:
+            continue
+        stats = compute_stats(range_vals)
+        compare_val = full_cat_months[cat_name].get(selected_month, 0)
+        expense_categories.append({
+            'name': cat_name, 'color': cat_colors.get(cat_name, '#6c757d'),
+            'compare': round(compare_val),
+            'min': round(stats['min']), 'median': round(stats['median']),
+            'avg': round(stats['avg']), 'max': round(stats['max']),
+            'p25': round(stats['p25']), 'p75': round(stats['p75']),
+        })
+
+    expense_categories.sort(key=lambda x: x['median'], reverse=True)
+
+    # Overall monthly totals for the period (sum all categories per month)
+    monthly_totals = []
+    for m in range_month_labels:
+        month_sum = sum(full_cat_months[cat].get(m, 0) for cat in full_cat_months)
+        monthly_totals.append(month_sum)
+    overall_stats = compute_stats([v for v in monthly_totals if v > 0])
+    compare_total = sum(c['compare'] for c in expense_categories)
+
+    context = {
+        'currency_symbol': currency_symbol,
+        'expense_data': json.dumps(expense_categories, cls=DecimalEncoder),
+        'time_frames': time_frames,
+        'selected_frame': selected_frame,
+        'frame_label': frame_label,
+        'range_months': range_month_labels,
+        'selected_month': selected_month,
+        'overall_min': round(overall_stats['min']),
+        'overall_p25': round(overall_stats['p25']),
+        'overall_median': round(overall_stats['median']),
+        'overall_avg': round(overall_stats['avg']),
+        'overall_p75': round(overall_stats['p75']),
+        'overall_max': round(overall_stats['max']),
+        'compare_total': round(compare_total),
     }
     return context
 

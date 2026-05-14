@@ -55,39 +55,6 @@
       </div>
     </div>
 
-    <!-- Summary tables -->
-    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expense Details</h5>
-    <div class="card mb-4">
-      <div class="card-body table-responsive">
-        <table class="table table-sm table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th class="text-end">Last Month</th>
-              <th class="text-end">Min</th>
-              <th class="text-end">Median</th>
-              <th class="text-end">Average</th>
-              <th class="text-end">Max</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for cat in expense_categories %}
-            <tr>
-              <td><span class="badge rounded-pill me-1" style="background-color: {{ cat.color }}">⠀</span>{{ cat.name }}</td>
-              <td class="text-end">{{ currency_symbol }}{{ cat.last_month|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.min|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.median|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.avg|format_number }}</td>
-              <td class="text-end text-muted">{{ currency_symbol }}{{ cat.max|format_number }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="6" class="text-muted">No expense data</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
     </div>
   </div>
 </div>

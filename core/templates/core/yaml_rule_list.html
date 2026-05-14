@@ -9,6 +9,11 @@
       {% csrf_token %}
       <button type="submit" class="btn btn-outline-success">Apply Rules to Unclassified</button>
     </form>
+    <form method="post" action="{% url 'core:delete_unused_rules' %}" class="d-inline"
+          onsubmit="return confirm('Delete all rules with zero matches?')">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-danger">Delete Unused Rules</button>
+    </form>
     <a href="{% url 'core:yaml_rule_add' %}{% if filter_group %}?group={{ filter_group|urlencode }}&category={{ filter_category|urlencode }}{% endif %}" class="btn btn-primary">+ Add Rule</a>
   </div>
 </div>
