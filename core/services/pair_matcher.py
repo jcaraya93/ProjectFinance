@@ -1,8 +1,16 @@
 """Auto-matching service for transfer transaction pairs.
 
-Scans RawTransactions whose LogicalTransaction is in the transfer group
-(Internal, Credit categories) and creates TransactionPair records linking
-the outgoing and incoming sides.
+Scans LogicalTransactions in the transfer group and creates TransactionPair
+records linking the outgoing and incoming sides.
+
+Pairing rules:
+- Both sides must share the same transfer category (e.g. two "Account BAC
+  Debit" transactions).  This prevents cross-category false positives such
+  as a broker wire matching an unrelated credit-card payment.
+- Both sides must come from different bank accounts.
+- Amounts must have opposite signs (negative = outgoing, positive = incoming).
+- Dates must be within ±2 days.
+- CRC or USD amounts must be within a 2 % + ₡5 000 tolerance.
 """
 import logging
 from collections import defaultdict
@@ -13,8 +21,6 @@ from core.models import (
 )
 
 logger = logging.getLogger(__name__)
-
-PAIRABLE_CATEGORIES = ['Internal', 'Credit']
 
 
 @dataclass
@@ -32,7 +38,7 @@ def auto_match_transfers(user, dry_run=False):
     """
     result = MatchResult()
 
-    # Get all RawTransactions in pairable categories that are NOT already paired
+    # Get all RawTransactions that are already paired
     already_paired_out = set(
         TransactionPair.objects.filter(user=user, outgoing__isnull=False)
         .values_list('outgoing_id', flat=True)
@@ -43,12 +49,11 @@ def auto_match_transfers(user, dry_run=False):
     )
     already_paired = already_paired_out | already_paired_in
 
-    # Get candidate LogicalTransactions in transfer group with pairable categories
+    # Get all LogicalTransactions in the transfer group
     logical_txns = (
         LogicalTransaction.objects.filter(
             user=user,
             category__group__slug='transfer',
-            category__name__in=PAIRABLE_CATEGORIES,
         )
         .select_related(
             'raw_transaction__ledger__statement_import__account',
@@ -56,7 +61,7 @@ def auto_match_transfers(user, dry_run=False):
         )
     )
 
-    # Build candidate list with raw transaction info
+    # Build candidate list, grouped by category for same-category matching
     candidates = []
     for lt in logical_txns:
         raw = lt.raw_transaction
@@ -80,7 +85,8 @@ def auto_match_transfers(user, dry_run=False):
             'category': lt.category.name,
         })
 
-    # Match pairs: different accounts, opposite signs, close amounts, close dates
+    # Match pairs: same category, different accounts, opposite signs,
+    # close amounts, close dates
     matched = set()
     pairs_to_create = []
     unmatched_to_create = []
@@ -95,17 +101,19 @@ def auto_match_transfers(user, dry_run=False):
         for j, cj in enumerate(candidates):
             if j <= i or cj['raw_id'] in matched:
                 continue
+            # Must be the same transfer category
+            if ci['category'] != cj['category']:
+                continue
             # Must be different accounts
             if ci['account_id'] == cj['account_id']:
                 continue
-            # Must be opposite signs (negative=out, positive=in — standardized)
+            # Must be opposite signs (negative=out, positive=in)
             if ci['amount_crc'] * cj['amount_crc'] >= 0:
                 continue
 
-            # Date tolerance: Internal ±1 day, Credit ±2 days
+            # Date tolerance: ±2 days
             day_diff = abs((ci['date'] - cj['date']).days)
-            max_days = 1 if ci['category'] == 'Internal' else 2
-            if day_diff > max_days:
+            if day_diff > 2:
                 continue
 
             # Amount matching: CRC or USD, within tolerance
