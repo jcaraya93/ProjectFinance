@@ -1973,8 +1973,6 @@ def _match_transfer_pairs(user, amount_field, display_currency):
         acct = stmt.account if stmt else None
         currency = ledger.currency if ledger else ''
         acct_label = str(acct) if acct else 'Unknown'
-        if currency and hasattr(acct, 'creditaccount'):
-            acct_label = f'{acct_label} ({currency})'
         all_txns.append({
             'date': t.date,
             'amount': float(getattr(t, amount_field) or 0),
@@ -2100,8 +2098,6 @@ def credit_transfers_dashboard(request, display_currency, time_group):
         is_credit = hasattr(acct, 'creditaccount') if acct else False
         currency = ledger.currency if ledger else ''
         acct_label = str(acct) if acct else 'Unknown'
-        if currency and is_credit:
-            acct_label = f'{acct_label} ({currency})'
         entry = {
             'date': t.date,
             'amount': float(getattr(t, amount_field) or 0),
