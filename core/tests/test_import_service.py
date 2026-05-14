@@ -67,7 +67,7 @@ class TestImportCredit:
 
         for txn in LogicalTransaction.objects.filter(user=user):
             assert txn.category is not None
-            assert txn.category.name == 'Unclassified Unclassified'
+            assert txn.category.name == 'Unclassified'
 
     def test_no_classification_during_import(
         self, mock_fetch, user, expense_category, exchange_rates, credit_csv

@@ -2666,7 +2666,7 @@ def category_stats_dashboard(request, display_currency, time_group):
         user=user,
         category__isnull=False,
         **{f'{amount_field}__isnull': False},
-    ).exclude(category__name='Unclassified Unclassified')
+    ).exclude(category__name='Unclassified')
 
     monthly_cat = (
         qs.annotate(month=TruncMonth('date'))

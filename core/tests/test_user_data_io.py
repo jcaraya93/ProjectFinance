@@ -101,7 +101,7 @@ class TestExport:
         assert 'Groceries' in cat_names
         assert 'Salary Main' in cat_names
         # Default categories are also included
-        assert 'Unclassified Unclassified' in cat_names
+        assert 'Unclassified' in cat_names
 
     def test_export_rules(self, user, full_data):
         data = export_user_data(user)

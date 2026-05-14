@@ -182,7 +182,7 @@ def _rule_phase(rule_obj):
         category = rule_obj.get('category', '')
     if group == 'transfer':
         return 0
-    if category == 'Unclassified Unclassified':
+    if category == 'Unclassified':
         return 2
     return 1
 

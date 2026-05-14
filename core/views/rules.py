@@ -35,7 +35,7 @@ def yaml_rule_list(request):
     for grp in get_category_groups(request.user, exclude_unclassified=True):
         cats = sorted(
             [c.name for c in grp.categories.all()],
-            key=lambda x: (x == 'Unclassified Unclassified', x)
+            key=lambda x: (x == 'Unclassified', x)
         )
         if cats:
             group_categories[grp.slug] = cats
@@ -403,7 +403,7 @@ def yaml_category_delete(request):
     group_slug = request.POST.get('group', '')
     cat_name = request.POST.get('category', '').strip()
 
-    PROTECTED = {'Unclassified Unclassified'}
+    PROTECTED = {'Unclassified'}
     if cat_name in PROTECTED:
         messages.error(request, f'The "{cat_name}" category is protected and cannot be deleted.')
         return redirect('core:category_list')
@@ -462,7 +462,7 @@ def yaml_category_rename(request):
     old_name = request.POST.get('old_name', '').strip()
     new_name = request.POST.get('new_name', '').strip()
 
-    PROTECTED = {'Unclassified Unclassified'}
+    PROTECTED = {'Unclassified'}
     if old_name in PROTECTED:
         messages.error(request, f'The "{old_name}" category is protected and cannot be renamed.')
         return redirect('core:category_list')

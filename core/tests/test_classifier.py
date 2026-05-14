@@ -128,13 +128,13 @@ class TestRulePhase:
         assert _rule_phase({'group': 'expense', 'category': 'Groceries'}) == 1
 
     def test_default_phase_2(self):
-        assert _rule_phase({'group': 'expense', 'category': 'Unclassified Unclassified'}) == 2
+        assert _rule_phase({'group': 'expense', 'category': 'Unclassified'}) == 2
 
     def test_income_specific_phase_1(self):
         assert _rule_phase({'group': 'income', 'category': 'Salary'}) == 1
 
     def test_income_default_phase_2(self):
-        assert _rule_phase({'group': 'income', 'category': 'Unclassified Unclassified'}) == 2
+        assert _rule_phase({'group': 'income', 'category': 'Unclassified'}) == 2
 
 
 # ── DB-backed classification ────────────────────────────────────
@@ -181,7 +181,7 @@ class TestClassifySingle:
         txn = _make_txn(user, description='RANDOM STORE')
         category, rule = classify_transaction_yaml(txn)
 
-        assert category.name == 'Unclassified Unclassified'
+        assert category.name == 'Unclassified'
         assert rule is None
 
     def test_most_specific_wins(self, user, expense_category):

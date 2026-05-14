@@ -78,11 +78,11 @@ class TestCategoryRename:
     def test_rename_protected_default(self, auth_client, unclassified_category):
         resp = auth_client.post(reverse('core:yaml_category_rename'), {
             'group': 'unclassified',
-            'old_name': 'Unclassified Unclassified',
+            'old_name': 'Unclassified',
             'new_name': 'Something',
         })
         assert resp.status_code == 302
-        assert Category.objects.filter(name='Unclassified Unclassified').exists()
+        assert Category.objects.filter(name='Unclassified').exists()
 
 
 class TestCategoryDelete:
@@ -108,10 +108,10 @@ class TestCategoryDelete:
     def test_delete_protected_default(self, auth_client, unclassified_category):
         resp = auth_client.post(reverse('core:yaml_category_delete'), {
             'group': 'unclassified',
-            'category': 'Unclassified Unclassified',
+            'category': 'Unclassified',
         })
         assert resp.status_code == 302
-        assert Category.objects.filter(name='Unclassified Unclassified').exists()
+        assert Category.objects.filter(name='Unclassified').exists()
 
 
 class TestCategoryExport:

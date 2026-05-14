@@ -52,7 +52,7 @@
             <a href="{% url 'core:transaction_list' %}?group={{ grp_slug }}&category={{ cat.id }}" class="badge bg-secondary text-decoration-none">{{ cat.txn_count }}</a>
           </td>
           <td class="text-end text-nowrap">
-            {% if cat.name != 'Unclassified Unclassified' %}
+            {% if cat.name != 'Unclassified' %}
             <button type="button" class="btn btn-sm btn-outline-primary rename-category-btn" data-group="{{ grp_slug }}" data-name="{{ cat.name }}">Rename</button>
             <form method="post" action="{% url 'core:yaml_category_delete' %}" class="d-inline"
                   onsubmit="return confirm('Delete &quot;{{ cat.name }}&quot; and all its rules? Transactions will become unclassified.')">

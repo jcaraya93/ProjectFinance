@@ -73,14 +73,14 @@ class CategoryGroup(models.Model):
 
 
 class Category(models.Model):
-    UNCLASSIFIED_NAME = 'Unclassified Unclassified'
+    UNCLASSIFIED_NAME = 'Unclassified'
 
     name = models.CharField(max_length=100)
     color = models.CharField(max_length=7, default='#6c757d', help_text='Hex color for charts')
     group = models.ForeignKey(CategoryGroup, on_delete=models.PROTECT, related_name='categories')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
 
-    PROTECTED_NAMES = {'Unclassified Unclassified'}
+    PROTECTED_NAMES = {'Unclassified'}
 
     class Meta:
         verbose_name_plural = 'categories'
