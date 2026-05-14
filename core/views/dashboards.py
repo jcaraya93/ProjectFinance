@@ -1723,9 +1723,17 @@ def credit_payment_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
 
+    # Find categories that contain credit-account transactions, then fetch both sides
+    credit_cat_ids = list(
+        Transaction.objects.filter(
+            user=request.user,
+            category__group__slug='transfer',
+            raw_transaction__ledger__statement_import__account__account_type='credit_account',
+        ).values_list('category_id', flat=True).distinct()
+    )
     cp_qs = Transaction.objects.filter(
         user=request.user,
-        category__name=CREDIT_PAYMENT_CATEGORY,
+        category_id__in=credit_cat_ids,
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
     ).select_related('raw_transaction__ledger__statement_import__account')
@@ -1845,10 +1853,10 @@ def personal_account_dashboard(request, display_currency, time_group):
 
     pa_qs = Transaction.objects.filter(
         user=request.user,
-        category__name__in=[PERSONAL_ACCOUNT_CATEGORY, CREDIT_PAYMENT_CATEGORY],
+        category__group__slug='transfer',
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
-    ).select_related('raw_transaction__ledger__statement_import__account')
+    ).select_related('raw_transaction__ledger__statement_import__account', 'category')
 
     # Collect all transactions with their account info
     all_txns = []
@@ -1868,7 +1876,8 @@ def personal_account_dashboard(request, display_currency, time_group):
             'category': t.category.name,
         })
 
-    # Match: find pairs on same/adjacent day, different accounts, opposite signs, close amounts
+    # Match: find pairs on same/adjacent day, same category, different accounts,
+    # opposite signs, close amounts
     matched = set()
     internal_txns = []
     external_txns = []
@@ -1879,6 +1888,8 @@ def personal_account_dashboard(request, display_currency, time_group):
         found_pair = False
         for j, tj in enumerate(all_txns):
             if j <= i or j in matched:
+                continue
+            if ti['category'] != tj['category']:
                 continue
             if ti['account_id'] == tj['account_id']:
                 continue
@@ -2080,9 +2091,18 @@ def credit_transfers_dashboard(request, display_currency, time_group):
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
+    # Get all transfer transactions that involve a credit account on either side.
+    # Find categories containing credit-account transactions, then fetch both sides.
+    credit_cat_ids = list(
+        Transaction.objects.filter(
+            user=request.user,
+            category__group__slug='transfer',
+            raw_transaction__ledger__statement_import__account__account_type='credit_account',
+        ).values_list('category_id', flat=True).distinct()
+    )
     cp_qs = Transaction.objects.filter(
         user=request.user,
-        category__name=CREDIT_PAYMENT_CATEGORY,
+        category_id__in=credit_cat_ids,
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
     ).select_related('raw_transaction__ledger__statement_import__account')
@@ -2206,33 +2226,31 @@ def credit_transfers_dashboard(request, display_currency, time_group):
 def external_transfers_dashboard(request, display_currency, time_group):
     """Dashboard for external transfers — money going to/from non-registered accounts."""
     from collections import defaultdict
-    from django.db.models import Sum
-    from django.db.models.functions import TruncMonth, Abs
 
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
-    abs_field = Abs(amount_field)
 
-    ext_qs = Transaction.objects.filter(
-        user=request.user,
-        category__name='External',
-        category__group__slug='transfer',
-        **{f'{amount_field}__isnull': False},
-    )
+    # External transfers are unmatched transfer-group transactions
+    _, _, ext_list = _match_transfer_pairs(request.user, amount_field, display_currency)
 
-    # Separate outgoing/incoming
-    all_txns = list(ext_qs.order_by('-date').values(
-        'date', 'description', amount_field,
-    ))
     outgoing = []
     incoming = []
-    for t in all_txns:
-        amt = float(t[amount_field] or 0)
-        entry = {'date': t['date'], 'amount': amt, 'abs_amount': abs(amt), 'description': t['description']}
+    for t in ext_list:
+        amt = t['amount']
+        entry = {
+            'date': t['date'], 'amount': amt, 'abs_amount': abs(amt),
+            'description': t['description'], 'category': t['category'],
+            'account_name': t.get('account_name', ''),
+        }
         if amt < 0:
             outgoing.append(entry)
         else:
             incoming.append(entry)
+
+    # Sort by date descending
+    outgoing.sort(key=lambda e: e['date'], reverse=True)
+    incoming.sort(key=lambda e: e['date'], reverse=True)
+    all_txns = outgoing + incoming
 
     total_out = sum(t['abs_amount'] for t in outgoing)
     total_in = sum(t['abs_amount'] for t in incoming)
