@@ -1951,15 +1951,19 @@ def personal_account_dashboard(request, display_currency, time_group):
 
 
 def _match_transfer_pairs(user, amount_field, display_currency):
-    """Shared logic: match Personal Account + Credit Payment transactions into internal/external."""
+    """Shared logic: match transfer-group transactions into internal pairs / external.
+
+    Uses the same rules as pair_matcher.py: same category, different accounts,
+    opposite CRC signs, ±2 day tolerance, and 2% + ₡5000 amount threshold.
+    """
     from collections import defaultdict
 
     pa_qs = Transaction.objects.filter(
         user=user,
-        category__name__in=[PERSONAL_ACCOUNT_CATEGORY, CREDIT_PAYMENT_CATEGORY],
+        category__group__slug='transfer',
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
-    ).select_related('raw_transaction__ledger__statement_import__account')
+    ).select_related('raw_transaction__ledger__statement_import__account', 'category')
 
     all_txns = []
     for t in pa_qs.order_by('date'):
@@ -1990,28 +1994,36 @@ def _match_transfer_pairs(user, amount_field, display_currency):
     for i, ti in enumerate(all_txns):
         if i in matched:
             continue
-        found = False
+        best_match = None
+        best_diff = float('inf')
         for j, tj in enumerate(all_txns):
-            if j <= i or j in matched or ti['account_id'] == tj['account_id']:
+            if j <= i or j in matched:
                 continue
-            if abs((ti['date'] - tj['date']).days) > 2:
+            # Same category, different accounts, opposite CRC signs
+            if ti['category'] != tj['category']:
+                continue
+            if ti['account_id'] == tj['account_id']:
                 continue
             if ti['amount_crc'] * tj['amount_crc'] >= 0:
                 continue
+            if abs((ti['date'] - tj['date']).days) > 2:
+                continue
             crc_diff = abs(abs(ti['amount_crc']) - abs(tj['amount_crc'])) if ti['amount_crc'] and tj['amount_crc'] else float('inf')
             usd_diff = abs(abs(ti['amount_usd']) - abs(tj['amount_usd'])) if ti['amount_usd'] and tj['amount_usd'] else float('inf')
+            amt_diff = min(crc_diff, usd_diff)
             threshold = min(abs(ti['amount_crc']), abs(tj['amount_crc'])) * 0.02 + 5000
-            if min(crc_diff, usd_diff) < threshold:
-                matched.add(i)
-                matched.add(j)
-                # The outgoing side is the one with negative amount
-                out_side = ti if ti['amount'] < 0 else tj
-                in_side = tj if ti['amount'] < 0 else ti
-                out_side['abs_amount'] = abs(out_side['amount'])
-                internal_pairs.append({'out': out_side, 'in': in_side})
-                found = True
-                break
-        if not found and i not in matched:
+            if amt_diff < threshold and amt_diff < best_diff:
+                best_diff = amt_diff
+                best_match = j
+        if best_match is not None:
+            tj = all_txns[best_match]
+            matched.add(i)
+            matched.add(best_match)
+            out_side = ti if ti['amount_crc'] < 0 else tj
+            in_side = tj if ti['amount_crc'] < 0 else ti
+            out_side['abs_amount'] = abs(out_side['amount'])
+            internal_pairs.append({'out': out_side, 'in': in_side})
+        elif i not in matched:
             external_txns.append(ti)
 
     return all_txns, internal_pairs, external_txns
@@ -2270,76 +2282,32 @@ def transfer_flow_dashboard(request, display_currency, time_group):
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
-    transfer_qs = Transaction.objects.filter(
-        user=request.user,
-        category__group__slug='transfer',
-        **{f'{amount_field}__isnull': False},
-    ).select_related(
-        'raw_transaction__ledger__statement_import__account',
-        'category',
-    )
-
-    # Build flows: source → destination with volume
     flows = defaultdict(float)
     flow_counts = defaultdict(int)
 
-    for t in transfer_qs:
-        raw = t.raw_transaction
-        ledger = raw.ledger if raw else None
-        stmt = ledger.statement_import if ledger else None
-        acct = stmt.account if stmt else None
-        acct_name = str(acct) if acct else 'Unknown'
-        cat = t.category.name
-        amt = float(getattr(t, amount_field) or 0)
+    # Build flows from matched pairs and unmatched transactions
+    _, internal_pairs, external_txns = _match_transfer_pairs(request.user, amount_field, display_currency)
 
-        # Determine source and destination based on category and direction
-        if cat == 'Internal':
-            # Skip — will use matched pairs from _match_transfer_pairs below
-            pass
-        elif cat == 'Credit':
-            if acct and hasattr(acct, 'creditaccount'):
-                # Credit side — skip, we'll capture this from the debit side
-                pass
-            else:
-                # Debit side paying to credit card
-                currency = ledger.currency if ledger else ''
-                if amt < 0:
-                    flows[(acct_name, 'Credit 2918')] += abs(amt)
-                    flow_counts[(acct_name, 'Credit 2918')] += 1
-        elif cat == 'External':
-            if amt < 0:
-                flows[(acct_name, 'Investments')] += abs(amt)
-                flow_counts[(acct_name, 'Investments')] += 1
-            else:
-                flows[('Investments', acct_name)] += abs(amt)
-                flow_counts[('Investments', acct_name)] += 1
-        elif cat == 'Cash Withdrawal':
-            if amt < 0:
-                flows[(acct_name, 'Cash')] += abs(amt)
-                flow_counts[(acct_name, 'Cash')] += 1
-        elif cat == 'CDP':
-            if amt < 0:
-                flows[(acct_name, 'CDP')] += abs(amt)
-                flow_counts[(acct_name, 'CDP')] += 1
-            else:
-                flows[('CDP', acct_name)] += abs(amt)
-                flow_counts[('CDP', acct_name)] += 1
-        elif cat == 'Investments':
-            if amt < 0:
-                flows[(acct_name, 'Investments')] += abs(amt)
-                flow_counts[(acct_name, 'Investments')] += 1
-            else:
-                flows[('Investments', acct_name)] += abs(amt)
-                flow_counts[('Investments', acct_name)] += 1
-
-    # Add Internal transfers using matched pairs (actual account names)
-    _, internal_pairs, _ = _match_transfer_pairs(request.user, amount_field, display_currency)
+    # Paired transfers: actual account → account
     for p in internal_pairs:
         src = p['out']['account_name']
         dst = p['in']['account_name']
         vol = abs(p['out']['amount'])
         flows[(src, dst)] += vol
         flow_counts[(src, dst)] += 1
+
+    # Unpaired transfers: account → category (outgoing) or category → account (incoming)
+    for t in external_txns:
+        raw = t.get('raw_transaction')
+        acct_name = t.get('account_name', 'Unknown')
+        cat = t['category']
+        amt = t['amount']
+        if amt < 0:
+            flows[(acct_name, cat)] += abs(amt)
+            flow_counts[(acct_name, cat)] += 1
+        elif amt > 0:
+            flows[(cat, acct_name)] += abs(amt)
+            flow_counts[(cat, acct_name)] += 1
 
     # Add income sources flowing into debit accounts
     from django.db.models.functions import Abs as _Abs
@@ -2476,68 +2444,29 @@ def transfer_graph_dashboard(request, display_currency, time_group):
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
-    transfer_qs = Transaction.objects.filter(
-        user=request.user,
-        category__group__slug='transfer',
-        **{f'{amount_field}__isnull': False},
-    ).select_related(
-        'raw_transaction__ledger__statement_import__account',
-        'category',
-    )
-
-    # Build edges: unique connections with volume and count
+    # Build edges from matched pairs and unmatched transactions
     edges = defaultdict(lambda: {'volume': 0, 'count': 0})
 
-    for t in transfer_qs:
-        raw = t.raw_transaction
-        ledger = raw.ledger if raw else None
-        stmt = ledger.statement_import if ledger else None
-        acct = stmt.account if stmt else None
-        acct_name = str(acct) if acct else 'Unknown'
-        cat = t.category.name
-        amt = float(getattr(t, amount_field) or 0)
+    _, internal_pairs, external_txns = _match_transfer_pairs(request.user, amount_field, display_currency)
 
-        if cat == 'Internal':
-            pass  # handled via pairs below
-        elif cat == 'Credit':
-            if acct and hasattr(acct, 'creditaccount'):
-                pass
-            elif amt < 0:
-                edges[(acct_name, 'Credit Card')]['volume'] += abs(amt)
-                edges[(acct_name, 'Credit Card')]['count'] += 1
-        elif cat == 'External':
-            if amt < 0:
-                edges[(acct_name, 'External')]['volume'] += abs(amt)
-                edges[(acct_name, 'External')]['count'] += 1
-            else:
-                edges[('External', acct_name)]['volume'] += abs(amt)
-                edges[('External', acct_name)]['count'] += 1
-        elif cat == 'Cash Withdrawal':
-            if amt < 0:
-                edges[(acct_name, 'Cash')]['volume'] += abs(amt)
-                edges[(acct_name, 'Cash')]['count'] += 1
-        elif cat == 'CDP':
-            if amt < 0:
-                edges[(acct_name, 'CDP')]['volume'] += abs(amt)
-                edges[(acct_name, 'CDP')]['count'] += 1
-            else:
-                edges[('CDP', acct_name)]['volume'] += abs(amt)
-                edges[('CDP', acct_name)]['count'] += 1
-        elif cat == 'Investments':
-            if amt < 0:
-                edges[(acct_name, 'Investments')]['volume'] += abs(amt)
-                edges[(acct_name, 'Investments')]['count'] += 1
-            else:
-                edges[('Investments', acct_name)]['volume'] += abs(amt)
-                edges[('Investments', acct_name)]['count'] += 1
-
-    # Internal pairs
-    _, internal_pairs, _ = _match_transfer_pairs(request.user, amount_field, display_currency)
+    # Paired transfers: account → account
     for p in internal_pairs:
         src = p['out']['account_name']
         dst = p['in']['account_name']
         edges[(src, dst)]['volume'] += abs(p['out']['amount'])
         edges[(src, dst)]['count'] += 1
+
+    # Unpaired transfers: account → category or category → account
+    for t in external_txns:
+        acct_name = t.get('account_name', 'Unknown')
+        cat = t['category']
+        amt = t['amount']
+        if amt < 0:
+            edges[(acct_name, cat)]['volume'] += abs(amt)
+            edges[(acct_name, cat)]['count'] += 1
+        elif amt > 0:
+            edges[(cat, acct_name)]['volume'] += abs(amt)
+            edges[(cat, acct_name)]['count'] += 1
 
     # Build graph data
     all_nodes = set()
