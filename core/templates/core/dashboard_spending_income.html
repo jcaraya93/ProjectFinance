@@ -12,10 +12,19 @@
   <!-- Right panel -->
   <div class="col-md-10">
 
-    <!-- Currency toggle -->
+    <!-- Currency toggle + time frame -->
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Spending & Income — Last 12 Months</h4>
-      {% include "core/_currency_toggle.html" %}
+      <h4 class="mb-0">Spending & Income — {{ frame_label }}</h4>
+      <div class="d-flex align-items-center gap-2">
+        {% include "core/_currency_toggle.html" %}
+      </div>
+    </div>
+
+    <!-- Time frame selector -->
+    <div class="btn-group btn-group-sm mb-3" role="group">
+      {% for key, label, start in time_frames %}
+      <a href="?display_currency={{ display_currency }}&time_frame={{ key }}" class="btn {% if selected_frame == key %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ label }}</a>
+      {% endfor %}
     </div>
 
     <!-- ═══ SPENDING ═══ -->

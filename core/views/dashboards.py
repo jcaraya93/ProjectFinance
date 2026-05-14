@@ -405,15 +405,44 @@ def default_buckets_dashboard(request, display_currency, time_group):
 
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
 def spending_income_dashboard(request, display_currency, time_group):
-    """Spending & Income breakdown dashboard — last 12 months."""
+    """Spending & Income breakdown dashboard with selectable time frames."""
     from datetime import timedelta
-    today = date.today()
-    start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1).isoformat()
 
-    return get_dashboard_stats(request.user,
-        start_date=start_12m,
+    today = date.today()
+    first_of_month = today.replace(day=1)
+
+    def _months_ago(n):
+        """Return the first day of the month n months before first_of_month."""
+        y, m = first_of_month.year, first_of_month.month - n
+        while m < 1:
+            m += 12
+            y -= 1
+        return date(y, m, 1)
+
+    time_frames = [
+        ('month', 'Last Month', (first_of_month - timedelta(days=1)).replace(day=1)),
+        ('quarter', 'Last Quarter', _months_ago(3)),
+        ('semester', 'Last 6 Months', _months_ago(6)),
+        ('year', 'Last Year', _months_ago(12)),
+        ('all', 'All Time', None),
+    ]
+    frame_map = {key: (label, start) for key, label, start in time_frames}
+
+    selected_frame = request.GET.get('time_frame', 'year')
+    if selected_frame not in frame_map:
+        selected_frame = 'year'
+
+    frame_label, start_date = frame_map[selected_frame]
+    start_iso = start_date.isoformat() if start_date else None
+
+    context = get_dashboard_stats(request.user,
+        start_date=start_iso,
         display_currency=display_currency,
     )
+    context['selected_frame'] = selected_frame
+    context['frame_label'] = frame_label
+    context['time_frames'] = time_frames
+    return context
 
 
 @dashboard_view("chart_comparison", "core/chart_comparison.html")
