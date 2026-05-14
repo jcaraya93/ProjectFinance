@@ -29,7 +29,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ last_month_total|format_number }}</h3>
             <div class="small">
               {% if median_pct > 0 %}<span class="text-success">▲ {{ median_pct|floatformat:0 }}% above median</span>
@@ -83,6 +83,13 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- View Transactions Link -->
+    <div class="text-end mb-4">
+      <a href="{% url 'core:transaction_list' %}?group=income&category={{ salary_category_ids }}" class="btn btn-outline-primary">
+        View All Salary Transactions →
+      </a>
     </div>
 
   </div><!-- col-md-10 -->

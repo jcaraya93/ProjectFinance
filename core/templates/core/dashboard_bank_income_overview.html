@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 {% load finance_filters %}
-{% block title %}Bank Income Overview — Project Finance{% endblock %}
+{% block title %}Bank Income — Project Finance{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -11,7 +11,7 @@
   <div class="col-md-10">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Bank Income Overview</h4>
+      <h4 class="mb-0">Bank Income</h4>
       <div class="d-flex align-items-center gap-2">
         <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
           <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
@@ -26,8 +26,13 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month_label }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ last_month_total|format_number }}</h3>
+            <div class="small">
+              {% if median_pct > 0 %}<span class="text-success">▲ {{ median_pct|floatformat:0 }}% above median</span>
+              {% elif median_pct < 0 %}<span class="text-danger">▼ {{ median_pct|floatformat:0 }}% below median</span>
+              {% else %}<span class="text-muted">At median</span>{% endif %}
+            </div>
           </div>
         </div>
       </div>
@@ -45,6 +50,7 @@
           <div class="card-body">
             <h6 class="card-subtitle text-muted">All Time Total</h6>
             <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ all_time_total|format_number }}</h3>
+            <div class="small text-muted">&nbsp;</div>
           </div>
         </div>
       </div>
@@ -70,11 +76,40 @@
       </div>
     </div>
 
+    <!-- Individual Transactions + Count -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-7 d-flex">
+        <div class="card w-100">
+          <div class="card-body d-flex flex-column">
+            <h6 class="card-title">Individual Transactions</h6>
+            <div id="scatterChart" class="flex-grow-1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-5 d-flex">
+        <div class="card w-100">
+          <div class="card-body d-flex flex-column">
+            <h6 class="card-title">Transactions per Month</h6>
+            <div id="countChart" class="flex-grow-1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- View Transactions Link -->
+    <div class="text-end mb-4">
+      <a href="{% url 'core:transaction_list' %}?group=income&category={{ bank_category_ids }}" class="btn btn-outline-primary">
+        View All Bank Income Transactions →
+      </a>
+    </div>
+
   </div>
 </div>
 
 <script id="breakdownData" type="application/json">{{ breakdown_data|escapejson }}</script>
 <script id="stackedData" type="application/json">{{ stacked_data|escapejson }}</script>
+<script id="scatterData" type="application/json">{{ scatter_data|escapejson }}</script>
+<script id="countData" type="application/json">{{ count_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}
@@ -84,6 +119,7 @@
   window._dashCharts = [];
   var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
 
+  // Breakdown donut
   var bk = DashboardCharts.parseJSON('breakdownData');
   if (bk) {
     var donutChart = new ApexCharts(document.getElementById('breakdownChart'), {
@@ -103,6 +139,7 @@
     window._dashCharts.push(donutChart);
   }
 
+  // Stacked bar by category
   var stacked = JSON.parse(document.getElementById('stackedData').textContent);
   var stackedChart = new ApexCharts(document.getElementById('stackedChart'), {
     chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
@@ -118,6 +155,56 @@
   });
   stackedChart.render();
   window._dashCharts.push(stackedChart);
+
+  // Individual transactions scatter (multi-series by category)
+  var scatterRaw = JSON.parse(document.getElementById('scatterData').textContent);
+  var scatterSeries = (scatterRaw.series || []).map(function(s) {
+    return {
+      name: s.name,
+      data: s.data.map(function(t) { return { x: new Date(t.date).getTime(), y: t.amount, meta: t.description }; }),
+    };
+  });
+  var scatterChart = new ApexCharts(document.getElementById('scatterChart'), {
+    chart: { type: 'scatter', height: 300, toolbar: { show: false }, zoom: { enabled: false } },
+    series: scatterSeries,
+    colors: scatterRaw.colors || [],
+    xaxis: { type: 'datetime' },
+    yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
+    markers: { size: 6, strokeWidth: 0, opacity: 0.7 },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: {
+      enabled: !isPrivacy,
+      custom: function(opts) {
+        var s = scatterRaw.series[opts.seriesIndex];
+        var t = s.data[opts.dataPointIndex];
+        return '<div style="padding:8px 12px"><b>' + t.date + '</b><br>' +
+          '<span style="font-size:12px;color:#666">' + s.name + '</span><br>' +
+          '<span style="font-size:13px">' + t.description + '</span><br>' +
+          '<b>' + fmtNum(t.amount) + '</b></div>';
+      },
+    },
+    grid: { borderColor: '#e9ecef' },
+  });
+  scatterChart.render();
+  window._dashCharts.push(scatterChart);
+
+  // Transaction count per month (stacked by category)
+  var countRaw = JSON.parse(document.getElementById('countData').textContent);
+  var countChart = new ApexCharts(document.getElementById('countChart'), {
+    chart: { type: 'bar', height: 300, stacked: true, toolbar: { show: false } },
+    series: countRaw.series || [],
+    colors: countRaw.colors || [],
+    plotOptions: { bar: { borderRadius: 4 } },
+    xaxis: { categories: countRaw.labels || [] },
+    yaxis: { labels: { formatter: function(v) { return Math.round(v); } } },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: { shared: true, intersect: false, y: { formatter: function(v) { return v + ' transactions'; } } },
+    grid: { borderColor: '#e9ecef' },
+  });
+  countChart.render();
+  window._dashCharts.push(countChart);
 
   dashboardPrivacy.apply(window._dashCharts);
 })();

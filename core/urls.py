@@ -13,7 +13,6 @@ urlpatterns = [
     path('income/salary/', views.income_salary_dashboard, name='income_salary_dashboard'),
     path('income/bonuses/', views.income_bonus_dashboard, name='income_bonus_dashboard'),
     path('income/', views.income_overview_dashboard, name='income_overview_dashboard'),
-    path('income/transactions/', views.income_txn_dashboard, name='income_txn_dashboard'),
     path('reimbursements/', views.reimbursement_overview_dashboard, name='reimbursement_overview_dashboard'),
     path('bank-income/', views.bank_income_overview_dashboard, name='bank_income_overview_dashboard'),
     path('internal-transfers/', views.internal_transfers_dashboard, name='internal_transfers_dashboard'),

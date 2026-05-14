@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 {% load finance_filters %}
-{% block title %}Reimbursement Overview — Project Finance{% endblock %}
+{% block title %}Reimbursement — Project Finance{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -11,7 +11,7 @@
   <div class="col-md-10">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Reimbursement Overview</h4>
+      <h4 class="mb-0">Reimbursement</h4>
       <div class="d-flex align-items-center gap-2">
         <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
           <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
@@ -26,7 +26,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month_label }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ last_month_total|format_number }}</h3>
             <div class="small">
               {% if median_pct > 0 %}<span class="text-success">▲ {{ median_pct|floatformat:0 }}% above median</span>
@@ -96,34 +96,12 @@
       </div>
     </div>
 
-    <!-- Recent Transactions -->
-    {% if events %}
-    <div class="card mb-4">
-      <div class="card-header fw-bold">Recent Transactions</div>
-      <div class="table-responsive">
-        <table class="table table-hover table-sm align-middle mb-0">
-          <thead class="table-light">
-            <tr>
-              <th>Date</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th class="text-end">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for e in events %}
-            <tr>
-              <td class="text-nowrap">{{ e.date }}</td>
-              <td><span class="badge" style="background-color: {{ e.color }}">{{ e.category }}</span></td>
-              <td>{{ e.description }}</td>
-              <td class="text-end text-success" data-sensitive>{{ currency_symbol }}{{ e.amount|format_number }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+    <!-- View Transactions Link -->
+    <div class="text-end mb-4">
+      <a href="{% url 'core:transaction_list' %}?group=income&category={{ reimbursement_category_ids }}" class="btn btn-outline-primary">
+        View All Reimbursement Transactions →
+      </a>
     </div>
-    {% endif %}
 
   </div>
 </div>
@@ -183,22 +161,30 @@
   stackedChart.render();
   window._dashCharts.push(stackedChart);
 
-  // Individual transactions scatter
+  // Individual transactions scatter (multi-series by category)
   var scatterRaw = JSON.parse(document.getElementById('scatterData').textContent);
-  var scatterPoints = scatterRaw.map(function(t) { return { x: new Date(t.date).getTime(), y: t.amount }; });
+  var scatterSeries = (scatterRaw.series || []).map(function(s) {
+    return {
+      name: s.name,
+      data: s.data.map(function(t) { return { x: new Date(t.date).getTime(), y: t.amount, meta: t.description }; }),
+    };
+  });
   var scatterChart = new ApexCharts(document.getElementById('scatterChart'), {
     chart: { type: 'scatter', height: 300, toolbar: { show: false }, zoom: { enabled: false } },
-    series: [{ name: 'Amount', data: scatterPoints }],
-    colors: ['#2ecc71'],
+    series: scatterSeries,
+    colors: scatterRaw.colors || [],
     xaxis: { type: 'datetime' },
     yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
     markers: { size: 6, strokeWidth: 0, opacity: 0.7 },
     dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
     tooltip: {
       enabled: !isPrivacy,
       custom: function(opts) {
-        var t = scatterRaw[opts.dataPointIndex];
+        var s = scatterRaw.series[opts.seriesIndex];
+        var t = s.data[opts.dataPointIndex];
         return '<div style="padding:8px 12px"><b>' + t.date + '</b><br>' +
+          '<span style="font-size:12px;color:#666">' + s.name + '</span><br>' +
           '<span style="font-size:13px">' + t.description + '</span><br>' +
           '<b>' + fmtNum(t.amount) + '</b></div>';
       },
@@ -208,17 +194,18 @@
   scatterChart.render();
   window._dashCharts.push(scatterChart);
 
-  // Transaction count per month
+  // Transaction count per month (stacked by category)
   var countRaw = JSON.parse(document.getElementById('countData').textContent);
   var countChart = new ApexCharts(document.getElementById('countChart'), {
-    chart: { type: 'bar', height: 300, toolbar: { show: false } },
-    series: [{ name: 'Count', data: countRaw.values || [] }],
-    colors: ['#2ecc71'],
+    chart: { type: 'bar', height: 300, stacked: true, toolbar: { show: false } },
+    series: countRaw.series || [],
+    colors: countRaw.colors || [],
     plotOptions: { bar: { borderRadius: 4 } },
     xaxis: { categories: countRaw.labels || [] },
     yaxis: { labels: { formatter: function(v) { return Math.round(v); } } },
     dataLabels: { enabled: false },
-    tooltip: { y: { formatter: function(v) { return v + ' transactions'; } } },
+    legend: { position: 'bottom' },
+    tooltip: { shared: true, intersect: false, y: { formatter: function(v) { return v + ' transactions'; } } },
     grid: { borderColor: '#e9ecef' },
   });
   countChart.render();

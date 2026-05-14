@@ -24,7 +24,6 @@ __all__ = [
     'income_salary_dashboard',
     'income_bonus_dashboard',
     'income_overview_dashboard',
-    'income_txn_dashboard',
     'reimbursement_overview_dashboard',
     'bank_income_overview_dashboard',
     'internal_transfers_dashboard',
@@ -68,7 +67,7 @@ PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 DASHBOARD_CATEGORIES = {
     'overview': 'overview', 'spending_income': 'overview', 'category_stats': 'overview',
     'income_overview': 'income', 'income_salary': 'income', 'income_bonus': 'income',
-    'reimbursement_overview': 'income', 'income_txn': 'income',
+    'reimbursement_overview': 'income',
     'bank_income_overview': 'income',
     'transfer_flow': 'transfers', 'internal_transfers': 'transfers',
     'credit_transfers': 'transfers', 'external_transfers': 'transfers',
@@ -1021,6 +1020,7 @@ def car_parking_dashboard(request, display_currency, time_group):
 def income_salary_dashboard(request, display_currency, time_group):
     """Dashboard focused on Salary Main income."""
     from collections import defaultdict
+    from datetime import timedelta
     from django.db.models import Sum, Count, Avg
     from django.db.models.functions import TruncMonth
 
@@ -1031,6 +1031,28 @@ def income_salary_dashboard(request, display_currency, time_group):
         category__name='Work Salary',
         **{f'{amount_field}__isnull': False},
     )
+
+    # --- Determine last period from latest statement ---
+    from core.models import StatementImport
+    today = date.today()
+    latest_stmt = (
+        StatementImport.objects.filter(user=request.user)
+        .order_by('-statement_date').first()
+    )
+    if latest_stmt and latest_stmt.statement_date:
+        stmt_date = latest_stmt.statement_date
+        last_period_start = stmt_date.replace(day=1)
+        if stmt_date.month == 12:
+            last_period_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            last_period_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
+        last_month_label = f"{last_period_start.strftime('%b %Y')} (latest)"
+        last_period_key = last_period_start.strftime('%Y-%m')
+    else:
+        last_period_end = today.replace(day=1) - timedelta(days=1)
+        last_period_start = last_period_end.replace(day=1)
+        last_month_label = last_period_start.strftime('%b %Y')
+        last_period_key = last_period_start.strftime('%Y-%m')
 
     # --- Always compute monthly summary cards ---
     monthly_agg = (
@@ -1054,8 +1076,7 @@ def income_salary_dashboard(request, display_currency, time_group):
     median_monthly = (sorted_totals[n // 2] if n % 2 else
                       (sorted_totals[n // 2 - 1] + sorted_totals[n // 2]) / 2) if n else 0
 
-    last_month = sorted_month_keys[-1] if sorted_month_keys else ''
-    last_month_total = monthly_map.get(last_month, 0)
+    last_month_total = monthly_map.get(last_period_key, 0)
     median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
 
     last_12 = monthly_totals_list[-12:] if len(monthly_totals_list) >= 12 else monthly_totals_list
@@ -1092,9 +1113,18 @@ def income_salary_dashboard(request, display_currency, time_group):
         'median': chart_median,
     }, cls=DecimalEncoder)
 
+    # --- Link to transactions ---
+    from core.models import Category
+    salary_cat_ids = list(
+        Category.objects.filter(
+            user=request.user, name='Work Salary', group__slug='income',
+        ).values_list('id', flat=True)
+    )
+    salary_category_ids = '&category='.join(str(cid) for cid in salary_cat_ids)
+
     context = {
         'currency_symbol': currency_symbol,
-        'last_month': last_month,
+        'last_month_label': last_month_label,
         'last_month_total': last_month_total,
         'avg_monthly': avg_monthly,
         'median_monthly': median_monthly,
@@ -1102,6 +1132,7 @@ def income_salary_dashboard(request, display_currency, time_group):
         'salary_last_year': salary_last_year,
         'sorted_months': sorted_month_keys,
         'trend_data': trend_data,
+        'salary_category_ids': salary_category_ids,
     }
     return context
 
@@ -1151,6 +1182,15 @@ def income_bonus_dashboard(request, display_currency, time_group):
         for e in extra_events
     ], cls=DecimalEncoder)
 
+    # --- Link to transactions ---
+    from core.models import Category
+    extras_cat_ids = list(
+        Category.objects.filter(
+            user=request.user, name__in=EXTRA_INCOME_CATEGORIES, group__slug='income',
+        ).values_list('id', flat=True)
+    )
+    extras_category_ids = '&category='.join(str(cid) for cid in extras_cat_ids)
+
     context = {
         'currency_symbol': currency_symbol,
         'bonus_total': bonus_total,
@@ -1159,6 +1199,7 @@ def income_bonus_dashboard(request, display_currency, time_group):
         'extra_combined': extra_combined,
         'extra_events': extra_events,
         'extra_events_json': extra_events_json,
+        'extras_category_ids': extras_category_ids,
     }
     return context
 
@@ -1312,183 +1353,7 @@ def income_overview_dashboard(request, display_currency, time_group):
         'composition_data': composition_data,
         'income_category_data': json.dumps(income_category_data, cls=DecimalEncoder),
         'top_income_data': json.dumps(top_income_data, cls=DecimalEncoder),
-    }
-    return context
-
-
-@dashboard_view("income_txn", "core/dashboard_income_txn.html", default_time_group="biweekly")
-def income_txn_dashboard(request, display_currency, time_group):
-    """Dashboard for Reimbursement income categories — filterable by sub-category."""
-    from collections import defaultdict
-    from datetime import timedelta
-    from django.db.models import Sum, Count
-    from django.db.models.functions import TruncMonth, Abs
-
-    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
-    currency_symbol = '₡' if display_currency == 'CRC' else '$'
-    abs_field = Abs(amount_field)
-
-    today = date.today()
-    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-    last_month_end = today.replace(day=1) - timedelta(days=1)
-    last_month_label = last_month_start.strftime('%Y-%m')
-
-    # Category filter from query param
-    selected_category = request.GET.get('category', '')
-    if selected_category and selected_category in REIMBURSEMENT_CATEGORIES:
-        filter_categories = [selected_category]
-    else:
-        selected_category = ''
-        filter_categories = REIMBURSEMENT_CATEGORIES
-
-    txn_qs = Transaction.objects.filter(
-        user=request.user,
-        category__name__in=filter_categories,
-        category__group__slug='income',
-        **{f'{amount_field}__isnull': False},
-    )
-
-    # --- Summary cards (always monthly) ---
-    last_month_total = float(
-        txn_qs.filter(date__gte=last_month_start, date__lte=last_month_end)
-        .aggregate(t=Sum(abs_field))['t'] or 0
-    )
-
-    monthly_agg = (
-        txn_qs.annotate(month=TruncMonth('date'))
-        .values('month')
-        .annotate(total=Sum(abs_field), cnt=Count('id'))
-        .order_by('month')
-    )
-    monthly_map = {}
-    monthly_counts = {}
-    for r in monthly_agg:
-        m = r['month'].strftime('%Y-%m')
-        monthly_map[m] = float(r['total'] or 0)
-        monthly_counts[m] = r['cnt']
-    sorted_month_keys = sorted(monthly_map.keys())
-    monthly_totals = [monthly_map[m] for m in sorted_month_keys]
-
-    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
-    sorted_vals = sorted(monthly_totals)
-    n = len(sorted_vals)
-    median_monthly = (sorted_vals[n // 2] if n % 2 else
-                      (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2) if n else 0
-    all_time_total = sum(monthly_totals)
-    median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
-
-    # --- Chart data grouped by time_group ---
-    if time_group == 'biweekly':
-        def _semi_month_key(d):
-            return date(d.year, d.month, 1 if d.day < 15 else 15)
-
-        txn_raw = txn_qs.values_list('date', amount_field)
-        period_totals = defaultdict(float)
-        period_counts = defaultdict(int)
-        for d, amt in txn_raw:
-            if amt:
-                key = _semi_month_key(d)
-                period_totals[key] += abs(float(amt))
-                period_counts[key] += 1
-
-        sorted_periods = sorted(period_totals.keys())
-        chart_labels = [p.strftime('%Y-%m-%d') for p in sorted_periods]
-        chart_values = [round(period_totals[p]) for p in sorted_periods]
-        chart_counts = [period_counts[p] for p in sorted_periods]
-    else:
-        chart_labels = sorted_month_keys
-        chart_values = [round(v) for v in monthly_totals]
-        chart_counts = [monthly_counts.get(m, 0) for m in sorted_month_keys]
-
-    chart_vals_sorted = sorted(chart_values)
-    cn = len(chart_vals_sorted)
-    chart_median = (chart_vals_sorted[cn // 2] if cn % 2 else
-                    (chart_vals_sorted[cn // 2 - 1] + chart_vals_sorted[cn // 2]) / 2) if cn else 0
-
-    trend_data = json.dumps({
-        'labels': chart_labels,
-        'values': chart_values,
-        'median': chart_median,
-    }, cls=DecimalEncoder)
-
-    count_data = json.dumps({
-        'labels': chart_labels,
-        'values': chart_counts,
-    }, cls=DecimalEncoder)
-
-    # --- Individual transactions for scatter plot ---
-    individual_txns = list(
-        txn_qs.order_by('date')
-        .values_list('date', amount_field, 'description')
-    )
-    scatter_data = json.dumps([{
-        'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
-        'amount': round(abs(float(amt))) if amt else 0,
-        'description': desc,
-    } for d, amt, desc in individual_txns], cls=DecimalEncoder)
-
-    # --- Recent transactions table ---
-    events = list(
-        txn_qs.order_by('-date')[:50]
-        .values('date', 'description', amount_field)
-    )
-    for e in events:
-        e['amount'] = abs(float(e.pop(amount_field) or 0))
-
-    # --- Overview charts (only when showing All) ---
-    breakdown_data = ''
-    stacked_data = ''
-    if not selected_category:
-        from django.db.models.functions import TruncMonth as _TM
-        cat_breakdown = list(
-            txn_qs.values('category__name', 'category__color')
-            .annotate(abs_total=Sum(abs_field))
-            .order_by('-abs_total')
-        )
-        bd = {'labels': [], 'values': [], 'colors': []}
-        for r in cat_breakdown:
-            bd['labels'].append(r['category__name'] or 'Uncategorized')
-            bd['values'].append(float(r['abs_total'] or 0))
-            bd['colors'].append(r['category__color'] or '#6c757d')
-        breakdown_data = json.dumps(bd, cls=DecimalEncoder)
-
-        cat_monthly_qs = (
-            txn_qs.annotate(month=_TM('date'))
-            .values('month', 'category__name', 'category__color')
-            .annotate(total=Sum(abs_field))
-            .order_by('month')
-        )
-        from collections import defaultdict as _dd
-        csm = _dd(lambda: _dd(float))
-        ccm = {}
-        for r in cat_monthly_qs:
-            name = r['category__name']
-            m = r['month'].strftime('%Y-%m')
-            csm[name][m] = float(r['total'] or 0)
-            ccm[name] = r['category__color'] or '#6c757d'
-        ss = []
-        sc = []
-        for name in sorted(csm.keys(), key=lambda k: -sum(csm[k].values())):
-            ss.append({'name': name, 'data': [round(csm[name].get(m, 0)) for m in sorted_month_keys]})
-            sc.append(ccm[name])
-        stacked_data = json.dumps({'labels': sorted_month_keys, 'series': ss, 'colors': sc}, cls=DecimalEncoder)
-
-    context = {
-        'currency_symbol': currency_symbol,
-        'last_month_label': last_month_label,
-        'last_month_total': last_month_total,
-        'avg_monthly': avg_monthly,
-        'median_monthly': median_monthly,
-        'median_pct': median_pct,
-        'all_time_total': all_time_total,
-        'trend_data': trend_data,
-        'count_data': count_data,
-        'scatter_data': scatter_data,
-        'breakdown_data': breakdown_data,
-        'stacked_data': stacked_data,
-        'events': events,
-        'reimbursement_categories': REIMBURSEMENT_CATEGORIES,
-        'selected_category': selected_category,
+        'filter_group': 'income',
     }
     return context
 
@@ -1508,10 +1373,24 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
 
+    from core.models import StatementImport
     today = date.today()
-    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-    last_month_end = today.replace(day=1) - timedelta(days=1)
-    last_month_label = last_month_start.strftime('%Y-%m')
+    latest_stmt = (
+        StatementImport.objects.filter(user=request.user)
+        .order_by('-statement_date').first()
+    )
+    if latest_stmt and latest_stmt.statement_date:
+        stmt_date = latest_stmt.statement_date
+        last_month_start = stmt_date.replace(day=1)
+        if stmt_date.month == 12:
+            last_month_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            last_month_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
+        last_month_label = f"{last_month_start.strftime('%b %Y')} (latest)"
+    else:
+        last_month_end = today.replace(day=1) - timedelta(days=1)
+        last_month_start = last_month_end.replace(day=1)
+        last_month_label = last_month_start.strftime('%Y-%m')
 
     reimb_qs = Transaction.objects.filter(
         user=request.user,
@@ -1613,30 +1492,76 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         e['category'] = e.pop('category__name')
         e['color'] = e.pop('category__color') or '#6c757d'
 
-    # --- Individual transactions scatter ---
+    # --- Individual transactions scatter (with category) ---
     individual_txns = list(
         reimb_qs.order_by('date')
-        .values_list('date', amount_field, 'description')
+        .values_list('date', amount_field, 'description', 'category__name', 'category__color')
     )
-    scatter_data = json.dumps([{
-        'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
-        'amount': round(abs(float(amt))) if amt else 0,
-        'description': desc,
-    } for d, amt, desc in individual_txns], cls=DecimalEncoder)
+    # Group by category for multi-series scatter
+    from collections import OrderedDict
+    scatter_by_cat = defaultdict(list)
+    scatter_colors = {}
+    for d, amt, desc, cat_name, cat_color in individual_txns:
+        cat = cat_name or 'Uncategorized'
+        scatter_by_cat[cat].append({
+            'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
+            'amount': round(abs(float(amt))) if amt else 0,
+            'description': desc,
+        })
+        scatter_colors[cat] = cat_color or '#6c757d'
 
-    # --- Transaction count per month ---
+    scatter_series = []
+    scatter_color_list = []
+    for cat in sorted(scatter_by_cat.keys(), key=lambda k: -len(scatter_by_cat[k])):
+        scatter_series.append({'name': cat, 'data': scatter_by_cat[cat]})
+        scatter_color_list.append(scatter_colors[cat])
+
+    scatter_data = json.dumps({
+        'series': scatter_series,
+        'colors': scatter_color_list,
+    }, cls=DecimalEncoder)
+
+    # --- Transaction count per month (stacked by category) ---
     from django.db.models import Count
-    count_agg = (
+    count_cat_agg = (
         reimb_qs.annotate(month=TruncMonth('date'))
-        .values('month')
+        .values('month', 'category__name', 'category__color')
         .annotate(cnt=Count('id'))
         .order_by('month')
     )
-    count_map = {r['month'].strftime('%Y-%m'): r['cnt'] for r in count_agg}
+    count_cat_map = defaultdict(lambda: defaultdict(int))
+    count_color_map = {}
+    for r in count_cat_agg:
+        name = r['category__name'] or 'Uncategorized'
+        m = r['month'].strftime('%Y-%m')
+        count_cat_map[name][m] = r['cnt']
+        count_color_map[name] = r['category__color'] or '#6c757d'
+
+    count_series = []
+    count_colors = []
+    for name in sorted(count_cat_map.keys(), key=lambda k: -sum(count_cat_map[k].values())):
+        count_series.append({
+            'name': name,
+            'data': [count_cat_map[name].get(m, 0) for m in sorted_months],
+        })
+        count_colors.append(count_color_map[name])
+
     count_data = json.dumps({
         'labels': sorted_months,
-        'values': [count_map.get(m, 0) for m in sorted_months],
+        'series': count_series,
+        'colors': count_colors,
     }, cls=DecimalEncoder)
+
+    # --- Link to transactions page with reimbursement filter ---
+    from core.models import Category
+    reimb_cat_ids = list(
+        Category.objects.filter(
+            user=request.user,
+            name__in=REIMBURSEMENT_CATEGORIES,
+            group__slug='income',
+        ).values_list('id', flat=True)
+    )
+    reimbursement_category_ids = '&category='.join(str(cid) for cid in reimb_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1652,7 +1577,7 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         'stacked_data': stacked_data,
         'scatter_data': scatter_data,
         'count_data': count_data,
-        'events': events,
+        'reimbursement_category_ids': reimbursement_category_ids,
     }
     return context
 
@@ -1669,10 +1594,24 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
 
+    from core.models import StatementImport
     today = date.today()
-    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-    last_month_end = today.replace(day=1) - timedelta(days=1)
-    last_month_label = last_month_start.strftime('%Y-%m')
+    latest_stmt = (
+        StatementImport.objects.filter(user=request.user)
+        .order_by('-statement_date').first()
+    )
+    if latest_stmt and latest_stmt.statement_date:
+        stmt_date = latest_stmt.statement_date
+        last_month_start = stmt_date.replace(day=1)
+        if stmt_date.month == 12:
+            last_month_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            last_month_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
+        last_month_label = f"{last_month_start.strftime('%b %Y')} (latest)"
+    else:
+        last_month_end = today.replace(day=1) - timedelta(days=1)
+        last_month_start = last_month_end.replace(day=1)
+        last_month_label = last_month_start.strftime('%Y-%m')
 
     bank_qs = Transaction.objects.filter(
         user=request.user,
@@ -1698,6 +1637,7 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     n = len(sv)
     median_monthly = (sv[n // 2] if n % 2 else (sv[n // 2 - 1] + sv[n // 2]) / 2) if n else 0
     all_time_total = sum(monthly_totals)
+    median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
 
     # Breakdown
     cat_breakdown = list(
@@ -1705,10 +1645,17 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
         .annotate(abs_total=Sum(abs_field)).order_by('-abs_total')
     )
     breakdown_data = {'labels': [], 'values': [], 'colors': []}
+    top_data = {'labels': [], 'values': [], 'colors': []}
     for r in cat_breakdown:
-        breakdown_data['labels'].append(r['category__name'] or 'Uncategorized')
-        breakdown_data['values'].append(float(r['abs_total'] or 0))
-        breakdown_data['colors'].append(r['category__color'] or '#6c757d')
+        name = r['category__name'] or 'Uncategorized'
+        val = float(r['abs_total'] or 0)
+        color = r['category__color'] or '#6c757d'
+        breakdown_data['labels'].append(name)
+        breakdown_data['values'].append(val)
+        breakdown_data['colors'].append(color)
+        top_data['labels'].append(name)
+        top_data['values'].append(val)
+        top_data['colors'].append(color)
 
     # Stacked bar
     cat_monthly = (
@@ -1728,15 +1675,88 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
         ss.append({'name': name, 'data': [round(csm[name].get(m, 0)) for m in sorted_months]})
         sc.append(ccm[name])
 
+    # --- Individual transactions scatter (with category) ---
+    individual_txns = list(
+        bank_qs.order_by('date')
+        .values_list('date', amount_field, 'description', 'category__name', 'category__color')
+    )
+    scatter_by_cat = defaultdict(list)
+    scatter_colors = {}
+    for d, amt, desc, cat_name, cat_color in individual_txns:
+        cat = cat_name or 'Uncategorized'
+        scatter_by_cat[cat].append({
+            'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
+            'amount': round(abs(float(amt))) if amt else 0,
+            'description': desc,
+        })
+        scatter_colors[cat] = cat_color or '#6c757d'
+
+    scatter_series = []
+    scatter_color_list = []
+    for cat in sorted(scatter_by_cat.keys(), key=lambda k: -len(scatter_by_cat[k])):
+        scatter_series.append({'name': cat, 'data': scatter_by_cat[cat]})
+        scatter_color_list.append(scatter_colors[cat])
+
+    scatter_data = json.dumps({
+        'series': scatter_series,
+        'colors': scatter_color_list,
+    }, cls=DecimalEncoder)
+
+    # --- Transaction count per month (stacked by category) ---
+    from django.db.models import Count
+    count_cat_agg = (
+        bank_qs.annotate(month=TruncMonth('date'))
+        .values('month', 'category__name', 'category__color')
+        .annotate(cnt=Count('id'))
+        .order_by('month')
+    )
+    count_cat_map = defaultdict(lambda: defaultdict(int))
+    count_color_map = {}
+    for r in count_cat_agg:
+        name = r['category__name'] or 'Uncategorized'
+        m = r['month'].strftime('%Y-%m')
+        count_cat_map[name][m] = r['cnt']
+        count_color_map[name] = r['category__color'] or '#6c757d'
+
+    count_series = []
+    count_colors = []
+    for name in sorted(count_cat_map.keys(), key=lambda k: -sum(count_cat_map[k].values())):
+        count_series.append({
+            'name': name,
+            'data': [count_cat_map[name].get(m, 0) for m in sorted_months],
+        })
+        count_colors.append(count_color_map[name])
+
+    count_data = json.dumps({
+        'labels': sorted_months,
+        'series': count_series,
+        'colors': count_colors,
+    }, cls=DecimalEncoder)
+
+    # --- Link to transactions page ---
+    from core.models import Category
+    bank_cat_ids = list(
+        Category.objects.filter(
+            user=request.user,
+            name__in=BANK_INCOME_CATEGORIES,
+            group__slug='income',
+        ).values_list('id', flat=True)
+    )
+    bank_category_ids = '&category='.join(str(cid) for cid in bank_cat_ids)
+
     context = {
         'currency_symbol': currency_symbol,
         'last_month_label': last_month_label,
         'last_month_total': last_month_total,
         'avg_monthly': avg_monthly,
         'median_monthly': median_monthly,
+        'median_pct': median_pct,
         'all_time_total': all_time_total,
         'breakdown_data': json.dumps(breakdown_data, cls=DecimalEncoder),
         'stacked_data': json.dumps({'labels': sorted_months, 'series': ss, 'colors': sc}, cls=DecimalEncoder),
+        'scatter_data': scatter_data,
+        'count_data': count_data,
+        'bank_category_ids': bank_category_ids,
     }
     return context
 

@@ -109,6 +109,13 @@
     <div class="alert alert-light border text-center mb-4">No bonus or non-recurring income recorded.</div>
     {% endif %}
 
+    <!-- View Transactions Link -->
+    <div class="text-end mb-4">
+      <a href="{% url 'core:transaction_list' %}?group=income&category={{ extras_category_ids }}" class="btn btn-outline-primary">
+        View All Work Extras Transactions →
+      </a>
+    </div>
+
   </div><!-- col-md-10 -->
 </div><!-- row -->
 
