@@ -407,23 +407,35 @@ def default_buckets_dashboard(request, display_currency, time_group):
 def spending_income_dashboard(request, display_currency, time_group):
     """Spending & Income breakdown dashboard with selectable time frames."""
     from datetime import timedelta
+    from core.models import StatementImport
 
     today = date.today()
-    first_of_month = today.replace(day=1)
+
+    # Use latest statement month as the reference point
+    latest_stmt = (
+        StatementImport.objects.filter(user=request.user)
+        .order_by('-statement_date').first()
+    )
+    if latest_stmt and latest_stmt.statement_date:
+        ref_date = latest_stmt.statement_date
+    else:
+        ref_date = today
+
+    ref_first = ref_date.replace(day=1)
 
     def _months_ago(n):
-        """Return the first day of the month n months before first_of_month."""
-        y, m = first_of_month.year, first_of_month.month - n
+        y, m = ref_first.year, ref_first.month - n
         while m < 1:
             m += 12
             y -= 1
         return date(y, m, 1)
 
+    ref_month_label = ref_first.strftime('%b %Y')
     time_frames = [
-        ('month', 'Last Month', (first_of_month - timedelta(days=1)).replace(day=1)),
-        ('quarter', 'Last Quarter', _months_ago(3)),
-        ('semester', 'Last 6 Months', _months_ago(6)),
-        ('year', 'Last Year', _months_ago(12)),
+        ('month', ref_month_label, ref_first),
+        ('quarter', 'Last Quarter', _months_ago(2)),
+        ('semester', 'Last 6 Months', _months_ago(5)),
+        ('year', 'Last Year', _months_ago(11)),
         ('all', 'All Time', None),
     ]
     frame_map = {key: (label, start) for key, label, start in time_frames}
