@@ -56,27 +56,11 @@
       </div>
     </div>
 
-    <!-- Monthly Income Trend -->
-    <div class="card mb-4">
-      <div class="card-body">
-        <h6 class="card-title">Monthly Income</h6>
-        <div id="trendChart"></div>
-      </div>
-    </div>
-
     <!-- Stacked by Category -->
     <div class="card mb-4">
       <div class="card-body">
         <h6 class="card-title">Monthly Income by Category</h6>
         <div id="stackedChart"></div>
-      </div>
-    </div>
-
-    <!-- Composition (100% stacked) -->
-    <div class="card mb-4">
-      <div class="card-body">
-        <h6 class="card-title">Income Composition</h6>
-        <div id="compositionChart"></div>
       </div>
     </div>
 
@@ -103,9 +87,7 @@
   </div>
 </div>
 
-<script id="trendData" type="application/json">{{ trend_data|escapejson }}</script>
 <script id="stackedData" type="application/json">{{ stacked_data|escapejson }}</script>
-<script id="compositionData" type="application/json">{{ composition_data|escapejson }}</script>
 <script id="incomeCategoryData" type="application/json">{{ income_category_data|escapejson }}</script>
 <script id="topIncomeData" type="application/json">{{ top_income_data|escapejson }}</script>
 {% endblock %}
@@ -116,31 +98,6 @@
   var isPrivacy = dashboardPrivacy.isOn();
   window._dashCharts = [];
   var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
-
-  // Monthly Income Trend (area + median line)
-  var trend = JSON.parse(document.getElementById('trendData').textContent);
-  var trendChart = new ApexCharts(document.getElementById('trendChart'), {
-    chart: { type: 'area', height: 300, toolbar: { show: false } },
-    series: [{ name: 'Income', data: trend.values || [] }],
-    colors: ['#2ecc71'],
-    fill: { type: 'solid', opacity: 0.2 },
-    stroke: { width: 3, curve: 'straight' },
-    markers: { size: 4, strokeWidth: 0 },
-    xaxis: { categories: trend.labels || [] },
-    yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
-    annotations: {
-      yaxis: [{
-        y: trend.median, borderColor: '#e74c3c', strokeDashArray: 6, borderWidth: 2,
-        label: { text: 'Median: ' + (trend.median || 0).toLocaleString(), position: 'left',
-                 style: { fontSize: '11px', color: '#fff', background: '#e74c3c' } },
-      }],
-    },
-    dataLabels: { enabled: false },
-    tooltip: { enabled: !isPrivacy, y: { formatter: fmtNum } },
-    grid: { borderColor: '#e9ecef' },
-  });
-  trendChart.render();
-  window._dashCharts.push(trendChart);
 
   // Stacked bar by category
   var stacked = JSON.parse(document.getElementById('stackedData').textContent);
@@ -158,29 +115,6 @@
   });
   stackedChart.render();
   window._dashCharts.push(stackedChart);
-
-  // Composition (100% stacked bar)
-  var comp = JSON.parse(document.getElementById('compositionData').textContent);
-  var compChart = new ApexCharts(document.getElementById('compositionChart'), {
-    chart: { type: 'bar', height: 280, stacked: true, stackType: '100%', toolbar: { show: false } },
-    series: comp.series || [],
-    colors: comp.colors || [],
-    plotOptions: { bar: { borderRadius: 2 } },
-    xaxis: { categories: comp.labels || [] },
-    yaxis: { labels: { formatter: function(v) { return v.toFixed(0) + '%'; } } },
-    dataLabels: { enabled: false },
-    legend: { position: 'bottom' },
-    tooltip: { shared: true, intersect: false, y: {
-      formatter: function(val, opts) {
-        var total = opts.w.globals.stackedSeriesTotals[opts.dataPointIndex];
-        var pct = total > 0 ? (val / total * 100).toFixed(1) : 0;
-        return fmtNum(val) + ' (' + pct + '%)';
-      }
-    } },
-    grid: { borderColor: '#e9ecef' },
-  });
-  compChart.render();
-  window._dashCharts.push(compChart);
 
   // Income Breakdown (donut)
   var incomeRaw = DashboardCharts.parseJSON('incomeCategoryData');
