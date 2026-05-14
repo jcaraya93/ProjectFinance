@@ -1504,6 +1504,31 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         e['category'] = e.pop('category__name')
         e['color'] = e.pop('category__color') or '#6c757d'
 
+    # --- Individual transactions scatter ---
+    individual_txns = list(
+        reimb_qs.order_by('date')
+        .values_list('date', amount_field, 'description')
+    )
+    scatter_data = json.dumps([{
+        'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
+        'amount': round(abs(float(amt))) if amt else 0,
+        'description': desc,
+    } for d, amt, desc in individual_txns], cls=DecimalEncoder)
+
+    # --- Transaction count per month ---
+    from django.db.models import Count
+    count_agg = (
+        reimb_qs.annotate(month=TruncMonth('date'))
+        .values('month')
+        .annotate(cnt=Count('id'))
+        .order_by('month')
+    )
+    count_map = {r['month'].strftime('%Y-%m'): r['cnt'] for r in count_agg}
+    count_data = json.dumps({
+        'labels': sorted_months,
+        'values': [count_map.get(m, 0) for m in sorted_months],
+    }, cls=DecimalEncoder)
+
     context = {
         'currency_symbol': currency_symbol,
         'last_month_label': last_month_label,
@@ -1516,6 +1541,8 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         'breakdown_data': json.dumps(breakdown_data, cls=DecimalEncoder),
         'top_data': json.dumps(top_data, cls=DecimalEncoder),
         'stacked_data': stacked_data,
+        'scatter_data': scatter_data,
+        'count_data': count_data,
         'events': events,
     }
     return context
