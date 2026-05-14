@@ -83,25 +83,46 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     avg_expenses = sum(expense_months) / len(expense_months) if expense_months else Decimal('0')
     avg_cashflow = avg_income - avg_expenses
 
-    # Last complete month
-    from datetime import date as date_cls
+    # Last statement period (based on most recent uploaded statement)
+    from core.models import StatementImport, LogicalTransaction
+    from datetime import date as date_cls, timedelta
     today = date_cls.today()
-    last_month_end = today.replace(day=1) - __import__('datetime').timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
+
+    latest_stmt = (
+        StatementImport.objects.filter(user=user)
+        .order_by('-statement_date')
+        .first()
+    )
+
+    if latest_stmt and latest_stmt.statement_date:
+        # Use the statement's month as the "last period"
+        stmt_date = latest_stmt.statement_date
+        last_period_start = stmt_date.replace(day=1)
+        # End of that month
+        if stmt_date.month == 12:
+            last_period_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            last_period_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
+        last_period_name = f"{last_period_start.strftime('%b %Y')} (latest statement)"
+    else:
+        # Fallback to calendar last month
+        last_period_end = today.replace(day=1) - timedelta(days=1)
+        last_period_start = last_period_end.replace(day=1)
+        last_period_name = last_period_start.strftime('%b %Y')
 
     last_month_income = (
-        qs.filter(**income_filter, date__gte=last_month_start, date__lte=last_month_end)
+        qs.filter(**income_filter, date__gte=last_period_start, date__lte=last_period_end)
         .exclude(**income_exclude)
         .aggregate(total=Sum(Abs(amount_field)))['total']
         or Decimal('0')
     )
     last_month_expenses = (
-        qs.filter(category__group__slug='expense', date__gte=last_month_start, date__lte=last_month_end)
+        qs.filter(category__group__slug='expense', date__gte=last_period_start, date__lte=last_period_end)
         .aggregate(total=Sum(Abs(amount_field)))['total']
         or Decimal('0')
     )
     last_month_cashflow = last_month_income - last_month_expenses
-    last_month_name = last_month_start.strftime('%b %Y')
+    last_month_name = last_period_name
 
     total_transfers = qs.filter(category__group__slug='transfer').count()
 
@@ -149,7 +170,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     last_month_by_cat = {}
     lm_cats = (
         qs.filter(category__group__slug='expense',
-                  date__gte=last_month_start, date__lte=last_month_end)
+                  date__gte=last_period_start, date__lte=last_period_end)
         .values('category__name')
         .annotate(total=Sum(Abs(amount_field)))
     )
