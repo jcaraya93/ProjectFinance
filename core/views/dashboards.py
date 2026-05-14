@@ -2539,8 +2539,9 @@ def transaction_pairing_dashboard(request, display_currency, time_group):
         'incoming__ledger__statement_import__account',
     )
 
-    paired = []
-    unmatched = []
+    internal = []
+    external_outgoing = []
+    external_incoming = []
     for p in pairs_qs:
         entry = {'id': p.id, 'status': p.status, 'created_at': p.created_at}
 
@@ -2579,23 +2580,30 @@ def transaction_pairing_dashboard(request, display_currency, time_group):
             entry['in_currency'] = ''
 
         if p.status == 'paired':
-            paired.append(entry)
+            internal.append(entry)
+        elif p.outgoing and not p.incoming:
+            external_outgoing.append(entry)
         else:
-            unmatched.append(entry)
+            external_incoming.append(entry)
 
     # Sort by date descending
-    paired.sort(key=lambda e: e['out_date'] or e['in_date'] or '', reverse=True)
-    unmatched.sort(key=lambda e: e['out_date'] or e['in_date'] or '', reverse=True)
+    internal.sort(key=lambda e: e['out_date'] or e['in_date'] or '', reverse=True)
+    external_outgoing.sort(key=lambda e: e['out_date'] or '', reverse=True)
+    external_incoming.sort(key=lambda e: e['in_date'] or '', reverse=True)
 
-    total = len(paired) + len(unmatched)
-    match_rate = (len(paired) / total * 100) if total else 0
+    external_count = len(external_outgoing) + len(external_incoming)
+    total = len(internal) + external_count
+    match_rate = (len(internal) / total * 100) if total else 0
 
     context = {
         'currency_symbol': currency_symbol,
-        'paired': paired,
-        'unmatched': unmatched,
-        'paired_count': len(paired),
-        'unmatched_count': len(unmatched),
+        'internal': internal,
+        'external_outgoing': external_outgoing,
+        'external_incoming': external_incoming,
+        'internal_count': len(internal),
+        'external_outgoing_count': len(external_outgoing),
+        'external_incoming_count': len(external_incoming),
+        'external_count': external_count,
         'total_count': total,
         'match_rate': match_rate,
     }

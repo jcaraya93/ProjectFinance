@@ -30,16 +30,17 @@
       <div class="col-sm-6 col-lg-3">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Paired</h6>
-            <h3 class="card-title mb-1 text-success">{{ paired_count }}</h3>
+            <h6 class="card-subtitle text-muted">Internal (Paired)</h6>
+            <h3 class="card-title mb-1 text-success">{{ internal_count }}</h3>
           </div>
         </div>
       </div>
       <div class="col-sm-6 col-lg-3">
-        <div class="card h-100 {% if unmatched_count > 0 %}border-warning{% endif %}">
+        <div class="card h-100 {% if external_count > 0 %}border-info{% endif %}">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Unmatched</h6>
-            <h3 class="card-title mb-1 {% if unmatched_count > 0 %}text-warning{% endif %}">{{ unmatched_count }}</h3>
+            <h6 class="card-subtitle text-muted">External</h6>
+            <h3 class="card-title mb-1 {% if external_count > 0 %}text-info{% endif %}">{{ external_count }}</h3>
+            <small class="text-muted">{{ external_outgoing_count }} out · {{ external_incoming_count }} in</small>
           </div>
         </div>
       </div>
@@ -61,10 +62,10 @@
       </div>
     </div>
 
-    <!-- Unmatched transactions -->
-    {% if unmatched %}
+    <!-- External Outgoing -->
+    {% if external_outgoing %}
     <div class="card mb-4">
-      <div class="card-header fw-bold"><span class="text-warning">⚠</span> Unmatched Transactions ({{ unmatched_count }})</div>
+      <div class="card-header fw-bold"><span class="text-danger">↑</span> External Outgoing ({{ external_outgoing_count }})</div>
       <div class="table-responsive">
         <table class="table table-hover table-sm align-middle mb-0">
           <thead class="table-light">
@@ -78,14 +79,14 @@
             </tr>
           </thead>
           <tbody>
-            {% for u in unmatched %}
+            {% for u in external_outgoing %}
             <tr>
-              <td class="text-nowrap">{{ u.out_date|default:u.in_date }}</td>
-              <td><span class="badge bg-secondary">{{ u.out_account|default:u.in_account }}</span></td>
-              <td>{{ u.out_currency|default:u.in_currency }}</td>
-              <td>{{ u.out_category|default:u.in_category }}</td>
-              <td>{{ u.out_description|default:u.in_description }}</td>
-              <td class="text-end text-warning" data-sensitive>{{ currency_symbol }}{{ u.out_amount|default:u.in_amount|format_number }}</td>
+              <td class="text-nowrap">{{ u.out_date }}</td>
+              <td><span class="badge bg-secondary">{{ u.out_account }}</span></td>
+              <td>{{ u.out_currency }}</td>
+              <td>{{ u.out_category }}</td>
+              <td>{{ u.out_description }}</td>
+              <td class="text-end text-danger" data-sensitive>{{ currency_symbol }}{{ u.out_amount|format_number }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -94,10 +95,43 @@
     </div>
     {% endif %}
 
-    <!-- Paired transactions -->
-    {% if paired %}
+    <!-- External Incoming -->
+    {% if external_incoming %}
     <div class="card mb-4">
-      <div class="card-header fw-bold">Paired Transactions ({{ paired_count }})</div>
+      <div class="card-header fw-bold"><span class="text-success">↓</span> External Incoming ({{ external_incoming_count }})</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Account</th>
+              <th>Currency</th>
+              <th>Category</th>
+              <th>Description</th>
+              <th class="text-end">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in external_incoming %}
+            <tr>
+              <td class="text-nowrap">{{ u.in_date }}</td>
+              <td><span class="badge bg-secondary">{{ u.in_account }}</span></td>
+              <td>{{ u.in_currency }}</td>
+              <td>{{ u.in_category }}</td>
+              <td>{{ u.in_description }}</td>
+              <td class="text-end text-success" data-sensitive>{{ currency_symbol }}{{ u.in_amount|format_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Internal Transfers (Paired) -->
+    {% if internal %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold">Internal Transfers ({{ internal_count }})</div>
       <div class="table-responsive">
         <table class="table table-hover table-sm align-middle mb-0">
           <thead class="table-light">
@@ -111,7 +145,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for p in paired %}
+            {% for p in internal %}
             <tr>
               <td class="text-nowrap">{{ p.out_date }}</td>
               <td><span class="badge bg-secondary">{{ p.out_account }}</span> <small class="text-muted">{{ p.out_currency }}</small></td>
@@ -127,7 +161,7 @@
     </div>
     {% endif %}
 
-    {% if not paired and not unmatched %}
+    {% if not internal and not external_outgoing and not external_incoming %}
     <div class="alert alert-info text-center mb-4">No transfer pairs found. Click "Run Auto-Match" to scan for pairs.</div>
     {% endif %}
 
