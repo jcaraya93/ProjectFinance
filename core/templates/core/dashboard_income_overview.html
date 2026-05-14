@@ -12,9 +12,75 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Income Overview</h4>
-      {% include "core/_currency_toggle.html" %}
+      <div class="d-flex align-items-center gap-2">
+        <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
+          <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
+          <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
+        </button>
+        {% include "core/_currency_toggle.html" %}
+      </div>
     </div>
 
+    <!-- Summary cards -->
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">{{ last_period_label }}</h6>
+            <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ last_period_total|format_number }}</h3>
+            <div class="small">
+              {% if median_pct > 0 %}<span class="text-success">▲ {{ median_pct|floatformat:0 }}% above median</span>
+              {% elif median_pct < 0 %}<span class="text-danger">▼ {{ median_pct|floatformat:0 }}% below median</span>
+              {% else %}<span class="text-muted">At median</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Monthly Average</h6>
+            <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ avg_monthly|format_number }}</h3>
+            <div class="small text-muted">Median: <span data-sensitive>{{ currency_symbol }}{{ median_monthly|format_number }}</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">All Time Total</h6>
+            <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ all_time_total|format_number }}</h3>
+            <div class="small text-muted">&nbsp;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly Income Trend -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Monthly Income</h6>
+        <div id="trendChart"></div>
+      </div>
+    </div>
+
+    <!-- Stacked by Category -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Monthly Income by Category</h6>
+        <div id="stackedChart"></div>
+      </div>
+    </div>
+
+    <!-- Composition (100% stacked) -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Income Composition</h6>
+        <div id="compositionChart"></div>
+      </div>
+    </div>
+
+    <!-- Breakdown + Top Categories -->
     <div class="row g-3 mb-4" style="align-items: stretch;">
       <div class="col-lg-5 d-flex">
         <div class="card w-100">
@@ -37,6 +103,9 @@
   </div>
 </div>
 
+<script id="trendData" type="application/json">{{ trend_data|escapejson }}</script>
+<script id="stackedData" type="application/json">{{ stacked_data|escapejson }}</script>
+<script id="compositionData" type="application/json">{{ composition_data|escapejson }}</script>
 <script id="incomeCategoryData" type="application/json">{{ income_category_data|escapejson }}</script>
 <script id="topIncomeData" type="application/json">{{ top_income_data|escapejson }}</script>
 {% endblock %}
@@ -44,31 +113,104 @@
 {% block extra_js %}
 <script>
 (function() {
+  var isPrivacy = dashboardPrivacy.isOn();
+  window._dashCharts = [];
+  var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
+
+  // Monthly Income Trend (area + median line)
+  var trend = JSON.parse(document.getElementById('trendData').textContent);
+  var trendChart = new ApexCharts(document.getElementById('trendChart'), {
+    chart: { type: 'area', height: 300, toolbar: { show: false } },
+    series: [{ name: 'Income', data: trend.values || [] }],
+    colors: ['#2ecc71'],
+    fill: { type: 'solid', opacity: 0.2 },
+    stroke: { width: 3, curve: 'straight' },
+    markers: { size: 4, strokeWidth: 0 },
+    xaxis: { categories: trend.labels || [] },
+    yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
+    annotations: {
+      yaxis: [{
+        y: trend.median, borderColor: '#e74c3c', strokeDashArray: 6, borderWidth: 2,
+        label: { text: 'Median: ' + (trend.median || 0).toLocaleString(), position: 'left',
+                 style: { fontSize: '11px', color: '#fff', background: '#e74c3c' } },
+      }],
+    },
+    dataLabels: { enabled: false },
+    tooltip: { enabled: !isPrivacy, y: { formatter: fmtNum } },
+    grid: { borderColor: '#e9ecef' },
+  });
+  trendChart.render();
+  window._dashCharts.push(trendChart);
+
+  // Stacked bar by category
+  var stacked = JSON.parse(document.getElementById('stackedData').textContent);
+  var stackedChart = new ApexCharts(document.getElementById('stackedChart'), {
+    chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
+    series: stacked.series || [],
+    colors: stacked.colors || [],
+    plotOptions: { bar: { borderRadius: 2 } },
+    xaxis: { categories: stacked.labels || [] },
+    yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: { enabled: !isPrivacy, shared: true, intersect: false, y: { formatter: fmtNum } },
+    grid: { borderColor: '#e9ecef' },
+  });
+  stackedChart.render();
+  window._dashCharts.push(stackedChart);
+
+  // Composition (100% stacked bar)
+  var comp = JSON.parse(document.getElementById('compositionData').textContent);
+  var compChart = new ApexCharts(document.getElementById('compositionChart'), {
+    chart: { type: 'bar', height: 280, stacked: true, stackType: '100%', toolbar: { show: false } },
+    series: comp.series || [],
+    colors: comp.colors || [],
+    plotOptions: { bar: { borderRadius: 2 } },
+    xaxis: { categories: comp.labels || [] },
+    yaxis: { labels: { formatter: function(v) { return v.toFixed(0) + '%'; } } },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: { shared: true, intersect: false, y: {
+      formatter: function(val, opts) {
+        var total = opts.w.globals.stackedSeriesTotals[opts.dataPointIndex];
+        var pct = total > 0 ? (val / total * 100).toFixed(1) : 0;
+        return fmtNum(val) + ' (' + pct + '%)';
+      }
+    } },
+    grid: { borderColor: '#e9ecef' },
+  });
+  compChart.render();
+  window._dashCharts.push(compChart);
+
   // Income Breakdown (donut)
   var incomeRaw = DashboardCharts.parseJSON('incomeCategoryData');
   if (incomeRaw) {
-    new ApexCharts(document.getElementById('incomeChart'), {
+    var donutChart = new ApexCharts(document.getElementById('incomeChart'), {
       chart: { type: 'donut', height: 320 },
       series: (incomeRaw.values || []).map(Math.round),
       labels: incomeRaw.labels || [],
       colors: incomeRaw.colors || [],
-      dataLabels: { enabled: false },
+      dataLabels: { enabled: !isPrivacy, formatter: function(val) { return val.toFixed(0) + '%'; } },
       legend: { position: 'right' },
       tooltip: {
+        enabled: !isPrivacy,
         y: {
           formatter: function(val, opts) {
             var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
-            return Math.round(val).toLocaleString() + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
+            return fmtNum(val) + ' (' + (total > 0 ? (val/total*100).toFixed(1) : 0) + '%)';
           }
         }
       },
-    }).render();
+      plotOptions: { pie: { donut: { size: '55%' } } },
+    });
+    donutChart.render();
+    window._dashCharts.push(donutChart);
   }
 
   // Top Income Categories (horizontal bar)
   var topIncomeRaw = DashboardCharts.parseJSON('topIncomeData');
   if (topIncomeRaw) {
-    new ApexCharts(document.getElementById('topIncomeChart'), {
+    var topChart = new ApexCharts(document.getElementById('topIncomeChart'), {
       chart: { type: 'bar', height: 320, toolbar: { show: false } },
       series: [{ name: 'Amount', data: (topIncomeRaw.values || []).map(Math.round) }],
       colors: topIncomeRaw.colors || [],
@@ -77,11 +219,14 @@
       yaxis: { labels: { formatter: function(v) { return v; } } },
       dataLabels: { enabled: false },
       legend: { show: false },
-      markers: { size: 0 },
-      tooltip: { y: { formatter: function(v) { return Math.round(v).toLocaleString(); } } },
+      tooltip: { enabled: !isPrivacy, y: { formatter: fmtNum } },
       grid: { borderColor: '#e9ecef' },
-    }).render();
+    });
+    topChart.render();
+    window._dashCharts.push(topChart);
   }
+
+  dashboardPrivacy.apply(window._dashCharts);
 })();
 </script>
 {% endblock %}

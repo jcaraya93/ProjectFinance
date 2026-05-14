@@ -1166,8 +1166,10 @@ def income_bonus_dashboard(request, display_currency, time_group):
 @dashboard_view("income_overview", "core/dashboard_income_overview.html")
 def income_overview_dashboard(request, display_currency, time_group):
     """Overview dashboard for all income categories."""
-    from django.db.models import Sum
-    from django.db.models.functions import Abs
+    from collections import defaultdict
+    from datetime import timedelta
+    from django.db.models import Sum, Count
+    from django.db.models.functions import Abs, TruncMonth
 
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
@@ -1179,7 +1181,90 @@ def income_overview_dashboard(request, display_currency, time_group):
         **{f'{amount_field}__isnull': False},
     )
 
-    # All-time breakdown by category
+    # --- Summary cards ---
+    from core.models import StatementImport
+    today = date.today()
+    latest_stmt = (
+        StatementImport.objects.filter(user=request.user)
+        .order_by('-statement_date').first()
+    )
+    if latest_stmt and latest_stmt.statement_date:
+        stmt_date = latest_stmt.statement_date
+        last_period_start = stmt_date.replace(day=1)
+        if stmt_date.month == 12:
+            last_period_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            last_period_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
+        last_period_label = f"{last_period_start.strftime('%b %Y')} (latest)"
+    else:
+        last_period_end = today.replace(day=1) - timedelta(days=1)
+        last_period_start = last_period_end.replace(day=1)
+        last_period_label = last_period_start.strftime('%b %Y')
+
+    last_period_total = float(
+        income_qs.filter(date__gte=last_period_start, date__lte=last_period_end)
+        .aggregate(t=Sum(abs_field))['t'] or 0
+    )
+
+    monthly_agg = (
+        income_qs.annotate(month=TruncMonth('date'))
+        .values('month')
+        .annotate(total=Sum(abs_field))
+        .order_by('month')
+    )
+    monthly_map = {}
+    for r in monthly_agg:
+        m = r['month'].strftime('%Y-%m')
+        monthly_map[m] = float(r['total'] or 0)
+    sorted_months = sorted(monthly_map.keys())
+    monthly_totals = [monthly_map[m] for m in sorted_months]
+
+    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
+    sorted_vals = sorted(monthly_totals)
+    n = len(sorted_vals)
+    median_monthly = (sorted_vals[n // 2] if n % 2 else
+                      (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2) if n else 0
+    all_time_total = sum(monthly_totals)
+    median_pct = ((last_period_total - median_monthly) / median_monthly * 100) if median_monthly else 0
+
+    # --- Monthly trend (total) ---
+    trend_data = json.dumps({
+        'labels': sorted_months,
+        'values': [round(v) for v in monthly_totals],
+        'median': round(median_monthly),
+    }, cls=DecimalEncoder)
+
+    # --- Stacked bar by category over time ---
+    cat_monthly = (
+        income_qs.annotate(month=TruncMonth('date'))
+        .values('month', 'category__name', 'category__color')
+        .annotate(total=Sum(abs_field))
+        .order_by('month')
+    )
+    cat_series_map = defaultdict(lambda: defaultdict(float))
+    cat_color_map = {}
+    for r in cat_monthly:
+        name = r['category__name']
+        m = r['month'].strftime('%Y-%m')
+        cat_series_map[name][m] = float(r['total'] or 0)
+        cat_color_map[name] = r['category__color'] or '#6c757d'
+
+    stacked_series = []
+    stacked_colors = []
+    for name in sorted(cat_series_map.keys(), key=lambda k: -sum(cat_series_map[k].values())):
+        stacked_series.append({
+            'name': name,
+            'data': [round(cat_series_map[name].get(m, 0)) for m in sorted_months],
+        })
+        stacked_colors.append(cat_color_map[name])
+
+    stacked_data = json.dumps({
+        'labels': sorted_months,
+        'series': stacked_series,
+        'colors': stacked_colors,
+    }, cls=DecimalEncoder)
+
+    # --- All-time breakdown by category (donut + bar) ---
     cat_breakdown = list(
         income_qs.values('category__name', 'category__color')
         .annotate(abs_total=Sum(abs_field))
@@ -1198,8 +1283,33 @@ def income_overview_dashboard(request, display_currency, time_group):
         top_income_data['values'].append(val)
         top_income_data['colors'].append(color)
 
+    # --- Income composition (% stacked) ---
+    composition_series = []
+    composition_colors = []
+    for name in sorted(cat_series_map.keys(), key=lambda k: -sum(cat_series_map[k].values())):
+        composition_series.append({
+            'name': name,
+            'data': [round(cat_series_map[name].get(m, 0)) for m in sorted_months],
+        })
+        composition_colors.append(cat_color_map[name])
+
+    composition_data = json.dumps({
+        'labels': sorted_months,
+        'series': composition_series,
+        'colors': composition_colors,
+    }, cls=DecimalEncoder)
+
     context = {
         'currency_symbol': currency_symbol,
+        'last_period_label': last_period_label,
+        'last_period_total': last_period_total,
+        'avg_monthly': avg_monthly,
+        'median_monthly': median_monthly,
+        'median_pct': median_pct,
+        'all_time_total': all_time_total,
+        'trend_data': trend_data,
+        'stacked_data': stacked_data,
+        'composition_data': composition_data,
         'income_category_data': json.dumps(income_category_data, cls=DecimalEncoder),
         'top_income_data': json.dumps(top_income_data, cls=DecimalEncoder),
     }
