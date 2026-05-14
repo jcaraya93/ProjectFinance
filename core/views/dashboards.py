@@ -27,7 +27,6 @@ __all__ = [
     'income_txn_dashboard',
     'reimbursement_overview_dashboard',
     'bank_income_overview_dashboard',
-    'bank_income_detail_dashboard',
     'internal_transfers_dashboard',
     'credit_transfers_dashboard',
     'external_transfers_dashboard',
@@ -70,7 +69,7 @@ DASHBOARD_CATEGORIES = {
     'overview': 'overview', 'spending_income': 'overview', 'category_stats': 'overview',
     'income_overview': 'income', 'income_salary': 'income', 'income_bonus': 'income',
     'reimbursement_overview': 'income', 'income_txn': 'income',
-    'bank_income_overview': 'income', 'bank_income_detail': 'income',
+    'bank_income_overview': 'income',
     'transfer_flow': 'transfers', 'internal_transfers': 'transfers',
     'credit_transfers': 'transfers', 'external_transfers': 'transfers',
     'transaction_pairing': 'transfers',
@@ -1631,111 +1630,6 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     }
     return context
 
-
-@dashboard_view("bank_income_detail", "core/dashboard_bank_income_detail.html", default_time_group="biweekly")
-def bank_income_detail_dashboard(request, display_currency, time_group):
-    """Detail dashboard for bank interest income — filterable by sub-category."""
-    from collections import defaultdict
-    from datetime import timedelta
-    from django.db.models import Sum, Count
-    from django.db.models.functions import TruncMonth, Abs
-
-    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
-    currency_symbol = '₡' if display_currency == 'CRC' else '$'
-    abs_field = Abs(amount_field)
-
-    today = date.today()
-    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-    last_month_end = today.replace(day=1) - timedelta(days=1)
-    last_month_label = last_month_start.strftime('%Y-%m')
-
-    selected_category = request.GET.get('category', '')
-    if selected_category and selected_category in BANK_INCOME_CATEGORIES:
-        filter_categories = [selected_category]
-    else:
-        selected_category = ''
-        filter_categories = BANK_INCOME_CATEGORIES
-
-    bank_qs = Transaction.objects.filter(
-        user=request.user,
-        category__name__in=filter_categories,
-        category__group__slug='income',
-        **{f'{amount_field}__isnull': False},
-    )
-
-    # Summary cards
-    last_month_total = float(
-        bank_qs.filter(date__gte=last_month_start, date__lte=last_month_end)
-        .aggregate(t=Sum(abs_field))['t'] or 0
-    )
-    monthly_agg = (
-        bank_qs.annotate(month=TruncMonth('date'))
-        .values('month').annotate(total=Sum(abs_field), cnt=Count('id')).order_by('month')
-    )
-    monthly_map = {}
-    monthly_counts = {}
-    for r in monthly_agg:
-        m = r['month'].strftime('%Y-%m')
-        monthly_map[m] = float(r['total'] or 0)
-        monthly_counts[m] = r['cnt']
-    sorted_month_keys = sorted(monthly_map.keys())
-    monthly_totals = [monthly_map[m] for m in sorted_month_keys]
-
-    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
-    sv = sorted(monthly_totals)
-    n = len(sv)
-    median_monthly = (sv[n // 2] if n % 2 else (sv[n // 2 - 1] + sv[n // 2]) / 2) if n else 0
-    all_time_total = sum(monthly_totals)
-    median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
-
-    # Chart data by time_group
-    if time_group == 'biweekly':
-        def _semi(d):
-            return date(d.year, d.month, 1 if d.day < 15 else 15)
-        raw = bank_qs.values_list('date', amount_field)
-        pt = defaultdict(float)
-        pc = defaultdict(int)
-        for d, amt in raw:
-            if amt:
-                k = _semi(d)
-                pt[k] += abs(float(amt))
-                pc[k] += 1
-        sp = sorted(pt.keys())
-        chart_labels = [p.strftime('%Y-%m-%d') for p in sp]
-        chart_values = [round(pt[p]) for p in sp]
-        chart_counts = [pc[p] for p in sp]
-    else:
-        chart_labels = sorted_month_keys
-        chart_values = [round(v) for v in monthly_totals]
-        chart_counts = [monthly_counts.get(m, 0) for m in sorted_month_keys]
-
-    cvs = sorted(chart_values)
-    cn = len(cvs)
-    chart_median = (cvs[cn // 2] if cn % 2 else (cvs[cn // 2 - 1] + cvs[cn // 2]) / 2) if cn else 0
-
-    # Scatter data
-    individual = list(bank_qs.order_by('date').values_list('date', amount_field, 'description'))
-    scatter_data = json.dumps([{
-        'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
-        'amount': round(abs(float(amt))) if amt else 0,
-        'description': desc,
-    } for d, amt, desc in individual], cls=DecimalEncoder)
-
-    context = {
-        'currency_symbol': currency_symbol,
-        'last_month_label': last_month_label,
-        'last_month_total': last_month_total,
-        'avg_monthly': avg_monthly,
-        'median_monthly': median_monthly,
-        'median_pct': median_pct,
-        'all_time_total': all_time_total,
-        'trend_data': json.dumps({'labels': chart_labels, 'values': chart_values, 'median': chart_median}, cls=DecimalEncoder),
-        'count_data': json.dumps({'labels': chart_labels, 'values': chart_counts}, cls=DecimalEncoder),
-        'scatter_data': scatter_data,
-        'bank_categories': BANK_INCOME_CATEGORIES,
-        'selected_category': selected_category,
-    }
-    return context
 
 
 @dashboard_view("credit_payment", "core/dashboard_credit_payment.html")

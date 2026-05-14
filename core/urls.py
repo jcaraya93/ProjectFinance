@@ -16,7 +16,6 @@ urlpatterns = [
     path('income/transactions/', views.income_txn_dashboard, name='income_txn_dashboard'),
     path('reimbursements/', views.reimbursement_overview_dashboard, name='reimbursement_overview_dashboard'),
     path('bank-income/', views.bank_income_overview_dashboard, name='bank_income_overview_dashboard'),
-    path('bank-income/detail/', views.bank_income_detail_dashboard, name='bank_income_detail_dashboard'),
     path('internal-transfers/', views.internal_transfers_dashboard, name='internal_transfers_dashboard'),
     path('credit-transfers/', views.credit_transfers_dashboard, name='credit_transfers_dashboard'),
     path('external-transfers/', views.external_transfers_dashboard, name='external_transfers_dashboard'),

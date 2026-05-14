@@ -20,7 +20,6 @@
         <a href="{% url 'core:reimbursement_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'reimbursement_overview' %} active{% endif %}">Reimbursement Overview</a>
         <a href="{% url 'core:income_txn_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_txn' %} active{% endif %}">Reimbursement Detail</a>
         <a href="{% url 'core:bank_income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_overview' %} active{% endif %}">Bank Income Overview</a>
-        <a href="{% url 'core:bank_income_detail_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_detail' %} active{% endif %}">Bank Income Detail</a>
 
         {% elif dashboard_category == 'transfers' %}
         <a href="{% url 'core:transfer_flow_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transfer_flow' %} active{% endif %}">Flow Overview</a>
