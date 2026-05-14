@@ -2053,21 +2053,59 @@ def internal_transfers_dashboard(request, display_currency, time_group):
     pair_count = len(internal_pairs)
     avg_transfer = total_volume / pair_count if pair_count else 0
 
-    # Monthly trend
-    monthly_volume = defaultdict(float)
-    monthly_count = defaultdict(int)
+    # Determine account type label for each side of a pair
+    def _acct_type(name):
+        if name.startswith('Credit'):
+            return 'Credit'
+        return 'Debit'
+
+    # Monthly trend — broken down by route (e.g. Debit → Credit)
+    monthly_volume = defaultdict(lambda: defaultdict(float))
+    monthly_count = defaultdict(lambda: defaultdict(int))
+    route_totals = defaultdict(float)
     for p in internal_pairs:
         m = p['out']['date'].strftime('%Y-%m')
-        monthly_volume[m] += abs(p['out']['amount'])
-        monthly_count[m] += 1
+        route = f"{_acct_type(p['out']['account_name'])} → {_acct_type(p['in']['account_name'])}"
+        vol = abs(p['out']['amount'])
+        monthly_volume[m][route] += vol
+        monthly_count[m][route] += 1
+        route_totals[route] += vol
 
     all_months = sorted(monthly_volume.keys())
+    routes = sorted(route_totals.keys(), key=lambda r: -route_totals[r])
 
-    trend_data = json.dumps({
+    # Assign colors per route
+    route_colors = {}
+    palette = ['#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#9b59b6', '#1abc9c']
+    for i, r in enumerate(routes):
+        route_colors[r] = palette[i % len(palette)]
+
+    volume_data = json.dumps({
         'labels': all_months,
-        'volume': [round(monthly_volume[m]) for m in all_months],
-        'count': [monthly_count[m] for m in all_months],
+        'routes': routes,
+        'colors': [route_colors[r] for r in routes],
+        'series': [{
+            'name': r,
+            'data': [round(monthly_volume[m].get(r, 0)) for m in all_months],
+        } for r in routes],
     }, cls=DecimalEncoder)
+
+    count_data = json.dumps({
+        'labels': all_months,
+        'routes': routes,
+        'colors': [route_colors[r] for r in routes],
+        'series': [{
+            'name': r,
+            'data': [monthly_count[m].get(r, 0) for m in all_months],
+        } for r in routes],
+    }, cls=DecimalEncoder)
+
+    # Route summary for cards
+    route_summary = [
+        {'route': r, 'volume': round(route_totals[r]), 'color': route_colors[r],
+         'count': sum(monthly_count[m].get(r, 0) for m in all_months)}
+        for r in routes
+    ]
 
     # Paired table (most recent first)
     pairs_sorted = sorted(internal_pairs, key=lambda p: p['out']['date'], reverse=True)
@@ -2077,7 +2115,9 @@ def internal_transfers_dashboard(request, display_currency, time_group):
         'total_volume': total_volume,
         'pair_count': pair_count,
         'avg_transfer': avg_transfer,
-        'trend_data': trend_data,
+        'volume_data': volume_data,
+        'count_data': count_data,
+        'route_summary': route_summary,
         'pairs': pairs_sorted,
     }
     return context

@@ -52,11 +52,36 @@
       </div>
     </div>
 
-    <!-- Monthly trend (dual axis: volume + count) -->
+    <!-- Route breakdown cards -->
+    {% if route_summary %}
+    <div class="row g-3 mb-3">
+      {% for r in route_summary %}
+      <div class="col-sm-6 col-lg-3">
+        <div class="card h-100" style="border-left: 4px solid {{ r.color }}">
+          <div class="card-body py-2">
+            <h6 class="card-subtitle text-muted mb-1">{{ r.route }}</h6>
+            <span class="fw-bold" data-sensitive>{{ currency_symbol }}{{ r.volume|format_number }}</span>
+            <span class="text-muted small ms-1">({{ r.count }})</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Monthly Volume Chart -->
     <div class="card mb-4">
       <div class="card-body">
-        <h6 class="card-title">Monthly Internal Transfer Volume</h6>
-        <div id="trendChart"></div>
+        <h6 class="card-title">Monthly Transfer Volume</h6>
+        <div id="volumeChart"></div>
+      </div>
+    </div>
+
+    <!-- Monthly Count Chart -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="card-title">Monthly Transfer Count</h6>
+        <div id="countChart"></div>
       </div>
     </div>
 
@@ -94,7 +119,8 @@
   </div>
 </div>
 
-<script id="trendData" type="application/json">{{ trend_data|escapejson }}</script>
+<script id="volumeData" type="application/json">{{ volume_data|escapejson }}</script>
+<script id="countData" type="application/json">{{ count_data|escapejson }}</script>
 {% endblock %}
 
 {% block extra_js %}
@@ -104,32 +130,38 @@
   window._dashCharts = [];
   var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
 
-  var trend = JSON.parse(document.getElementById('trendData').textContent);
+  var vol = JSON.parse(document.getElementById('volumeData').textContent);
+  var cnt = JSON.parse(document.getElementById('countData').textContent);
 
-  var trendChart = new ApexCharts(document.getElementById('trendChart'), {
-    chart: { type: 'line', height: 320, toolbar: { show: false } },
-    series: [
-      { name: 'Volume', type: 'bar', data: trend.volume || [] },
-      { name: 'Count', type: 'line', data: trend.count || [] },
-    ],
-    colors: ['#3498db', '#e67e22'],
-    stroke: { width: [0, 3], curve: 'smooth' },
-    markers: { size: [0, 4], strokeWidth: 0 },
+  var volumeChart = new ApexCharts(document.getElementById('volumeChart'), {
+    chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
+    series: vol.series || [],
+    colors: vol.colors || [],
     plotOptions: { bar: { borderRadius: 4 } },
-    xaxis: { categories: trend.labels || [] },
-    yaxis: [
-      { title: { text: 'Volume' }, labels: { show: !isPrivacy, formatter: fmtNum } },
-      { opposite: true, title: { text: 'Count' }, labels: { formatter: function(v) { return Math.round(v); } } },
-    ],
+    xaxis: { categories: vol.labels || [] },
+    yaxis: { title: { text: 'Volume' }, labels: { show: !isPrivacy, formatter: fmtNum } },
     dataLabels: { enabled: false },
     legend: { position: 'bottom' },
-    tooltip: { enabled: !isPrivacy, shared: true, intersect: false, y: { formatter: function(v, opts) {
-      return opts.seriesIndex === 0 ? fmtNum(v) : Math.round(v) + ' transfers';
-    } } },
+    tooltip: { enabled: !isPrivacy, shared: true, intersect: false, y: { formatter: fmtNum } },
     grid: { borderColor: '#e9ecef' },
   });
-  trendChart.render();
-  window._dashCharts.push(trendChart);
+  volumeChart.render();
+  window._dashCharts.push(volumeChart);
+
+  var countChart = new ApexCharts(document.getElementById('countChart'), {
+    chart: { type: 'bar', height: 280, stacked: true, toolbar: { show: false } },
+    series: cnt.series || [],
+    colors: cnt.colors || [],
+    plotOptions: { bar: { borderRadius: 4 } },
+    xaxis: { categories: cnt.labels || [] },
+    yaxis: { title: { text: 'Count' }, labels: { formatter: function(v) { return Math.round(v); } } },
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom' },
+    tooltip: { shared: true, intersect: false, y: { formatter: function(v) { return Math.round(v) + ' transfers'; } } },
+    grid: { borderColor: '#e9ecef' },
+  });
+  countChart.render();
+  window._dashCharts.push(countChart);
 
   dashboardPrivacy.apply(window._dashCharts);
 })();
