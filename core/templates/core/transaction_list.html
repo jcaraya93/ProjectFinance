@@ -165,6 +165,7 @@
   <div class="d-flex gap-2 align-items-center">
     <form method="post" action="{% url 'core:classify_unclassified' %}" class="d-inline">
       {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <button type="submit" class="btn btn-sm btn-outline-secondary">Apply Rules to Unclassified</button>
     </form>
     <div class="dropdown">

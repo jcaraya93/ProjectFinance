@@ -359,6 +359,13 @@ def classify_unclassified(request):
     )
     remaining = Transaction.objects.filter(user=request.user).filter(classification_method='unclassified').count()
     messages.success(request, f'Rules applied: {classified} transactions classified. {remaining} remain unclassified.')
+    next_url = request.POST.get('next')
+    if next_url:
+        from django.utils.http import url_has_allowed_host_and_scheme
+        if url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
+            return redirect(next_url)
     return redirect('core:transaction_list')
 
 
