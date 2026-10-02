@@ -34,7 +34,6 @@ __all__ = [
     'external_transfers_dashboard',
     'transfer_flow_dashboard',
     'transaction_pairing_dashboard',
-    'category_stats_dashboard',
 ]
 
 
@@ -68,7 +67,7 @@ PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
 
 DASHBOARD_CATEGORIES = {
-    'overview': 'overview', 'spending_income': 'overview', 'category_stats': 'overview',
+    'overview': 'overview', 'spending_income': 'overview',
     'expense_details': 'overview',
     'expense_range': 'overview',
     'income_overview': 'income', 'income_salary': 'income', 'income_bonus': 'income',
@@ -3141,111 +3140,5 @@ def expense_range_dashboard(request, display_currency, time_group):
         'overall_p75': round(overall_stats['p75']),
         'overall_max': round(overall_stats['max']),
         'compare_total': round(compare_total),
-    }
-    return context
-
-
-@dashboard_view("category_stats", "core/dashboard_category_stats.html")
-def category_stats_dashboard(request, display_currency, time_group):
-    """Dashboard comparing last month per category vs historical min/median/avg/max."""
-    from collections import defaultdict
-    from django.db.models import Sum
-    from django.db.models.functions import TruncMonth, Abs
-
-    user = request.user
-    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
-    currency_symbol = '₡' if display_currency == 'CRC' else '$'
-    abs_field = Abs(amount_field)
-
-    qs = LogicalTransaction.objects.filter(
-        user=user,
-        category__isnull=False,
-        **{f'{amount_field}__isnull': False},
-    ).exclude(category__name='Unclassified')
-
-    monthly_cat = (
-        qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__group__slug', 'category__color')
-        .annotate(total=Sum(abs_field))
-        .order_by('category__group__slug', 'category__name', 'month')
-    )
-
-    cat_months = defaultdict(lambda: {'month_data': {}, 'group': '', 'color': '#6c757d'})
-    all_months = set()
-    for r in monthly_cat:
-        key = r['category__name']
-        m = r['month'].strftime('%Y-%m')
-        cat_months[key]['month_data'][m] = float(r['total'] or 0)
-        cat_months[key]['group'] = r['category__group__slug']
-        cat_months[key]['color'] = r['category__color'] or '#6c757d'
-        all_months.add(r['month'])
-
-    sorted_months = sorted(all_months)
-    last_12_months = sorted_months[-12:] if len(sorted_months) >= 12 else sorted_months
-    month_labels = [m.strftime('%Y-%m') for m in last_12_months]
-    last_month = sorted_months[-1] if sorted_months else None
-    last_month_name = last_month.strftime('%B %Y') if last_month else 'N/A'
-
-    last_month_totals = {}
-    if last_month:
-        last_month_qs = (
-            qs.filter(date__year=last_month.year, date__month=last_month.month)
-            .values('category__name')
-            .annotate(total=Sum(abs_field))
-        )
-        for r in last_month_qs:
-            last_month_totals[r['category__name']] = float(r['total'] or 0)
-
-    def compute_stats(values):
-        if not values:
-            return {'min': 0, 'max': 0, 'avg': 0, 'median': 0}
-        s = sorted(values)
-        n = len(s)
-        return {
-            'min': s[0],
-            'max': s[-1],
-            'avg': sum(s) / n,
-            'median': s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2,
-        }
-
-    expense_categories = []
-    income_categories = []
-
-    for cat_name, data in sorted(cat_months.items(), key=lambda x: x[0]):
-        all_vals = list(data['month_data'].values())
-        stats = compute_stats(all_vals)
-        last_val = last_month_totals.get(cat_name, 0)
-        # Monthly values for the last 12 months (0 if no data)
-        monthly_vals = [round(data['month_data'].get(m, 0)) for m in month_labels]
-        # Deviation from median per month
-        med = stats['median']
-        monthly_dev = [round((v - med) / med * 100) if med > 0 else 0 for v in monthly_vals]
-        entry = {
-            'name': cat_name,
-            'color': data['color'],
-            'last_month': round(last_val),
-            'min': round(stats['min']),
-            'median': round(stats['median']),
-            'avg': round(stats['avg']),
-            'max': round(stats['max']),
-            'monthly_dev': monthly_dev,
-        }
-        if data['group'] == 'expense':
-            expense_categories.append(entry)
-        elif data['group'] == 'income':
-            income_categories.append(entry)
-
-    expense_categories.sort(key=lambda x: x['last_month'], reverse=True)
-    income_categories.sort(key=lambda x: x['last_month'], reverse=True)
-
-    context = {
-        'currency_symbol': currency_symbol,
-        'last_month_name': last_month_name,
-        'month_labels': month_labels,
-        'expense_categories': expense_categories,
-        'income_categories': income_categories,
-        'expense_data': json.dumps(expense_categories, cls=DecimalEncoder),
-        'income_data': json.dumps(income_categories, cls=DecimalEncoder),
-        'month_labels_json': json.dumps(month_labels),
     }
     return context
