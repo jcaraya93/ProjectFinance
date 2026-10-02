@@ -16,15 +16,57 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Expense & Income</h4>
       <div class="d-flex align-items-center gap-2">
-        {% include "core/_currency_toggle.html" %}
+        {% include "core/_currency_toggle.html" with extra_params="period_type="|add:period_type|add:"&period="|add:period_key %}
       </div>
     </div>
 
-    <!-- Time frame selector -->
+    <!-- Time frame selector: All Time, or a specific Month / Quarter / Semester / Year -->
     <div class="btn-group btn-group-sm mb-3" role="group">
-      {% for key, label, start in time_frames %}
-      <a href="?display_currency={{ display_currency }}&time_frame={{ key }}" class="btn {% if selected_frame == key %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ label }}</a>
-      {% endfor %}
+      <a href="?display_currency={{ display_currency }}&period_type=all" class="btn {% if period_type == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All Time</a>
+
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn {% if period_type == 'month' %}btn-primary{% else %}btn-outline-secondary{% endif %} dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+          {% if period_type == 'month' %}{{ period_label }}{% else %}Month{% endif %}
+        </button>
+        <ul class="dropdown-menu">
+          {% for p in period_months %}
+          <li><a class="dropdown-item{% if period_type == 'month' and period_key == p.key %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type=month&period={{ p.key }}">{{ p.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn {% if period_type == 'quarter' %}btn-primary{% else %}btn-outline-secondary{% endif %} dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+          {% if period_type == 'quarter' %}{{ period_label }}{% else %}Quarter{% endif %}
+        </button>
+        <ul class="dropdown-menu">
+          {% for p in period_quarters %}
+          <li><a class="dropdown-item{% if period_type == 'quarter' and period_key == p.key %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type=quarter&period={{ p.key }}">{{ p.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn {% if period_type == 'semester' %}btn-primary{% else %}btn-outline-secondary{% endif %} dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+          {% if period_type == 'semester' %}{{ period_label }}{% else %}Semester{% endif %}
+        </button>
+        <ul class="dropdown-menu">
+          {% for p in period_semesters %}
+          <li><a class="dropdown-item{% if period_type == 'semester' and period_key == p.key %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type=semester&period={{ p.key }}">{{ p.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn {% if period_type == 'year' %}btn-primary{% else %}btn-outline-secondary{% endif %} dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+          {% if period_type == 'year' %}{{ period_label }}{% else %}Year{% endif %}
+        </button>
+        <ul class="dropdown-menu">
+          {% for p in period_years %}
+          <li><a class="dropdown-item{% if period_type == 'year' and period_key == p.key %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type=year&period={{ p.key }}">{{ p.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
     </div>
 
     <!-- ═══ SPENDING ═══ -->

@@ -514,59 +514,108 @@ def manual_classification_dashboard(request, display_currency, time_group):
     return context
 
 
+def _build_calendar_periods(earliest, latest):
+    """Build newest-first lists of calendar Month/Quarter/Semester/Year periods
+    spanning from `earliest` to `latest` (inclusive), each with a stable `key`,
+    display `label`, and `start`/`end` dates (calendar-aligned, not rolling
+    windows).
+    """
+    from calendar import monthrange
+
+    months, quarters, semesters, years = [], [], [], []
+    if not earliest or not latest:
+        return months, quarters, semesters, years
+
+    def _month_end(d):
+        return d.replace(day=monthrange(d.year, d.month)[1])
+
+    # ── Months ──
+    y, m = latest.year, latest.month
+    earliest_first = earliest.replace(day=1)
+    while date(y, m, 1) >= earliest_first:
+        start = date(y, m, 1)
+        months.append({'key': f'{y:04d}-{m:02d}', 'label': start.strftime('%b %Y'),
+                        'start': start, 'end': _month_end(start)})
+        m -= 1
+        if m < 1:
+            m, y = 12, y - 1
+
+    # ── Quarters ──
+    def _q(d):
+        return (d.month - 1) // 3 + 1
+
+    y, q = latest.year, _q(latest)
+    ey, eq = earliest.year, _q(earliest)
+    while (y, q) >= (ey, eq):
+        start_month = (q - 1) * 3 + 1
+        start = date(y, start_month, 1)
+        end = _month_end(date(y, start_month + 2, 1))
+        quarters.append({'key': f'{y:04d}-Q{q}', 'label': f'Q{q} {y}', 'start': start, 'end': end})
+        q -= 1
+        if q < 1:
+            q, y = 4, y - 1
+
+    # ── Semesters ──
+    def _h(d):
+        return 1 if d.month <= 6 else 2
+
+    y, h = latest.year, _h(latest)
+    ey, eh = earliest.year, _h(earliest)
+    while (y, h) >= (ey, eh):
+        start_month = 1 if h == 1 else 7
+        start = date(y, start_month, 1)
+        end = _month_end(date(y, start_month + 5, 1))
+        semesters.append({'key': f'{y:04d}-H{h}', 'label': f'H{h} {y}', 'start': start, 'end': end})
+        h -= 1
+        if h < 1:
+            h, y = 2, y - 1
+
+    # ── Years ──
+    for y in range(latest.year, earliest.year - 1, -1):
+        years.append({'key': f'{y:04d}', 'label': str(y), 'start': date(y, 1, 1), 'end': date(y, 12, 31)})
+
+    return months, quarters, semesters, years
+
+
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
 def spending_income_dashboard(request, display_currency, time_group):
-    """Spending & Income breakdown dashboard with selectable time frames."""
-    from datetime import timedelta
-    from core.models import StatementImport
+    """Expense & Income breakdown dashboard with a calendar-based period filter:
+    All Time, or a specific Month, Quarter, Semester, or Year.
+    """
+    from django.db.models import Min, Max
 
-    today = date.today()
+    date_range = Transaction.objects.filter(user=request.user).aggregate(earliest=Min('date'), latest=Max('date'))
+    months, quarters, semesters, years = _build_calendar_periods(date_range['earliest'], date_range['latest'])
+    period_lookup = {
+        'month': {p['key']: p for p in months},
+        'quarter': {p['key']: p for p in quarters},
+        'semester': {p['key']: p for p in semesters},
+        'year': {p['key']: p for p in years},
+    }
 
-    # Use latest statement month as the reference point
-    latest_stmt = (
-        StatementImport.objects.filter(user=request.user)
-        .order_by('-statement_date').first()
-    )
-    if latest_stmt and latest_stmt.statement_date:
-        ref_date = latest_stmt.statement_date
+    period_type = request.GET.get('period_type', 'all')
+    period_key = request.GET.get('period', '')
+
+    start_date = end_date = None
+    period_label = 'All Time'
+    chosen = period_lookup.get(period_type, {}).get(period_key)
+    if period_type in period_lookup and chosen:
+        start_date, end_date, period_label = chosen['start'], chosen['end'], chosen['label']
     else:
-        ref_date = today
-
-    ref_first = ref_date.replace(day=1)
-
-    def _months_ago(n):
-        y, m = ref_first.year, ref_first.month - n
-        while m < 1:
-            m += 12
-            y -= 1
-        return date(y, m, 1)
-
-    ref_month_label = ref_first.strftime('%b %Y')
-    ytd_start = date(ref_date.year, 1, 1)
-    time_frames = [
-        ('month', ref_month_label, ref_first),
-        ('quarter', 'Last Quarter', _months_ago(2)),
-        ('semester', 'Last 6 Months', _months_ago(5)),
-        ('ytd', 'Year to Date', ytd_start),
-        ('year', 'Last Year', _months_ago(11)),
-        ('all', 'All Time', None),
-    ]
-    frame_map = {key: (label, start) for key, label, start in time_frames}
-
-    selected_frame = request.GET.get('time_frame', 'year')
-    if selected_frame not in frame_map:
-        selected_frame = 'year'
-
-    frame_label, start_date = frame_map[selected_frame]
-    start_iso = start_date.isoformat() if start_date else None
+        period_type, period_key = 'all', ''
 
     context = get_dashboard_stats(request.user,
-        start_date=start_iso,
+        start_date=start_date.isoformat() if start_date else None,
+        end_date=end_date.isoformat() if end_date else None,
         display_currency=display_currency,
     )
-    context['selected_frame'] = selected_frame
-    context['frame_label'] = frame_label
-    context['time_frames'] = time_frames
+    context['period_type'] = period_type
+    context['period_key'] = period_key
+    context['period_label'] = period_label
+    context['period_months'] = months
+    context['period_quarters'] = quarters
+    context['period_semesters'] = semesters
+    context['period_years'] = years
     return context
 
 
