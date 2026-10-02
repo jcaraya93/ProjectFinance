@@ -579,7 +579,8 @@ def _build_calendar_periods(earliest, latest):
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
 def spending_income_dashboard(request, display_currency, time_group):
     """Expense & Income breakdown dashboard with a calendar-based period filter:
-    All Time, or a specific Month, Quarter, Semester, or Year.
+    a specific Month, Quarter, Semester, or Year, or All Time. Defaults to the
+    latest month with data.
     """
     from django.db.models import Min, Max
 
@@ -592,8 +593,14 @@ def spending_income_dashboard(request, display_currency, time_group):
         'year': {p['key']: p for p in years},
     }
 
-    period_type = request.GET.get('period_type', 'all')
-    period_key = request.GET.get('period', '')
+    if 'period_type' in request.GET:
+        period_type = request.GET['period_type']
+        period_key = request.GET.get('period', '')
+    elif months:
+        # Default to the most recent month with data
+        period_type, period_key = 'month', months[0]['key']
+    else:
+        period_type, period_key = 'all', ''
 
     start_date = end_date = None
     period_label = 'All Time'

@@ -20,10 +20,8 @@
       </div>
     </div>
 
-    <!-- Time frame selector: All Time, or a specific Month / Quarter / Semester / Year -->
+    <!-- Time frame selector: a specific Month / Quarter / Semester / Year, or All Time -->
     <div class="btn-group btn-group-sm mb-3" role="group">
-      <a href="?display_currency={{ display_currency }}&period_type=all" class="btn {% if period_type == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All Time</a>
-
       <div class="btn-group btn-group-sm">
         <button type="button" class="btn {% if period_type == 'month' %}btn-primary{% else %}btn-outline-secondary{% endif %} dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
           {% if period_type == 'month' %}{{ period_label }}{% else %}Month{% endif %}
@@ -67,6 +65,8 @@
           {% endfor %}
         </ul>
       </div>
+
+      <a href="?display_currency={{ display_currency }}&period_type=all" class="btn {% if period_type == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All Time</a>
     </div>
 
     <!-- ═══ SPENDING ═══ -->
