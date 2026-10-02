@@ -1,0 +1,11 @@
+{# One period dropdown. Expects ptype, plabel, items (list of {key,label}) plus the period_* context. #}
+<div class="btn-group btn-group-sm">
+  <button type="button" class="btn {% if period_type == ptype %}btn-primary{% else %}btn-outline-secondary{% endif %} dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+    {% if period_type == ptype %}{{ period_label }}{% else %}{{ plabel }}{% endif %}
+  </button>
+  <ul class="dropdown-menu">
+    {% for p in items %}
+    <li><a class="dropdown-item{% if period_type == ptype and period_key == p.key %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ ptype }}&period={{ p.key }}">{{ p.label }}</a></li>
+    {% endfor %}
+  </ul>
+</div>

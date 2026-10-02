@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 {% load finance_filters %}
-{% block title %}Expense Details — Project Finance{% endblock %}
+{% block title %}Expense Monthly Statistics — Project Finance{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -10,51 +10,50 @@
   <div class="col-md-10">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Expense Details — {{ last_month_name }}</h4>
+      <h4 class="mb-0">Expense Monthly Statistics</h4>
       <div class="d-flex align-items-center gap-2">
         <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
           <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
           <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
         </button>
-        {% include "core/_currency_toggle.html" %}
+        {% include "core/_currency_toggle.html" with extra_params="period_type="|add:period_type|add:"&period="|add:period_key %}
       </div>
     </div>
+
+    {% include "core/_period_filter.html" with all_first=True %}
 
     <!-- Details table -->
     <div class="card mb-4">
       <div class="card-body table-responsive">
-        <table class="table table-sm table-hover mb-0">
+        <table class="table table-sm table-hover mb-0" id="detailsTable">
           <thead>
             <tr>
-              <th>Category</th>
-              <th class="text-end">Last Month</th>
-              <th class="text-end">Min</th>
-              <th class="text-end">Median</th>
-              <th class="text-end">Average</th>
-              <th class="text-end">Max</th>
+              <th class="sortable" data-type="text">Category</th>
+              <th class="text-end sortable" data-type="num">Min</th>
+              <th class="text-end sortable" data-type="num">Median</th>
+              <th class="text-end sortable" data-type="num">Average</th>
+              <th class="text-end sortable" data-type="num">Max</th>
             </tr>
           </thead>
           <tbody>
             {% for cat in expense_categories %}
             <tr>
-              <td><span class="badge rounded-pill me-1" style="background-color: {{ cat.color }}">⠀</span>{{ cat.name }}</td>
-              <td class="text-end {% if cat.last_month > cat.median %}text-danger{% elif cat.last_month < cat.median %}text-success{% endif %}" data-sensitive>{{ currency_symbol }}{{ cat.last_month|format_number }}</td>
-              <td class="text-end text-muted" data-sensitive>{{ currency_symbol }}{{ cat.min|format_number }}</td>
-              <td class="text-end text-muted" data-sensitive>{{ currency_symbol }}{{ cat.median|format_number }}</td>
-              <td class="text-end text-muted" data-sensitive>{{ currency_symbol }}{{ cat.avg|format_number }}</td>
-              <td class="text-end text-muted" data-sensitive>{{ currency_symbol }}{{ cat.max|format_number }}</td>
+              <td data-value="{{ cat.name }}"><span class="badge rounded-pill me-1" style="background-color: {{ cat.color }}">⠀</span>{{ cat.name }}</td>
+              <td class="text-end text-muted" data-value="{{ cat.min }}" data-sensitive>{{ currency_symbol }}{{ cat.min|format_number }}</td>
+              <td class="text-end text-muted" data-value="{{ cat.median }}" data-sensitive>{{ currency_symbol }}{{ cat.median|format_number }}</td>
+              <td class="text-end text-muted" data-value="{{ cat.avg }}" data-sensitive>{{ currency_symbol }}{{ cat.avg|format_number }}</td>
+              <td class="text-end text-muted" data-value="{{ cat.max }}" data-sensitive>{{ currency_symbol }}{{ cat.max|format_number }}</td>
             </tr>
             {% empty %}
-            <tr><td colspan="6" class="text-muted">No expense data</td></tr>
+            <tr><td colspan="5" class="text-muted">No expense data</td></tr>
             {% endfor %}
           </tbody>
           <tfoot class="table-light">
             <tr class="fw-bold">
               <td>Total</td>
-              <td class="text-end" data-sensitive>{{ currency_symbol }}{{ total_last_month|format_number }}</td>
               <td></td>
               <td class="text-end" data-sensitive>{{ currency_symbol }}{{ total_median|format_number }}</td>
-              <td></td>
+              <td class="text-end" data-sensitive>{{ currency_symbol }}{{ total_avg|format_number }}</td>
               <td></td>
             </tr>
           </tfoot>
@@ -71,4 +70,35 @@
 
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+  #detailsTable th.sortable { cursor: pointer; user-select: none; }
+  #detailsTable th.sortable::after { content: " \2195"; opacity: .3; }
+  #detailsTable th.sortable.asc::after { content: " \25B2"; opacity: 1; }
+  #detailsTable th.sortable.desc::after { content: " \25BC"; opacity: 1; }
+</style>
+<script>
+(function () {
+  const table = document.getElementById('detailsTable');
+  const tbody = table.tBodies[0];
+  const headers = Array.from(table.tHead.rows[0].cells);
+  headers.forEach((th, idx) => {
+    th.addEventListener('click', () => {
+      const numeric = th.dataset.type === 'num';
+      const dir = th.classList.contains('desc') ? 'asc' : (th.classList.contains('asc') ? 'desc' : (numeric ? 'desc' : 'asc'));
+      headers.forEach(h => h.classList.remove('asc', 'desc'));
+      th.classList.add(dir);
+      const rows = Array.from(tbody.rows).filter(r => r.cells[idx] && r.cells[idx].dataset.value !== undefined);
+      rows.sort((a, b) => {
+        const x = a.cells[idx].dataset.value, y = b.cells[idx].dataset.value;
+        const cmp = numeric ? Number(x) - Number(y) : x.localeCompare(y);
+        return dir === 'asc' ? cmp : -cmp;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+})();
+</script>
 {% endblock %}

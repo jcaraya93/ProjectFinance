@@ -1,0 +1,15 @@
+{# Period selector. all_first puts All Time first and lists periods largest to smallest (Year, Semester, Quarter); show_month adds a Month dropdown. #}
+<div class="btn-group btn-group-sm mb-3" role="group">
+{% if all_first %}
+  <a href="?display_currency={{ display_currency }}&period_type=all" class="btn {% if period_type == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All Time</a>
+  {% include "core/_period_dropdown.html" with ptype="year" plabel="Year" items=period_years %}
+  {% include "core/_period_dropdown.html" with ptype="semester" plabel="Semester" items=period_semesters %}
+  {% include "core/_period_dropdown.html" with ptype="quarter" plabel="Quarter" items=period_quarters %}
+{% else %}
+  {% if show_month %}{% include "core/_period_dropdown.html" with ptype="month" plabel="Month" items=period_months %}{% endif %}
+  {% include "core/_period_dropdown.html" with ptype="quarter" plabel="Quarter" items=period_quarters %}
+  {% include "core/_period_dropdown.html" with ptype="semester" plabel="Semester" items=period_semesters %}
+  {% include "core/_period_dropdown.html" with ptype="year" plabel="Year" items=period_years %}
+  <a href="?display_currency={{ display_currency }}&period_type=all" class="btn {% if period_type == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">All Time</a>
+{% endif %}
+</div>
