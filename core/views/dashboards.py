@@ -20,7 +20,6 @@ __all__ = [
     'default_buckets_dashboard',
     'manual_classification_dashboard',
     'spending_income_dashboard',
-    'expense_details_dashboard',
     'expense_range_dashboard',
     'chart_comparison',
     'car_dashboard',
@@ -70,7 +69,6 @@ PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
 DASHBOARD_CATEGORIES = {
     'overview': 'overview', 'spending_income': 'overview',
-    'expense_details': 'overview',
     'expense_range': 'overview',
     'income_overview': 'income', 'income_salary': 'income', 'income_bonus': 'income',
     'reimbursement_overview': 'income',
@@ -2977,95 +2975,6 @@ def transaction_pairing_dashboard(request, display_currency, time_group):
     }
     return context
 
-
-@dashboard_view("expense_details", "core/dashboard_expense_details.html")
-def expense_details_dashboard(request, display_currency, time_group):
-    """Expense category monthly statistics (min/median/avg/max) over a selected
-    Quarter, Semester, Year or All Time period."""
-    from collections import defaultdict
-    from django.db.models import Min, Max, Sum
-    from django.db.models.functions import TruncMonth, Abs
-
-    user = request.user
-    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
-    currency_symbol = '₡' if display_currency == 'CRC' else '$'
-    abs_field = Abs(amount_field)
-
-    date_range = Transaction.objects.filter(user=user).aggregate(earliest=Min('date'), latest=Max('date'))
-    _, quarters, semesters, years = _build_calendar_periods(date_range['earliest'], date_range['latest'])
-    period_lookup = {
-        'quarter': {p['key']: p for p in quarters},
-        'semester': {p['key']: p for p in semesters},
-        'year': {p['key']: p for p in years},
-    }
-
-    period_type = request.GET.get('period_type', 'all')
-    period_key = request.GET.get('period', '')
-    period_label = 'All Time'
-    qs = LogicalTransaction.objects.filter(
-        user=user,
-        category_v2__isnull=False,
-        category_v2__group__slug='expense',
-        **{f'{amount_field}__isnull': False},
-    ).exclude(category_v2__name='Unclassified')
-
-    chosen = period_lookup.get(period_type, {}).get(period_key)
-    if chosen:
-        qs = qs.filter(date__gte=chosen['start'], date__lte=chosen['end'])
-        period_label = chosen['label']
-    else:
-        period_type, period_key = 'all', ''
-
-    monthly_cat = (
-        qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category_v2__name', 'category_v2__color')
-        .annotate(total=Sum(abs_field))
-        .order_by('category_v2__name', 'month')
-    )
-
-    cat_months = defaultdict(lambda: {'values': [], 'color': '#6c757d'})
-    for r in monthly_cat:
-        data = cat_months[r['category_v2__name']]
-        data['values'].append(float(r['total'] or 0))
-        data['color'] = r['category_v2__color'] or '#6c757d'
-
-    def compute_stats(values):
-        s = sorted(values)
-        n = len(s)
-        return {
-            'min': s[0],
-            'max': s[-1],
-            'avg': sum(s) / n,
-            'median': s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2,
-        }
-
-    expense_categories = []
-    for cat_name, data in cat_months.items():
-        stats = compute_stats(data['values'])
-        expense_categories.append({
-            'name': cat_name,
-            'color': data['color'],
-            'min': round(stats['min']),
-            'median': round(stats['median']),
-            'avg': round(stats['avg']),
-            'max': round(stats['max']),
-        })
-
-    expense_categories.sort(key=lambda x: x['median'], reverse=True)
-
-    return {
-        'currency_symbol': currency_symbol,
-        'expense_categories': expense_categories,
-        'expense_data': json.dumps(expense_categories, cls=DecimalEncoder),
-        'total_median': sum(c['median'] for c in expense_categories),
-        'total_avg': sum(c['avg'] for c in expense_categories),
-        'period_type': period_type,
-        'period_key': period_key,
-        'period_label': period_label,
-        'period_quarters': quarters,
-        'period_semesters': semesters,
-        'period_years': years,
-    }
 
 @dashboard_view("expense_range", "core/dashboard_expense_range.html")
 def expense_range_dashboard(request, display_currency, time_group):
