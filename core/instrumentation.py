@@ -38,12 +38,6 @@ exchange_rate_fetches = meter.create_counter(
     description="Exchange rate API calls by outcome",
 )
 
-ai_classifier_calls = meter.create_counter(
-    "ai_classifier.calls",
-    unit="{request}",
-    description="AI classifier API calls by outcome",
-)
-
 # ── Histograms ────────────────────────────────────────────────
 
 dashboard_duration = meter.create_histogram(

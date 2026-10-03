@@ -69,12 +69,11 @@ ProjectFinance/
 │   ├── services/
 │   │   ├── classifier.py       # Thin façade → yaml_classifier
 │   │   ├── yaml_classifier.py  # Rule matching engine (reads ClassificationRule from DB)
-│   │   ├── ai_classifier.py    # Google Gemini AI classification
 │   │   ├── import_service.py   # Statement import orchestration (parse → classify → bulk write)
 │   │   ├── exchange_rates.py   # CRC↔USD via Frankfurter API
 │   │   ├── stats.py            # Dashboard aggregation queries
 │   │   └── user_data_io.py     # Full data export/import (JSON)
-│   ├── management/commands/    # seed_categories, ai_classify
+│   ├── management/commands/    # seed_categories
 │   ├── templates/core/         # HTML templates (Bootstrap 5)
 │   ├── static/core/            # CSS + JS assets
 │   ├── templatetags/           # Custom template filters
