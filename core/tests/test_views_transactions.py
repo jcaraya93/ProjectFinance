@@ -111,6 +111,18 @@ class TestEditTransaction:
         assert txn.description == 'Updated Description'
         assert (txn.category_v2, txn.classification_method_v2, txn.matched_rule_v2) == (node, 'manual', None)
 
+    def test_edit_saves_note_per_split(self, auth_client, user, sample_data, exchange_rates):
+        raw = sample_data['transactions'][0].raw_transaction
+        node = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'))
+        half = raw.normalized_amount / 2
+        auth_client.post(reverse('core:edit_transaction', args=[raw.pk]), {
+            'action': 'save', 'split_description': ['A', 'B'], 'split_amount': [str(half), str(half)],
+            'split_category': [node.pk, node.pk], 'split_note': ['first note', ''],
+        })
+        assert [lt.note for lt in raw.logical_transactions.order_by('pk')] == ['first note', '']
+        resp = auth_client.get(reverse('core:edit_transaction', args=[raw.pk]))
+        assert 'first note' in resp.content.decode()
+
     def test_edit_rejects_other_users_node(self, auth_client, sample_data):
         from core.models import User
         other = User.objects.create_user(email='o@example.com', password='x')

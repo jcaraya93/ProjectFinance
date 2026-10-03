@@ -304,9 +304,11 @@ def edit_transaction(request, raw_id):
         descriptions = request.POST.getlist('split_description')
         amounts = request.POST.getlist('split_amount')
         category_ids = request.POST.getlist('split_category')
+        notes = request.POST.getlist('split_note')
+        notes += [''] * (len(descriptions) - len(notes))
 
         try:
-            parsed = [(d.strip(), Decimal(a.strip()), int(c)) for d, a, c in zip(descriptions, amounts, category_ids) if a.strip()]
+            parsed = [(d.strip(), Decimal(a.strip()), int(c), n.strip()) for d, a, c, n in zip(descriptions, amounts, category_ids, notes) if a.strip()]
         except (ValueError, InvalidOperation):
             messages.error(request, 'Invalid amount values.')
             return redirect('core:edit_transaction', raw_id=raw_id)
@@ -315,7 +317,7 @@ def edit_transaction(request, raw_id):
             messages.error(request, 'At least one entry is required.')
             return redirect('core:edit_transaction', raw_id=raw_id)
 
-        total = sum(a for _, a, _ in parsed)
+        total = sum(p[1] for p in parsed)
         if total != raw.normalized_amount:
             messages.error(request, f'Amounts ({total}) must equal the original amount ({raw.normalized_amount}).')
             return redirect('core:edit_transaction', raw_id=raw_id)
@@ -327,15 +329,16 @@ def edit_transaction(request, raw_id):
 
         from ..services.exchange_rates import convert_transaction
 
-        for i, (desc, amt, cat_id) in enumerate(parsed):
+        for i, (desc, amt, cat_id, note) in enumerate(parsed):
             cat = get_object_or_404(CategoryNode, pk=cat_id, user=request.user)
             if i == 0 and first_logical:
                 first_logical.description = desc
+                first_logical.note = note
                 first_logical.amount = amt
                 first_logical.category_v2 = cat
                 first_logical.classification_method_v2 = 'unclassified' if cat.is_protected else 'manual'
                 first_logical.matched_rule_v2 = None
-                first_logical.save(update_fields=['description', 'amount', 'category_v2', 'classification_method_v2', 'matched_rule_v2'])
+                first_logical.save(update_fields=['description', 'note', 'amount', 'category_v2', 'classification_method_v2', 'matched_rule_v2'])
                 convert_transaction(first_logical)
                 first_logical.save(update_fields=['amount_crc', 'amount_usd'])
             else:
@@ -344,6 +347,7 @@ def edit_transaction(request, raw_id):
                     user=request.user,
                     date=raw.date,
                     description=desc,
+                    note=note,
                     amount=amt,
                     category_v2=cat,
                     classification_method_v2='unclassified' if cat.is_protected else 'manual',

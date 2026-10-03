@@ -313,6 +313,7 @@ class LogicalTransaction(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='logical_transactions')
     date = models.DateField()
     description = models.CharField(max_length=255)
+    note = models.TextField(blank=True, default='')
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     amount_crc = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     amount_usd = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)

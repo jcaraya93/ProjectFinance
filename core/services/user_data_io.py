@@ -153,6 +153,7 @@ def export_user_data(user):
                     for ltxn in LogicalTransaction.objects.filter(raw_transaction=raw, user=user).order_by('pk'):
                         ltxn_data = {
                             'description': ltxn.description,
+                            'note': ltxn.note,
                             'amount': _dec(ltxn.amount),
                             'amount_crc': _dec(ltxn.amount_crc),
                             'amount_usd': _dec(ltxn.amount_usd),
@@ -411,6 +412,7 @@ def import_user_data(user, data):
                                 date=_to_date(ltxn_data.get('date', raw_data['date'])),
                                 description=ltxn_data['description'],
                                 amount=_to_decimal(ltxn_data['amount']),
+                                note=ltxn_data.get('note') or '',
                                 amount_crc=_to_decimal(ltxn_data.get('amount_crc')),
                                 amount_usd=_to_decimal(ltxn_data.get('amount_usd')),
                                 category_v2=ltxn_cat,
