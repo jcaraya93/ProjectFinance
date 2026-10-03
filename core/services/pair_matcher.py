@@ -53,11 +53,11 @@ def auto_match_transfers(user, dry_run=False):
     logical_txns = (
         LogicalTransaction.objects.filter(
             user=user,
-            category__group__slug='transfer',
+            category_v2__group__slug='transfer',
         )
         .select_related(
             'raw_transaction__ledger__statement_import__account',
-            'category',
+            'category_v2',
         )
     )
 
@@ -82,7 +82,7 @@ def auto_match_transfers(user, dry_run=False):
             'description': lt.description,
             'account_id': acct.id if acct else None,
             'account_name': str(acct) if acct else 'Unknown',
-            'category': lt.category.name,
+            'category': lt.category_v2.name,
         })
 
     # Match pairs: same category, different accounts, opposite signs,

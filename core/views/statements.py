@@ -102,19 +102,19 @@ def statement_list(request):
             txn_count=Count('raw_transactions__logical_transactions', distinct=True),
             total_spent=Sum(
                 'raw_transactions__logical_transactions__amount',
-                filter=Q(raw_transactions__logical_transactions__category__group__slug='expense'),
+                filter=Q(raw_transactions__logical_transactions__category_v2__group__slug='expense'),
             ),
             total_payments=Abs(Sum(
                 'raw_transactions__logical_transactions__amount',
-                filter=Q(raw_transactions__logical_transactions__category__group__slug='transfer'),
+                filter=Q(raw_transactions__logical_transactions__category_v2__group__slug='transfer'),
             )),
             total_income=Sum(
                 'raw_transactions__logical_transactions__amount',
-                filter=Q(raw_transactions__logical_transactions__category__group__slug='income'),
+                filter=Q(raw_transactions__logical_transactions__category_v2__group__slug='income'),
             ),
             total_expenses=Abs(Sum(
                 'raw_transactions__logical_transactions__amount',
-                filter=Q(raw_transactions__logical_transactions__category__group__slug='expense'),
+                filter=Q(raw_transactions__logical_transactions__category_v2__group__slug='expense'),
             )),
         ).order_by(
             '-statement_import__statement_date'

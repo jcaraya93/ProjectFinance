@@ -7,7 +7,7 @@ from decimal import Decimal
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 
-from ..models import Transaction, LogicalTransaction, Category, ClassificationRule
+from ..models import Transaction, LogicalTransaction, CategoryNode, ClassificationRuleV2
 from ..services.stats import get_dashboard_stats
 from ..instrumentation import tracer, dashboard_duration
 
@@ -138,9 +138,9 @@ def transaction_health_dashboard(request, display_currency, time_group):
 
     total = qs.count()
     method_counts = dict(
-        qs.values('classification_method')
+        qs.values('classification_method_v2')
         .annotate(c=Count('id'))
-        .values_list('classification_method', 'c')
+        .values_list('classification_method_v2', 'c')
     )
     unclassified_count = method_counts.get('unclassified', 0)
     rule_count = method_counts.get('rule', 0)
@@ -159,14 +159,14 @@ def transaction_health_dashboard(request, display_currency, time_group):
     # Monthly classification trend
     monthly_methods = (
         qs.annotate(month=TruncMonth('date'))
-        .values('month', 'classification_method')
+        .values('month', 'classification_method_v2')
         .annotate(c=Count('id'))
         .order_by('month')
     )
     month_set = sorted(set(r['month'] for r in monthly_methods))
     month_map = defaultdict(lambda: defaultdict(int))
     for r in monthly_methods:
-        month_map[r['month']][r['classification_method']] = r['c']
+        month_map[r['month']][r['classification_method_v2']] = r['c']
 
     monthly_trend_data = {
         'labels': [m.strftime('%Y-%m') for m in month_set],
@@ -177,15 +177,15 @@ def transaction_health_dashboard(request, display_currency, time_group):
 
     # Category coverage (how each category is classified)
     cat_methods = (
-        qs.exclude(category__isnull=True)
-        .values('category__name', 'category__group__slug', 'classification_method')
+        qs.exclude(category_v2__isnull=True)
+        .values('category_v2__name', 'category_v2__group__slug', 'classification_method_v2')
         .annotate(c=Count('id'))
-        .order_by('category__group__slug', 'category__name')
+        .order_by('category_v2__group__slug', 'category_v2__name')
     )
     cat_data = defaultdict(lambda: defaultdict(int))
     for r in cat_methods:
-        label = f"{r['category__name']} ({r['category__group__slug']})"
-        cat_data[label][r['classification_method']] = r['c']
+        label = f"{r['category_v2__name']} ({r['category_v2__group__slug']})"
+        cat_data[label][r['classification_method_v2']] = r['c']
     # Sort by total count descending
     sorted_cats = sorted(cat_data.keys(), key=lambda c: sum(cat_data[c].values()), reverse=True)
     category_coverage_data = {
@@ -198,7 +198,7 @@ def transaction_health_dashboard(request, display_currency, time_group):
 
     # Recent unclassified
     recent_unclassified = list(
-        qs.filter(classification_method='unclassified')
+        qs.filter(classification_method_v2='unclassified')
         .select_related(
             'raw_transaction__ledger__statement_import__account',
         )
@@ -230,7 +230,7 @@ def rule_matching_dashboard(request, display_currency, time_group):
     from django.db.models.functions import TruncMonth
 
     user = request.user
-    rules_qs = ClassificationRule.objects.filter(user=user)
+    rules_qs = ClassificationRuleV2.objects.filter(user=user)
     txn_qs = LogicalTransaction.objects.filter(user=user)
 
     # Summary
@@ -238,7 +238,7 @@ def rule_matching_dashboard(request, display_currency, time_group):
     rules_with_counts = rules_qs.annotate(match_count=Count('matched_transactions'))
     active_rules = rules_with_counts.filter(match_count__gt=0).count()
     unused_count = total_rules - active_rules
-    total_rule_matched = txn_qs.filter(classification_method='rule').count()
+    total_rule_matched = txn_qs.filter(classification_method_v2='rule').count()
     avg_matches = (total_rule_matched / active_rules) if active_rules else 0
 
     # Rules by group doughnut
@@ -260,7 +260,7 @@ def rule_matching_dashboard(request, display_currency, time_group):
 
     # Monthly rule-matched transactions trend
     monthly_rule = (
-        txn_qs.filter(classification_method='rule')
+        txn_qs.filter(classification_method_v2='rule')
         .annotate(month=TruncMonth('date'))
         .values('month')
         .annotate(c=Count('id'))
@@ -312,10 +312,10 @@ def default_buckets_dashboard(request, display_currency, time_group):
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
-    default_name = Category.UNCLASSIFIED_NAME  # 'Default'
+    default_name = CategoryNode.UNCLASSIFIED_NAME  # 'Default'
     qs = LogicalTransaction.objects.filter(
-        user=user, category__name=default_name,
-    ).select_related('category__group')
+        user=user, category_v2__name=default_name,
+    ).select_related('category_v2__group')
 
     total_all = LogicalTransaction.objects.filter(user=user).count()
     total_default = qs.count()
@@ -324,13 +324,13 @@ def default_buckets_dashboard(request, display_currency, time_group):
     GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transfer': 'Transfer', 'unclassified': 'Unclassified'}
     GROUP_COLORS = {'expense': 'danger', 'income': 'success', 'transfer': 'primary', 'unclassified': 'warning'}
     group_stats_raw = (
-        qs.values('category__group__slug')
+        qs.values('category_v2__group__slug')
         .annotate(count=Count('id'), total_amount=Sum(Abs(amount_field)))
-        .order_by('category__group__slug')
+        .order_by('category_v2__group__slug')
     )
     group_stats = []
     for r in group_stats_raw:
-        slug = r['category__group__slug']
+        slug = r['category_v2__group__slug']
         group_stats.append({
             'slug': slug,
             'label': GROUP_LABELS.get(slug, slug),
@@ -354,16 +354,16 @@ def default_buckets_dashboard(request, display_currency, time_group):
     # Monthly trend of Default transactions by group
     monthly_raw = (
         qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__group__slug')
+        .values('month', 'category_v2__group__slug')
         .annotate(c=Count('id'))
         .order_by('month')
     )
     month_set = sorted(set(r['month'] for r in monthly_raw))
     month_map = defaultdict(lambda: defaultdict(int))
     for r in monthly_raw:
-        month_map[r['month']][r['category__group__slug']] = r['c']
+        month_map[r['month']][r['category_v2__group__slug']] = r['c']
 
-    active_slugs = sorted(set(r['category__group__slug'] for r in monthly_raw))
+    active_slugs = sorted(set(r['category_v2__group__slug'] for r in monthly_raw))
     monthly_trend = {
         'labels': [m.strftime('%Y-%m') for m in month_set],
         'datasets': [
@@ -378,7 +378,7 @@ def default_buckets_dashboard(request, display_currency, time_group):
 
     # Top repeated descriptions in Default (rule candidates)
     desc_counts = (
-        qs.values('description', 'category__group__slug')
+        qs.values('description', 'category_v2__group__slug')
         .annotate(count=Count('id'), total_amount=Sum(Abs(amount_field)))
         .filter(count__gte=2)
         .order_by('-count')[:20]
@@ -386,8 +386,8 @@ def default_buckets_dashboard(request, display_currency, time_group):
     top_descriptions = [
         {
             'description': r['description'],
-            'group': GROUP_LABELS.get(r['category__group__slug'], r['category__group__slug']),
-            'group_slug': r['category__group__slug'],
+            'group': GROUP_LABELS.get(r['category_v2__group__slug'], r['category_v2__group__slug']),
+            'group_slug': r['category_v2__group__slug'],
             'count': r['count'],
             'total_amount': r['total_amount'] or Decimal('0'),
         }
@@ -420,8 +420,8 @@ def manual_classification_dashboard(request, display_currency, time_group):
     abs_field = Abs(amount_field)
 
     manual_qs = LogicalTransaction.objects.filter(
-        user=user, classification_method='manual',
-    ).select_related('category__group')
+        user=user, classification_method_v2='manual',
+    ).select_related('category_v2__group')
 
     total_all = LogicalTransaction.objects.filter(user=user).count()
     total_manual = manual_qs.count()
@@ -430,13 +430,13 @@ def manual_classification_dashboard(request, display_currency, time_group):
     # By category group
     GROUP_LABELS = {'expense': 'Expense', 'income': 'Income', 'transfer': 'Transfer', 'unclassified': 'Unclassified'}
     group_breakdown = list(
-        manual_qs.values('category__group__slug')
+        manual_qs.values('category_v2__group__slug')
         .annotate(count=Count('id'), total_amount=Sum(abs_field))
         .order_by('-count')
     )
     group_stats = []
     for r in group_breakdown:
-        slug = r['category__group__slug']
+        slug = r['category_v2__group__slug']
         group_stats.append({
             'slug': slug,
             'label': GROUP_LABELS.get(slug, slug),
@@ -446,14 +446,14 @@ def manual_classification_dashboard(request, display_currency, time_group):
 
     # By category (top 20)
     cat_breakdown = list(
-        manual_qs.values('category__name', 'category__color', 'category__group__slug')
+        manual_qs.values('category_v2__name', 'category_v2__color', 'category_v2__group__slug')
         .annotate(count=Count('id'), total_amount=Sum(abs_field))
         .order_by('-count')[:20]
     )
     cat_data = {
-        'labels': [r['category__name'] for r in cat_breakdown],
+        'labels': [r['category_v2__name'] for r in cat_breakdown],
         'values': [r['count'] for r in cat_breakdown],
-        'colors': [r['category__color'] or '#6c757d' for r in cat_breakdown],
+        'colors': [r['category_v2__color'] or '#6c757d' for r in cat_breakdown],
     }
 
     # Monthly trend
@@ -472,7 +472,7 @@ def manual_classification_dashboard(request, display_currency, time_group):
 
     # Top repeated descriptions (candidates for new rules)
     desc_counts = list(
-        manual_qs.values('description', 'category__name', 'category__color', 'category__group__slug')
+        manual_qs.values('description', 'category_v2__name', 'category_v2__color', 'category_v2__group__slug')
         .annotate(count=Count('id'), total_amount=Sum(abs_field))
         .filter(count__gte=2)
         .order_by('-count')[:20]
@@ -480,9 +480,9 @@ def manual_classification_dashboard(request, display_currency, time_group):
     rule_candidates = [
         {
             'description': r['description'],
-            'category': r['category__name'],
-            'color': r['category__color'] or '#6c757d',
-            'group': GROUP_LABELS.get(r['category__group__slug'], r['category__group__slug']),
+            'category': r['category_v2__name'],
+            'color': r['category_v2__color'] or '#6c757d',
+            'group': GROUP_LABELS.get(r['category_v2__group__slug'], r['category_v2__group__slug']),
             'count': r['count'],
             'amount': float(r['total_amount'] or 0),
         }
@@ -492,12 +492,12 @@ def manual_classification_dashboard(request, display_currency, time_group):
     # Recent manual transactions
     recent = list(
         manual_qs.order_by('-date')[:30]
-        .values('date', 'description', 'category__name', 'category__color', amount_field)
+        .values('date', 'description', 'category_v2__name', 'category_v2__color', amount_field)
     )
     for r in recent:
         r['amount'] = abs(float(r.pop(amount_field) or 0))
-        r['category'] = r.pop('category__name')
-        r['color'] = r.pop('category__color') or '#6c757d'
+        r['category'] = r.pop('category_v2__name')
+        r['color'] = r.pop('category_v2__color') or '#6c757d'
 
     context = {
         'currency_symbol': currency_symbol,
@@ -652,13 +652,13 @@ def car_dashboard(request, display_currency, time_group):
 
     # ── Base querysets ──
     car_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name__in=CAR_CATEGORIES, **{f'{amount_field}__isnull': False})
+        category_v2__name__in=CAR_CATEGORIES, **{f'{amount_field}__isnull': False})
     salary_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name__in=SALARY_CATEGORIES, **{f'{amount_field}__isnull': False})
+        category_v2__name__in=SALARY_CATEGORIES, **{f'{amount_field}__isnull': False})
 
     # ── Monthly aggregations ──
     monthly_car = (car_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name').annotate(total=Sum(abs_field)).order_by('month'))
+        .values('month', 'category_v2__name').annotate(total=Sum(abs_field)).order_by('month'))
     monthly_salary = (salary_qs.annotate(month=TruncMonth('date'))
         .values('month').annotate(total=Sum(amount_field)).order_by('month'))
     salary_by_month = {r['month'].strftime('%Y-%m'): float(r['total'] or 0) for r in monthly_salary}
@@ -666,7 +666,7 @@ def car_dashboard(request, display_currency, time_group):
     months_data = {}
     for r in monthly_car:
         m = r['month'].strftime('%Y-%m')
-        cat = r['category__name']
+        cat = r['category_v2__name']
         if m not in months_data:
             months_data[m] = {c: 0 for c in CAR_CATEGORIES}
             months_data[m]['_total'] = 0
@@ -686,9 +686,9 @@ def car_dashboard(request, display_currency, time_group):
     tco_total = float(car_qs.aggregate(t=Sum(abs_field))['t'] or 0)
     car_last_year = sum(monthly_totals[-12:]) if monthly_totals else 0
 
-    category_totals = list(car_qs.values('category__name', 'category__color')
+    category_totals = list(car_qs.values('category_v2__name', 'category_v2__color')
         .annotate(total=Sum(abs_field)).order_by('-total'))
-    cat_colors = {r['category__name']: r['category__color'] for r in category_totals}
+    cat_colors = {r['category_v2__name']: r['category_v2__color'] for r in category_totals}
     defaults = {'Car Gas': '#2980b9', 'Car Insurance': '#d35400', 'Car Maintenance': '#5dade2', 'Car Parking & Toll': '#607d8b', 'Car Tax': '#8e44ad', 'Car Wash': '#1abc9c'}
     for c in CAR_CATEGORIES:
         cat_colors.setdefault(c, defaults.get(c, '#6c757d'))
@@ -697,7 +697,7 @@ def car_dashboard(request, display_currency, time_group):
     pct_trend = [(months_data.get(m, {}).get('_total', 0) / salary_by_month[m] * 100) if salary_by_month.get(m, 0) > 0 else 0 for m in sorted_months]
 
     # ── GAS section ──
-    gas_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Gas', **{f'{amount_field}__isnull': False})
+    gas_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Gas', **{f'{amount_field}__isnull': False})
     monthly_gas = (gas_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(count=Count('id'), total=Sum(abs_field), avg=Sum(abs_field) / Count('id'))
         .order_by('month'))
@@ -752,7 +752,7 @@ def car_dashboard(request, display_currency, time_group):
 
     # ── RUNNING COSTS (Gas + Parking + Wash) ──
     running_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name__in=RUNNING_CATEGORIES, **{f'{amount_field}__isnull': False})
+        category_v2__name__in=RUNNING_CATEGORIES, **{f'{amount_field}__isnull': False})
     running_monthly = (running_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field)).order_by('month'))
     running_by_month = {r['month'].strftime('%Y-%m'): float(r['total'] or 0) for r in running_monthly}
@@ -765,17 +765,17 @@ def car_dashboard(request, display_currency, time_group):
     running_last_year = sum(running_totals[-12:]) if running_totals else 0
     # Per-category monthly for stacked chart
     running_by_cat_month = (running_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name').annotate(total=Sum(abs_field)).order_by('month'))
+        .values('month', 'category_v2__name').annotate(total=Sum(abs_field)).order_by('month'))
     running_cat_data = {c: {m: 0 for m in sorted_months} for c in RUNNING_CATEGORIES}
     for r in running_by_cat_month:
         m = r['month'].strftime('%Y-%m')
-        if m in running_cat_data.get(r['category__name'], {}):
-            running_cat_data[r['category__name']][m] = float(r['total'] or 0)
+        if m in running_cat_data.get(r['category_v2__name'], {}):
+            running_cat_data[r['category_v2__name']][m] = float(r['total'] or 0)
     running_colors = {'Car Gas': '#2980b9', 'Car Parking & Toll': '#607d8b', 'Car Wash': '#1abc9c'}
 
     # ── OWNERSHIP COSTS (Maintenance + Insurance + Tax) ──
     ownership_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name__in=OWNERSHIP_CATEGORIES, **{f'{amount_field}__isnull': False})
+        category_v2__name__in=OWNERSHIP_CATEGORIES, **{f'{amount_field}__isnull': False})
     ownership_monthly = (ownership_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field)).order_by('month'))
     ownership_by_month = {r['month'].strftime('%Y-%m'): float(r['total'] or 0) for r in ownership_monthly}
@@ -790,22 +790,22 @@ def car_dashboard(request, display_currency, time_group):
     from datetime import date, timedelta
     twelve_months_ago = date.today() - timedelta(days=365)
 
-    maint_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Maintenance', **{f'{amount_field}__isnull': False})
+    maint_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Maintenance', **{f'{amount_field}__isnull': False})
     maint_qs_12m = maint_qs.filter(date__gte=twelve_months_ago)
     maint_12m_total = float(maint_qs_12m.aggregate(t=Sum(abs_field))['t'] or 0)
     maint_12m_count = maint_qs_12m.count()
 
-    ins_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Insurance', **{f'{amount_field}__isnull': False})
+    ins_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Insurance', **{f'{amount_field}__isnull': False})
     ins_qs_12m = ins_qs.filter(date__gte=twelve_months_ago)
     ins_12m_total = float(ins_qs_12m.aggregate(t=Sum(abs_field))['t'] or 0)
     ins_12m_count = ins_qs_12m.count()
 
-    tax_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Tax', **{f'{amount_field}__isnull': False})
+    tax_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Tax', **{f'{amount_field}__isnull': False})
     tax_qs_12m = tax_qs.filter(date__gte=twelve_months_ago)
     tax_12m_total = float(tax_qs_12m.aggregate(t=Sum(abs_field))['t'] or 0)
     tax_12m_count = tax_qs_12m.count()
 
-    wash_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Wash', **{f'{amount_field}__isnull': False})
+    wash_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Wash', **{f'{amount_field}__isnull': False})
     wash_total = float(wash_qs.aggregate(t=Sum(abs_field))['t'] or 0)
     wash_count = wash_qs.count()
 
@@ -820,7 +820,7 @@ def car_dashboard(request, display_currency, time_group):
     periodic_timeline.sort(key=lambda x: x['date'], reverse=True)
 
     # ── PARKING section ──
-    park_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Parking & Toll', **{f'{amount_field}__isnull': False})
+    park_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Parking & Toll', **{f'{amount_field}__isnull': False})
     park_monthly = (park_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field), count=Count('id')).order_by('month'))
     park_by_month = {r['month'].strftime('%Y-%m'): {'total': float(r['total'] or 0), 'count': r['count']} for r in park_monthly}
@@ -983,9 +983,9 @@ def car_dashboard(request, display_currency, time_group):
             'labels': sorted_months, 'datasets': trend_datasets, 'colors': cat_colors,
         }, cls=DecimalEncoder),
         'breakdown_data': json.dumps({
-            'labels': [r['category__name'] for r in category_totals],
+            'labels': [r['category_v2__name'] for r in category_totals],
             'values': [float(r['total']) for r in category_totals],
-            'colors': [cat_colors.get(r['category__name'], '#6c757d') for r in category_totals],
+            'colors': [cat_colors.get(r['category_v2__name'], '#6c757d') for r in category_totals],
         }, cls=DecimalEncoder),
         'cost_type_data': json.dumps({
             'labels': ['Running Costs', 'Ownership Costs'],
@@ -1018,7 +1018,7 @@ def car_gas_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
 
-    gas_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Gas', **{f'{amount_field}__isnull': False})
+    gas_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Gas', **{f'{amount_field}__isnull': False})
     monthly_gas = (gas_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(count=Count('id'), total=Sum(abs_field), avg=Sum(abs_field) / Count('id'))
         .order_by('month'))
@@ -1137,7 +1137,7 @@ def car_parking_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
 
-    park_qs = Transaction.objects.filter(user=request.user).filter(category__name='Car Parking & Toll', **{f'{amount_field}__isnull': False})
+    park_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Parking & Toll', **{f'{amount_field}__isnull': False})
     park_monthly = (park_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field), count=Count('id')).order_by('month'))
     park_by_month = {r['month'].strftime('%Y-%m'): {'total': float(r['total'] or 0), 'count': r['count']} for r in park_monthly}
@@ -1237,7 +1237,7 @@ def income_salary_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
     salary_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name='Work Salary',
+        category_v2__name='Work Salary',
         **{f'{amount_field}__isnull': False},
     )
 
@@ -1323,13 +1323,13 @@ def income_salary_dashboard(request, display_currency, time_group):
     }, cls=DecimalEncoder)
 
     # --- Link to transactions ---
-    from core.models import Category
+    from core.models import CategoryNode
     salary_cat_ids = list(
-        Category.objects.filter(
+        CategoryNode.objects.filter(
             user=request.user, name='Work Salary', group__slug='income',
         ).values_list('id', flat=True)
     )
-    salary_category_ids = '&v1_category='.join(str(cid) for cid in salary_cat_ids)
+    salary_category_ids = '&category='.join(str(cid) for cid in salary_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1355,32 +1355,32 @@ def income_bonus_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
     extra_qs = Transaction.objects.filter(user=request.user).filter(
-        category__name__in=EXTRA_INCOME_CATEGORIES,
+        category_v2__name__in=EXTRA_INCOME_CATEGORIES,
         **{f'{amount_field}__isnull': False},
     )
 
     bonus_total = float(
-        extra_qs.filter(category__name='Work Bonuses')
+        extra_qs.filter(category_v2__name='Work Bonuses')
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     association_total = float(
-        extra_qs.filter(category__name='Work Association')
+        extra_qs.filter(category_v2__name='Work Association')
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     goverment_total = float(
-        extra_qs.filter(category__name='Work Government')
+        extra_qs.filter(category_v2__name='Work Government')
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     extra_combined = bonus_total + association_total + goverment_total
 
     extra_events = list(
         extra_qs.order_by('-date')
-        .values('date', 'description', 'category__name', 'category__color', amount_field)
+        .values('date', 'description', 'category_v2__name', 'category_v2__color', amount_field)
     )
     for e in extra_events:
         e['amount'] = float(e.pop(amount_field) or 0)
-        e['category'] = e.pop('category__name')
-        e['color'] = e.pop('category__color') or '#6c757d'
+        e['category'] = e.pop('category_v2__name')
+        e['color'] = e.pop('category_v2__color') or '#6c757d'
 
     extra_events_json = json.dumps([
         {'date': e['date'].isoformat() if hasattr(e['date'], 'isoformat') else str(e['date']),
@@ -1392,13 +1392,13 @@ def income_bonus_dashboard(request, display_currency, time_group):
     ], cls=DecimalEncoder)
 
     # --- Link to transactions ---
-    from core.models import Category
+    from core.models import CategoryNode
     extras_cat_ids = list(
-        Category.objects.filter(
+        CategoryNode.objects.filter(
             user=request.user, name__in=EXTRA_INCOME_CATEGORIES, group__slug='income',
         ).values_list('id', flat=True)
     )
-    extras_category_ids = '&v1_category='.join(str(cid) for cid in extras_cat_ids)
+    extras_category_ids = '&category='.join(str(cid) for cid in extras_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1427,7 +1427,7 @@ def income_overview_dashboard(request, display_currency, time_group):
 
     income_qs = Transaction.objects.filter(
         user=request.user,
-        category__group__slug='income',
+        category_v2__group__slug='income',
         **{f'{amount_field}__isnull': False},
     )
 
@@ -1487,17 +1487,17 @@ def income_overview_dashboard(request, display_currency, time_group):
     # --- Stacked bar by category over time ---
     cat_monthly = (
         income_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(total=Sum(abs_field))
         .order_by('month')
     )
     cat_series_map = defaultdict(lambda: defaultdict(float))
     cat_color_map = {}
     for r in cat_monthly:
-        name = r['category__name']
+        name = r['category_v2__name']
         m = r['month'].strftime('%Y-%m')
         cat_series_map[name][m] = float(r['total'] or 0)
-        cat_color_map[name] = r['category__color'] or '#6c757d'
+        cat_color_map[name] = r['category_v2__color'] or '#6c757d'
 
     stacked_series = []
     stacked_colors = []
@@ -1516,16 +1516,16 @@ def income_overview_dashboard(request, display_currency, time_group):
 
     # --- All-time breakdown by category (donut + bar) ---
     cat_breakdown = list(
-        income_qs.values('category__name', 'category__color')
+        income_qs.values('category_v2__name', 'category_v2__color')
         .annotate(abs_total=Sum(abs_field))
         .order_by('-abs_total')
     )
     income_category_data = {'labels': [], 'values': [], 'colors': []}
     top_income_data = {'labels': [], 'values': [], 'colors': []}
     for r in cat_breakdown:
-        name = r['category__name'] or 'Uncategorized'
+        name = r['category_v2__name'] or 'Uncategorized'
         val = float(r['abs_total'] or 0)
-        color = r['category__color'] or '#6c757d'
+        color = r['category_v2__color'] or '#6c757d'
         income_category_data['labels'].append(name)
         income_category_data['values'].append(val)
         income_category_data['colors'].append(color)
@@ -1603,8 +1603,8 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
 
     reimb_qs = Transaction.objects.filter(
         user=request.user,
-        category__name__in=REIMBURSEMENT_CATEGORIES,
-        category__group__slug='income',
+        category_v2__name__in=REIMBURSEMENT_CATEGORIES,
+        category_v2__group__slug='income',
         **{f'{amount_field}__isnull': False},
     )
 
@@ -1644,16 +1644,16 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
 
     # --- All-time breakdown by category (donut + bar) ---
     cat_breakdown = list(
-        reimb_qs.values('category__name', 'category__color')
+        reimb_qs.values('category_v2__name', 'category_v2__color')
         .annotate(abs_total=Sum(abs_field))
         .order_by('-abs_total')
     )
     breakdown_data = {'labels': [], 'values': [], 'colors': []}
     top_data = {'labels': [], 'values': [], 'colors': []}
     for r in cat_breakdown:
-        name = r['category__name'] or 'Uncategorized'
+        name = r['category_v2__name'] or 'Uncategorized'
         val = float(r['abs_total'] or 0)
-        color = r['category__color'] or '#6c757d'
+        color = r['category_v2__color'] or '#6c757d'
         breakdown_data['labels'].append(name)
         breakdown_data['values'].append(val)
         breakdown_data['colors'].append(color)
@@ -1664,17 +1664,17 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     # --- Stacked bar by category over time ---
     cat_monthly = (
         reimb_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(total=Sum(abs_field))
         .order_by('month')
     )
     cat_series_map = defaultdict(lambda: defaultdict(float))
     cat_color_map = {}
     for r in cat_monthly:
-        name = r['category__name']
+        name = r['category_v2__name']
         m = r['month'].strftime('%Y-%m')
         cat_series_map[name][m] = float(r['total'] or 0)
-        cat_color_map[name] = r['category__color'] or '#6c757d'
+        cat_color_map[name] = r['category_v2__color'] or '#6c757d'
 
     stacked_series = []
     stacked_colors = []
@@ -1694,17 +1694,17 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     # --- Recent transactions ---
     events = list(
         reimb_qs.order_by('-date')[:50]
-        .values('date', 'description', 'category__name', 'category__color', amount_field)
+        .values('date', 'description', 'category_v2__name', 'category_v2__color', amount_field)
     )
     for e in events:
         e['amount'] = abs(float(e.pop(amount_field) or 0))
-        e['category'] = e.pop('category__name')
-        e['color'] = e.pop('category__color') or '#6c757d'
+        e['category'] = e.pop('category_v2__name')
+        e['color'] = e.pop('category_v2__color') or '#6c757d'
 
     # --- Individual transactions scatter (with category) ---
     individual_txns = list(
         reimb_qs.order_by('date')
-        .values_list('date', amount_field, 'description', 'category__name', 'category__color')
+        .values_list('date', amount_field, 'description', 'category_v2__name', 'category_v2__color')
     )
     # Group by category for multi-series scatter
     from collections import OrderedDict
@@ -1734,17 +1734,17 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     from django.db.models import Count
     count_cat_agg = (
         reimb_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(cnt=Count('id'))
         .order_by('month')
     )
     count_cat_map = defaultdict(lambda: defaultdict(int))
     count_color_map = {}
     for r in count_cat_agg:
-        name = r['category__name'] or 'Uncategorized'
+        name = r['category_v2__name'] or 'Uncategorized'
         m = r['month'].strftime('%Y-%m')
         count_cat_map[name][m] = r['cnt']
-        count_color_map[name] = r['category__color'] or '#6c757d'
+        count_color_map[name] = r['category_v2__color'] or '#6c757d'
 
     count_series = []
     count_colors = []
@@ -1762,15 +1762,15 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     }, cls=DecimalEncoder)
 
     # --- Link to transactions page with reimbursement filter ---
-    from core.models import Category
+    from core.models import CategoryNode
     reimb_cat_ids = list(
-        Category.objects.filter(
+        CategoryNode.objects.filter(
             user=request.user,
             name__in=REIMBURSEMENT_CATEGORIES,
             group__slug='income',
         ).values_list('id', flat=True)
     )
-    reimbursement_category_ids = '&v1_category='.join(str(cid) for cid in reimb_cat_ids)
+    reimbursement_category_ids = '&category='.join(str(cid) for cid in reimb_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1824,8 +1824,8 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
 
     bank_qs = Transaction.objects.filter(
         user=request.user,
-        category__name__in=BANK_INCOME_CATEGORIES,
-        category__group__slug='income',
+        category_v2__name__in=BANK_INCOME_CATEGORIES,
+        category_v2__group__slug='income',
         **{f'{amount_field}__isnull': False},
     )
 
@@ -1850,15 +1850,15 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
 
     # Breakdown
     cat_breakdown = list(
-        bank_qs.values('category__name', 'category__color')
+        bank_qs.values('category_v2__name', 'category_v2__color')
         .annotate(abs_total=Sum(abs_field)).order_by('-abs_total')
     )
     breakdown_data = {'labels': [], 'values': [], 'colors': []}
     top_data = {'labels': [], 'values': [], 'colors': []}
     for r in cat_breakdown:
-        name = r['category__name'] or 'Uncategorized'
+        name = r['category_v2__name'] or 'Uncategorized'
         val = float(r['abs_total'] or 0)
-        color = r['category__color'] or '#6c757d'
+        color = r['category_v2__color'] or '#6c757d'
         breakdown_data['labels'].append(name)
         breakdown_data['values'].append(val)
         breakdown_data['colors'].append(color)
@@ -1869,16 +1869,16 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     # Stacked bar
     cat_monthly = (
         bank_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(total=Sum(abs_field)).order_by('month')
     )
     csm = defaultdict(lambda: defaultdict(float))
     ccm = {}
     for r in cat_monthly:
-        name = r['category__name']
+        name = r['category_v2__name']
         m = r['month'].strftime('%Y-%m')
         csm[name][m] = float(r['total'] or 0)
-        ccm[name] = r['category__color'] or '#6c757d'
+        ccm[name] = r['category_v2__color'] or '#6c757d'
     ss, sc = [], []
     for name in sorted(csm.keys(), key=lambda k: -sum(csm[k].values())):
         ss.append({'name': name, 'data': [round(csm[name].get(m, 0)) for m in sorted_months]})
@@ -1887,7 +1887,7 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     # --- Individual transactions scatter (with category) ---
     individual_txns = list(
         bank_qs.order_by('date')
-        .values_list('date', amount_field, 'description', 'category__name', 'category__color')
+        .values_list('date', amount_field, 'description', 'category_v2__name', 'category_v2__color')
     )
     scatter_by_cat = defaultdict(list)
     scatter_colors = {}
@@ -1915,17 +1915,17 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     from django.db.models import Count
     count_cat_agg = (
         bank_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(cnt=Count('id'))
         .order_by('month')
     )
     count_cat_map = defaultdict(lambda: defaultdict(int))
     count_color_map = {}
     for r in count_cat_agg:
-        name = r['category__name'] or 'Uncategorized'
+        name = r['category_v2__name'] or 'Uncategorized'
         m = r['month'].strftime('%Y-%m')
         count_cat_map[name][m] = r['cnt']
-        count_color_map[name] = r['category__color'] or '#6c757d'
+        count_color_map[name] = r['category_v2__color'] or '#6c757d'
 
     count_series = []
     count_colors = []
@@ -1943,15 +1943,15 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     }, cls=DecimalEncoder)
 
     # --- Link to transactions page ---
-    from core.models import Category
+    from core.models import CategoryNode
     bank_cat_ids = list(
-        Category.objects.filter(
+        CategoryNode.objects.filter(
             user=request.user,
             name__in=BANK_INCOME_CATEGORIES,
             group__slug='income',
         ).values_list('id', flat=True)
     )
-    bank_category_ids = '&v1_category='.join(str(cid) for cid in bank_cat_ids)
+    bank_category_ids = '&category='.join(str(cid) for cid in bank_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1987,9 +1987,9 @@ def credit_payment_dashboard(request, display_currency, time_group):
     credit_cat_ids = list(
         Transaction.objects.filter(
             user=request.user,
-            category__group__slug='transfer',
+            category_v2__group__slug='transfer',
             raw_transaction__ledger__statement_import__account__account_type='credit_account',
-        ).values_list('category_id', flat=True).distinct()
+        ).values_list('category_v2_id', flat=True).distinct()
     )
     cp_qs = Transaction.objects.filter(
         user=request.user,
@@ -2113,10 +2113,10 @@ def personal_account_dashboard(request, display_currency, time_group):
 
     pa_qs = Transaction.objects.filter(
         user=request.user,
-        category__group__slug='transfer',
+        category_v2__group__slug='transfer',
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
-    ).select_related('raw_transaction__ledger__statement_import__account', 'category')
+    ).select_related('raw_transaction__ledger__statement_import__account', 'category_v2')
 
     # Collect all transactions with their account info
     all_txns = []
@@ -2133,7 +2133,7 @@ def personal_account_dashboard(request, display_currency, time_group):
             'date': t.date, 'amount': amt_display,
             'amount_crc': amt_crc, 'amount_usd': amt_usd,
             'description': t.description, 'account_id': acct_id, 'id': t.id,
-            'category': t.category.name,
+            'category': t.category_v2.name,
         })
 
     # Match: find pairs on same/adjacent day, same category, different accounts,
@@ -2231,10 +2231,10 @@ def _match_transfer_pairs(user, amount_field, display_currency):
 
     pa_qs = Transaction.objects.filter(
         user=user,
-        category__group__slug='transfer',
+        category_v2__group__slug='transfer',
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
-    ).select_related('raw_transaction__ledger__statement_import__account', 'category')
+    ).select_related('raw_transaction__ledger__statement_import__account', 'category_v2')
 
     all_txns = []
     for t in pa_qs.order_by('date'):
@@ -2252,7 +2252,7 @@ def _match_transfer_pairs(user, amount_field, display_currency):
             'description': t.description,
             'account_id': acct.id if acct else None,
             'account_name': acct_label,
-            'category': t.category.name,
+            'category': t.category_v2.name,
             'id': t.id,
         })
 
@@ -2396,9 +2396,9 @@ def credit_transfers_dashboard(request, display_currency, time_group):
     credit_cat_ids = list(
         Transaction.objects.filter(
             user=request.user,
-            category__group__slug='transfer',
+            category_v2__group__slug='transfer',
             raw_transaction__ledger__statement_import__account__account_type='credit_account',
-        ).values_list('category_id', flat=True).distinct()
+        ).values_list('category_v2_id', flat=True).distinct()
     )
     cp_qs = Transaction.objects.filter(
         user=request.user,
@@ -2627,7 +2627,7 @@ def transfer_flow_dashboard(request, display_currency, time_group):
     from django.db.models.functions import Abs as _Abs
     income_qs = Transaction.objects.filter(
         user=request.user,
-        category__group__slug='income',
+        category_v2__group__slug='income',
         **{f'{amount_field}__isnull': False},
     ).select_related(
         'raw_transaction__ledger__statement_import__account',
@@ -2649,7 +2649,7 @@ def transfer_flow_dashboard(request, display_currency, time_group):
         stmt = ledger.statement_import if ledger else None
         acct = stmt.account if stmt else None
         acct_name = str(acct) if acct else 'Unknown'
-        cat = t.category.name
+        cat = t.category_v2.name
         amt = float(getattr(t, amount_field) or 0)
         if amt > 0:
             if cat in REIMBURSEMENT_CATEGORIES:
@@ -2664,7 +2664,7 @@ def transfer_flow_dashboard(request, display_currency, time_group):
     # Add expenses flowing out of accounts
     expense_qs = Transaction.objects.filter(
         user=request.user,
-        category__group__slug='expense',
+        category_v2__group__slug='expense',
         **{f'{amount_field}__isnull': False},
     ).select_related(
         'raw_transaction__ledger__statement_import__account',
@@ -2846,14 +2846,14 @@ def transaction_pairing_dashboard(request, display_currency, time_group):
         entry = {'id': p.id, 'status': p.status, 'created_at': p.created_at}
 
         if p.outgoing:
-            out_lt = p.outgoing.logical_transactions.select_related('category').first()
+            out_lt = p.outgoing.logical_transactions.select_related('category_v2').first()
             out_acct = p.outgoing.ledger.statement_import.account
             entry['out_date'] = p.outgoing.date
             entry['out_account'] = str(out_acct)
             entry['out_currency'] = p.outgoing.ledger.currency
             entry['out_description'] = p.outgoing.description
             entry['out_amount'] = abs(float(getattr(out_lt, amount_field) or 0)) if out_lt else 0
-            entry['out_category'] = out_lt.category.name if out_lt and out_lt.category else ''
+            entry['out_category'] = out_lt.category_v2.name if out_lt and out_lt.category_v2 else ''
         else:
             entry['out_date'] = None
             entry['out_account'] = '—'
@@ -2863,14 +2863,14 @@ def transaction_pairing_dashboard(request, display_currency, time_group):
             entry['out_currency'] = ''
 
         if p.incoming:
-            in_lt = p.incoming.logical_transactions.select_related('category').first()
+            in_lt = p.incoming.logical_transactions.select_related('category_v2').first()
             in_acct = p.incoming.ledger.statement_import.account
             entry['in_date'] = p.incoming.date
             entry['in_account'] = str(in_acct)
             entry['in_currency'] = p.incoming.ledger.currency
             entry['in_description'] = p.incoming.description
             entry['in_amount'] = abs(float(getattr(in_lt, amount_field) or 0)) if in_lt else 0
-            entry['in_category'] = in_lt.category.name if in_lt and in_lt.category else ''
+            entry['in_category'] = in_lt.category_v2.name if in_lt and in_lt.category_v2 else ''
         else:
             entry['in_date'] = None
             entry['in_account'] = '—'
@@ -2936,10 +2936,10 @@ def expense_details_dashboard(request, display_currency, time_group):
     period_label = 'All Time'
     qs = LogicalTransaction.objects.filter(
         user=user,
-        category__isnull=False,
-        category__group__slug='expense',
+        category_v2__isnull=False,
+        category_v2__group__slug='expense',
         **{f'{amount_field}__isnull': False},
-    ).exclude(category__name='Unclassified')
+    ).exclude(category_v2__name='Unclassified')
 
     chosen = period_lookup.get(period_type, {}).get(period_key)
     if chosen:
@@ -2950,16 +2950,16 @@ def expense_details_dashboard(request, display_currency, time_group):
 
     monthly_cat = (
         qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(total=Sum(abs_field))
-        .order_by('category__name', 'month')
+        .order_by('category_v2__name', 'month')
     )
 
     cat_months = defaultdict(lambda: {'values': [], 'color': '#6c757d'})
     for r in monthly_cat:
-        data = cat_months[r['category__name']]
+        data = cat_months[r['category_v2__name']]
         data['values'].append(float(r['total'] or 0))
-        data['color'] = r['category__color'] or '#6c757d'
+        data['color'] = r['category_v2__color'] or '#6c757d'
 
     def compute_stats(values):
         s = sorted(values)
@@ -3013,15 +3013,15 @@ def expense_range_dashboard(request, display_currency, time_group):
 
     # Get all expense data first (unfiltered) to know available months
     base_qs = LogicalTransaction.objects.filter(
-        user=user, category__isnull=False, category__group__slug='expense',
+        user=user, category_v2__isnull=False, category_v2__group__slug='expense',
         **{f'{amount_field}__isnull': False},
-    ).exclude(category__name='Unclassified')
+    ).exclude(category_v2__name='Unclassified')
 
     all_monthly = (
         base_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(total=Sum(abs_field))
-        .order_by('category__name', 'month')
+        .order_by('category_v2__name', 'month')
     )
 
     # Build full month→category→amount map
@@ -3029,10 +3029,10 @@ def expense_range_dashboard(request, display_currency, time_group):
     cat_colors = {}
     all_month_set = set()
     for r in all_monthly:
-        key = r['category__name']
+        key = r['category_v2__name']
         m_key = r['month'].strftime('%Y-%m')
         full_cat_months[key][m_key] = float(r['total'] or 0)
-        cat_colors[key] = r['category__color'] or '#6c757d'
+        cat_colors[key] = r['category_v2__color'] or '#6c757d'
         all_month_set.add(r['month'])
 
     sorted_all_months = sorted(all_month_set)

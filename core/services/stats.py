@@ -37,7 +37,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     if wallet_filter:
         qs = qs.filter(wallet_filter)
     if groups:
-        qs = qs.filter(category__group__slug__in=groups)
+        qs = qs.filter(category_v2__group__slug__in=groups)
     if categories:
         qs = qs.filter(category_id__in=categories)
 
@@ -48,8 +48,8 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     # Monthly average
     from django.db.models.functions import TruncMonth as _TM
     EXCLUDED_INCOME = ['Work Association', 'Work Bonuses', 'Work Government', 'Unclassified']
-    income_filter = dict(category__group__slug='income')
-    income_exclude = dict(category__name__in=EXCLUDED_INCOME)
+    income_filter = dict(category_v2__group__slug='income')
+    income_exclude = dict(category_v2__name__in=EXCLUDED_INCOME)
 
     income_by_month = (
         qs.filter(**income_filter).exclude(**income_exclude)
@@ -58,7 +58,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
         .annotate(total=Sum(Abs(amount_field)))
     )
     expense_by_month = (
-        qs.filter(category__group__slug='expense')
+        qs.filter(category_v2__group__slug='expense')
         .annotate(month=_TM('date'))
         .values('month')
         .annotate(total=Sum(Abs(amount_field)))
@@ -117,14 +117,14 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
         or Decimal('0')
     )
     last_month_expenses = (
-        qs.filter(category__group__slug='expense', date__gte=last_period_start, date__lte=last_period_end)
+        qs.filter(category_v2__group__slug='expense', date__gte=last_period_start, date__lte=last_period_end)
         .aggregate(total=Sum(Abs(amount_field)))['total']
         or Decimal('0')
     )
     last_month_cashflow = last_month_income - last_month_expenses
     last_month_name = last_period_name
 
-    total_transfers = qs.filter(category__group__slug='transfer').count()
+    total_transfers = qs.filter(category_v2__group__slug='transfer').count()
 
     def _pct_change(current, median):
         if not median:
@@ -152,30 +152,30 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     # ── Per-category: last month vs median (horizontal grouped bar) ──
     from collections import defaultdict as _defaultdict
     expense_cat_monthly = (
-        qs.filter(category__group__slug='expense')
+        qs.filter(category_v2__group__slug='expense')
         .annotate(month=_TM('date'))
-        .values('month', 'category__name', 'category__color')
+        .values('month', 'category_v2__name', 'category_v2__color')
         .annotate(total=Sum(Abs(amount_field)))
-        .order_by('category__name', 'month')
+        .order_by('category_v2__name', 'month')
     )
     # Build {cat: [monthly totals]} and collect colors
     cat_months = _defaultdict(list)
     cat_colors_map = {}
     for r in expense_cat_monthly:
-        cat = r['category__name']
+        cat = r['category_v2__name']
         cat_months[cat].append(float(r['total'] or 0))
-        cat_colors_map[cat] = r['category__color'] or '#6c757d'
+        cat_colors_map[cat] = r['category_v2__color'] or '#6c757d'
 
     # Last month per category
     last_month_by_cat = {}
     lm_cats = (
-        qs.filter(category__group__slug='expense',
+        qs.filter(category_v2__group__slug='expense',
                   date__gte=last_period_start, date__lte=last_period_end)
-        .values('category__name')
+        .values('category_v2__name')
         .annotate(total=Sum(Abs(amount_field)))
     )
     for r in lm_cats:
-        last_month_by_cat[r['category__name']] = float(r['total'] or 0)
+        last_month_by_cat[r['category_v2__name']] = float(r['total'] or 0)
 
     # Build sorted list by median descending
     cat_comparison = []
@@ -203,7 +203,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     cat_monthly_map = _defaultdict(dict)  # {cat: {month_str: total}}
     all_months_set = set()
     for r in expense_cat_monthly:
-        cat = r['category__name']
+        cat = r['category_v2__name']
         m = r['month'].strftime('%Y-%m')
         cat_monthly_map[cat][m] = float(r['total'] or 0)
         all_months_set.add(m)
@@ -233,7 +233,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
         def _semi_month_key(d):
             return _date(d.year, d.month, 1 if d.day < 15 else 15)
 
-        expense_txns = qs.filter(category__group__slug='expense').values_list('date', amount_field)
+        expense_txns = qs.filter(category_v2__group__slug='expense').values_list('date', amount_field)
         income_txns = qs.filter(**income_filter).exclude(**income_exclude).values_list('date', amount_field)
 
         expense_semi = defaultdict(Decimal)
@@ -267,7 +267,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
             date_fmt_fn = lambda d: d.strftime(date_fmt)
 
         expense_grouped = (
-            qs.filter(category__group__slug='expense')
+            qs.filter(category_v2__group__slug='expense')
             .annotate(period=trunc_func('date'))
             .values('period')
             .annotate(total=Sum(Abs(amount_field)))
@@ -296,55 +296,55 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
 
     # ── Expense category breakdown (doughnut) ─────────────────
     expense_cats = (
-        qs.filter(category__group__slug='expense')
-        .values('category__name', 'category__color')
+        qs.filter(category_v2__group__slug='expense')
+        .values('category_v2__name', 'category_v2__color')
         .annotate(abs_total=Sum(Abs(amount_field)))
         .order_by('-abs_total')
     )
     expense_category_data = {'labels': [], 'values': [], 'colors': []}
     for r in expense_cats:
-        expense_category_data['labels'].append(r['category__name'] or 'Uncategorized')
+        expense_category_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
         expense_category_data['values'].append(float(r['abs_total'] or 0))
-        expense_category_data['colors'].append(r['category__color'] or '#6c757d')
+        expense_category_data['colors'].append(r['category_v2__color'] or '#6c757d')
 
     # ── Income category breakdown (doughnut) ──────────────────
     income_cats = (
-        qs.filter(category__group__slug='income')
-        .values('category__name', 'category__color')
+        qs.filter(category_v2__group__slug='income')
+        .values('category_v2__name', 'category_v2__color')
         .annotate(abs_total=Sum(Abs(amount_field)))
         .order_by('-abs_total')
     )
     income_category_data = {'labels': [], 'values': [], 'colors': []}
     for r in income_cats:
-        income_category_data['labels'].append(r['category__name'] or 'Uncategorized')
+        income_category_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
         income_category_data['values'].append(float(r['abs_total'] or 0))
-        income_category_data['colors'].append(r['category__color'] or '#6c757d')
+        income_category_data['colors'].append(r['category_v2__color'] or '#6c757d')
 
     # ── Top spending categories (horizontal bar, top 10) ──────
     top_cats = (
-        qs.filter(category__group__slug='expense')
-        .values('category__name', 'category__color')
+        qs.filter(category_v2__group__slug='expense')
+        .values('category_v2__name', 'category_v2__color')
         .annotate(abs_total=Sum(Abs(amount_field)))
         .order_by('-abs_total')[:10]
     )
     top_categories_data = {'labels': [], 'values': [], 'colors': []}
     for r in top_cats:
-        top_categories_data['labels'].append(r['category__name'] or 'Uncategorized')
+        top_categories_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
         top_categories_data['values'].append(float(r['abs_total'] or 0))
-        top_categories_data['colors'].append(r['category__color'] or '#6c757d')
+        top_categories_data['colors'].append(r['category_v2__color'] or '#6c757d')
 
     # ── Top income categories (horizontal bar, top 10) ────────
     top_income_cats = (
-        qs.filter(category__group__slug='income')
-        .values('category__name', 'category__color')
+        qs.filter(category_v2__group__slug='income')
+        .values('category_v2__name', 'category_v2__color')
         .annotate(abs_total=Sum(Abs(amount_field)))
         .order_by('-abs_total')[:10]
     )
     top_income_data = {'labels': [], 'values': [], 'colors': []}
     for r in top_income_cats:
-        top_income_data['labels'].append(r['category__name'] or 'Uncategorized')
+        top_income_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
         top_income_data['values'].append(float(r['abs_total'] or 0))
-        top_income_data['colors'].append(r['category__color'] or '#6c757d')
+        top_income_data['colors'].append(r['category_v2__color'] or '#6c757d')
 
     # ── Monthly trend (dual line) ─────────────────────────────
     trend_data = {
