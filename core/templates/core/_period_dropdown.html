@@ -5,7 +5,7 @@
   </button>
   <ul class="dropdown-menu">
     {% for p in items %}
-    <li><a class="dropdown-item{% if period_type == ptype and period_key == p.key %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ ptype }}&period={{ p.key }}">{{ p.label }}</a></li>
+    <li><a class="dropdown-item{% if period_type == ptype and period_key == p.key %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ ptype }}&period={{ p.key }}{% if category_level %}&level={{ category_level }}{% endif %}">{{ p.label }}</a></li>
     {% endfor %}
   </ul>
 </div>

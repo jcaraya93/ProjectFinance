@@ -16,7 +16,20 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Expense & Income</h4>
       <div class="d-flex align-items-center gap-2">
-        {% include "core/_currency_toggle.html" with extra_params="period_type="|add:period_type|add:"&period="|add:period_key %}
+        {% with lv=category_level|stringformat:"d" %}
+        <div class="btn-group btn-group-sm">
+          <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            {% if category_level %}Level {{ category_level }}{% else %}Detailed{% endif %}
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item{% if not category_level %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ period_type }}&period={{ period_key }}">Detailed (as assigned)</a></li>
+            {% for n in category_levels %}
+            <li><a class="dropdown-item{% if category_level == n %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ period_type }}&period={{ period_key }}&level={{ n }}">Level {{ n }}{% if n == 1 %} (top){% endif %}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% include "core/_currency_toggle.html" with extra_params="period_type="|add:period_type|add:"&period="|add:period_key|add:"&level="|add:lv %}
+        {% endwith %}
       </div>
     </div>
 

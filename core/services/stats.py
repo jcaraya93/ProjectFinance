@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.db.models import Sum
 from django.db.models.functions import TruncMonth, TruncWeek, TruncDay, TruncQuarter, Abs
 
-from core.models import Transaction
+from core.models import CategoryNode, Transaction
 from core.instrumentation import tracer, dashboard_duration
 
 
@@ -16,7 +16,49 @@ class DecimalEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='CRC', wallet_filter=None, groups=None, categories=None, time_group='monthly'):
+def category_depths(user):
+    """Return ({node_id: node}, {node_id: depth}) for the user's category tree; top level is depth 1."""
+    nodes = {n.id: n for n in CategoryNode.objects.filter(user=user)}
+    depths = {}
+
+    def depth(node):
+        if node.id not in depths:
+            depths[node.id] = 1 if node.parent_id is None else depth(nodes[node.parent_id]) + 1
+        return depths[node.id]
+
+    for n in nodes.values():
+        depth(n)
+    return nodes, depths
+
+
+def category_breakdown(qs, group_slug, amount_field, nodes, depths, level=None, limit=None):
+    """Totals per category for one group, rolled up to `level` (None = as assigned).
+
+    Nodes deeper than `level` are folded into their ancestor at that level; shallower ones stay as they are.
+    """
+    rows = (qs.filter(category_v2__group__slug=group_slug)
+            .values('category_v2_id').annotate(abs_total=Sum(Abs(amount_field))))
+    totals = {}
+    for r in rows:
+        node = nodes.get(r['category_v2_id'])
+        while node is not None and level and depths[node.id] > level:
+            node = nodes[node.parent_id]
+        key = node.id if node else None
+        totals[key] = totals.get(key, 0) + float(r['abs_total'] or 0)
+
+    ordered = sorted(totals.items(), key=lambda kv: -kv[1])
+    if limit:
+        ordered = ordered[:limit]
+    data = {'labels': [], 'values': [], 'colors': []}
+    for key, total in ordered:
+        node = nodes.get(key)
+        data['labels'].append(node.name if node else 'Uncategorized')
+        data['values'].append(total)
+        data['colors'].append((node.color if node else None) or '#6c757d')
+    return data
+
+
+def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='CRC', wallet_filter=None, groups=None, categories=None, time_group='monthly', category_level=None):
     """Return all dashboard statistics."""
     with tracer.start_as_current_span("stats.get_dashboard_stats") as span:
         t0 = time.monotonic()
@@ -294,57 +336,12 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
             'expenses': [float(expense_lookup.get(p) or 0) for p in periods_set],
         }
 
-    # ── Expense category breakdown (doughnut) ─────────────────
-    expense_cats = (
-        qs.filter(category_v2__group__slug='expense')
-        .values('category_v2__name', 'category_v2__color')
-        .annotate(abs_total=Sum(Abs(amount_field)))
-        .order_by('-abs_total')
-    )
-    expense_category_data = {'labels': [], 'values': [], 'colors': []}
-    for r in expense_cats:
-        expense_category_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
-        expense_category_data['values'].append(float(r['abs_total'] or 0))
-        expense_category_data['colors'].append(r['category_v2__color'] or '#6c757d')
-
-    # ── Income category breakdown (doughnut) ──────────────────
-    income_cats = (
-        qs.filter(category_v2__group__slug='income')
-        .values('category_v2__name', 'category_v2__color')
-        .annotate(abs_total=Sum(Abs(amount_field)))
-        .order_by('-abs_total')
-    )
-    income_category_data = {'labels': [], 'values': [], 'colors': []}
-    for r in income_cats:
-        income_category_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
-        income_category_data['values'].append(float(r['abs_total'] or 0))
-        income_category_data['colors'].append(r['category_v2__color'] or '#6c757d')
-
-    # ── Top spending categories (horizontal bar, top 10) ──────
-    top_cats = (
-        qs.filter(category_v2__group__slug='expense')
-        .values('category_v2__name', 'category_v2__color')
-        .annotate(abs_total=Sum(Abs(amount_field)))
-        .order_by('-abs_total')[:10]
-    )
-    top_categories_data = {'labels': [], 'values': [], 'colors': []}
-    for r in top_cats:
-        top_categories_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
-        top_categories_data['values'].append(float(r['abs_total'] or 0))
-        top_categories_data['colors'].append(r['category_v2__color'] or '#6c757d')
-
-    # ── Top income categories (horizontal bar, top 10) ────────
-    top_income_cats = (
-        qs.filter(category_v2__group__slug='income')
-        .values('category_v2__name', 'category_v2__color')
-        .annotate(abs_total=Sum(Abs(amount_field)))
-        .order_by('-abs_total')[:10]
-    )
-    top_income_data = {'labels': [], 'values': [], 'colors': []}
-    for r in top_income_cats:
-        top_income_data['labels'].append(r['category_v2__name'] or 'Uncategorized')
-        top_income_data['values'].append(float(r['abs_total'] or 0))
-        top_income_data['colors'].append(r['category_v2__color'] or '#6c757d')
+    # ── Category breakdowns (doughnuts and top-10 bars) at the chosen level ──
+    nodes, depths = category_depths(user)
+    expense_category_data = category_breakdown(qs, 'expense', amount_field, nodes, depths, category_level)
+    income_category_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level)
+    top_categories_data = category_breakdown(qs, 'expense', amount_field, nodes, depths, category_level, limit=10)
+    top_income_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level, limit=10)
 
     # ── Monthly trend (dual line) ─────────────────────────────
     trend_data = {

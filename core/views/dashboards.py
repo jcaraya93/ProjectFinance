@@ -610,11 +610,24 @@ def spending_income_dashboard(request, display_currency, time_group):
     else:
         period_type, period_key = 'all', ''
 
+    # Granularity: 0/absent = categories as assigned, N = roll up to tree level N.
+    from core.services.stats import category_depths
+    max_depth = max(category_depths(request.user)[1].values(), default=1)
+    try:
+        category_level = int(request.GET.get('level', 0))
+    except ValueError:
+        category_level = 0
+    if not 1 <= category_level <= max_depth:
+        category_level = None
+
     context = get_dashboard_stats(request.user,
         start_date=start_date.isoformat() if start_date else None,
         end_date=end_date.isoformat() if end_date else None,
         display_currency=display_currency,
+        category_level=category_level,
     )
+    context['category_level'] = category_level or 0
+    context['category_levels'] = list(range(1, max_depth + 1))
     context['period_type'] = period_type
     context['period_key'] = period_key
     context['period_label'] = period_label
