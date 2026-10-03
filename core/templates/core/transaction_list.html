@@ -224,13 +224,16 @@
         <input type="checkbox" class="form-check-input col-toggle" data-col="6" checked> Description
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="7" checked> Metadata
+        <input type="checkbox" class="form-check-input col-toggle" data-col="7" data-cell="8" checked> Metadata
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="8" checked> Amount
+        <input type="checkbox" class="form-check-input col-toggle" data-col="8" data-cell="9" checked> Amount
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="9" checked> Actions
+        <input type="checkbox" class="form-check-input col-toggle" data-col="9" data-cell="10" checked> Actions
+      </label>
+      <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+        <input type="checkbox" class="form-check-input col-toggle" data-col="10" data-cell="7" checked> Note
       </label>
       </div>
     </div>
@@ -248,6 +251,7 @@
         <th><a href="?{{ filter_qs }}&sort=group&dir={% if sc == 'group' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Group{% if sc == 'group' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=category&dir={% if sc == 'category' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Category{% if sc == 'category' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=description&dir={% if sc == 'description' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Description{% if sc == 'description' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
+        <th>Note</th>
         <th>Metadata</th>
         <th class="text-end"><a href="?{{ filter_qs }}&sort=amount&dir={% if sc == 'amount' and sd == 'desc' %}asc{% else %}desc{% endif %}" class="text-decoration-none text-dark">Amount{% if sc == 'amount' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th class="text-end" style="width: 100px;">Actions</th>
@@ -279,6 +283,7 @@
             {% endif %}
           </td>
           <td>{{ txn.description }}</td>
+          <td class="small">{{ txn.note|default:"—" }}</td>
           <td class="small text-muted text-nowrap">
             {% for k, v in txn.account_metadata.items %}<code>{{ k }}={{ v }}</code>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
           </td>
@@ -292,7 +297,7 @@
         </tr>
       {% empty %}
         <tr>
-          <td colspan="10" class="text-center text-muted py-4">No transactions found.</td>
+          <td colspan="11" class="text-center text-muted py-4">No transactions found.</td>
         </tr>
       {% endfor %}
     </tbody>

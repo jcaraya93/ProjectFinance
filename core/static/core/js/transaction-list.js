@@ -107,13 +107,15 @@
     }, 400);
   }
   document.querySelectorAll('.col-toggle').forEach(function (cb) {
+    // data-col is the stable preference key; data-cell is the position in the table
     var col = parseInt(cb.dataset.col);
+    var cell = parseInt(cb.dataset.cell || cb.dataset.col);
     if (savedCols[col] === false) {
       cb.checked = false;
-      toggleColumn(col, false);
+      toggleColumn(cell, false);
     }
     cb.addEventListener('change', function () {
-      toggleColumn(col, this.checked);
+      toggleColumn(cell, this.checked);
       savedCols[col] = this.checked;
       persistColumns();
     });
