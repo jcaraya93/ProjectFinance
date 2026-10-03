@@ -60,15 +60,16 @@ class TestSpendingIncomeLevel:
 
     def test_period_buttons_use_styled_toolbar(self, auth_client, sample_data):
         content = auth_client.get(reverse('core:spending_income_dashboard')).content.decode()
-        assert 'id="expenseFilters" class="d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3"' in content
+        assert 'id="expenseFilters" class="dashboard-filter-toolbar d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3"' in content
         toolbar = content.split('id="expenseFilters"')[1].split('<!-- ═══ SPENDING ═══ -->')[0]
         assert '>Period</span>' in toolbar
+        assert '>Level</span>' in toolbar
         assert 'Level 1' in toolbar
         assert 'Level 1' not in content.split('id="expenseFilters"')[0]
-        assert '<div class="btn-group btn-group-sm" role="group">' in content
-        assert 'btn-group btn-group-sm mb-3' not in content
+        assert '<div class="btn-group btn-group-sm" role="group">' in toolbar
+        assert '<select' not in toolbar
         for period in ('month', 'quarter', 'semester', 'year'):
-            assert f'period_type={period}' in content
+            assert f'period_type={period}' in toolbar
 
     def test_level_rolls_up_to_ancestor(self, auth_client, sample_data, expense_category, user):
         from core.models import CategoryNode

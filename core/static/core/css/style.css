@@ -9,6 +9,39 @@
   background-color: #f8f9fa;
 }
 
+.dashboard-filter-toolbar .btn-outline-secondary {
+  --bs-btn-color: #263445;
+  --bs-btn-bg: #fff;
+  --bs-btn-border-color: #ced4da;
+  --bs-btn-hover-color: var(--bs-body-color);
+  --bs-btn-hover-bg: var(--bs-gray-100);
+  --bs-btn-active-color: var(--bs-body-color);
+  --bs-btn-active-bg: var(--bs-gray-200);
+}
+
+.dashboard-filter-toolbar .form-select {
+  background-color: #fff;
+  color: var(--bs-body-color);
+}
+
+.dashboard-filter-toolbar [role="group"] {
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.dashboard-filter-toolbar .btn,
+.dashboard-filter-toolbar .form-select {
+  min-height: 34px;
+  font-size: 13px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.dashboard-filter-toolbar .btn {
+  padding-left: 11px;
+  padding-right: 11px;
+}
+
 /* Summary cards with coloured left border */
 .summary-card { border-left: 4px solid transparent; }
 .border-start-primary   { border-left-color: #0d6efd !important; }
