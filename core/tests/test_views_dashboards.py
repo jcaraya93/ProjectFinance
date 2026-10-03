@@ -100,3 +100,22 @@ class TestSpendingIncomeLevel:
         top = json.loads(resp.context['expense_category_data'])
         assert top['ids'] == [parent.pk]
         assert entry['values'][0] == top['values'][0]
+
+    def test_summary_total_change_and_unclassified(self, auth_client, sample_data, expense_category, user):
+        from datetime import date
+        from core.models import CategoryNode
+        unclassified = CategoryNode.objects.get(user=user, name='Unclassified', group=expense_category.group)
+        txns = sample_data['transactions']
+        for t in txns:
+            t.amount_crc = t.amount  # normalized negative amounts; the summary uses absolute values
+            t.save()
+        txns[4].category_v2 = unclassified
+        txns[4].save()
+        resp = auth_client.get(reverse('core:spending_income_dashboard'), {'period_type': 'month', 'period': '2025-02'})
+        sm = resp.context['expense_summary']
+        total = sum(abs(float(t.amount_crc)) for t in txns)
+        assert sm['total'] == total
+        assert sm['unclassified'] == abs(float(txns[4].amount_crc))
+        assert round(sm['unclassified_pct'], 4) == round(sm['unclassified'] / total * 100, 4)
+        assert sm['previous'] is None  # nothing earlier than Feb 2025, so no comparison
+        assert sm['change_pct'] is None

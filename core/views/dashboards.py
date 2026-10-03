@@ -576,6 +576,48 @@ def _build_calendar_periods(earliest, latest):
     return months, quarters, semesters, years
 
 
+def _expense_summary(user, display_currency, start_date, end_date, period_type, period_key, period_lists):
+    """Total expense for the period, the change versus the previous period, and the Unclassified share."""
+    from django.db.models import Sum
+    from django.db.models.functions import Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    base = Transaction.objects.filter(user=user, category_v2__group__slug='expense')
+
+    def total(qs):
+        return float(qs.aggregate(t=Sum(Abs(amount_field)))['t'] or 0)
+
+    def in_range(qs, start, end):
+        if start:
+            qs = qs.filter(date__gte=start)
+        if end:
+            qs = qs.filter(date__lte=end)
+        return qs
+
+    current_qs = in_range(base, start_date, end_date)
+    current = total(current_qs)
+    unclassified = total(current_qs.filter(category_v2__name='Unclassified'))
+
+    previous = previous_label = change_pct = None
+    items = period_lists.get(period_type) or []
+    keys = [p['key'] for p in items]
+    if period_key in keys and keys.index(period_key) + 1 < len(items):
+        prev = items[keys.index(period_key) + 1]  # periods are listed newest first
+        previous = total(in_range(base, prev['start'], prev['end']))
+        previous_label = prev['label']
+        change_pct = ((current - previous) / previous * 100) if previous else None
+
+    return {
+        'total': current,
+        'unclassified': unclassified,
+        'unclassified_pct': (unclassified / current * 100) if current else 0,
+        'previous': previous,
+        'previous_label': previous_label,
+        'change_pct': change_pct,
+        'symbol': '₡' if display_currency == 'CRC' else '$',
+    }
+
+
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
 def spending_income_dashboard(request, display_currency, time_group):
     """Expense breakdown dashboard with a calendar-based period filter:
@@ -625,6 +667,10 @@ def spending_income_dashboard(request, display_currency, time_group):
         end_date=end_date.isoformat() if end_date else None,
         display_currency=display_currency,
         category_level=category_level,
+    )
+    context['expense_summary'] = _expense_summary(
+        request.user, display_currency, start_date, end_date, period_type, period_key,
+        {'month': months, 'quarter': quarters, 'semester': semesters, 'year': years},
     )
     context['category_level'] = category_level or 0
     context['category_levels'] = list(range(1, max_depth + 1))
