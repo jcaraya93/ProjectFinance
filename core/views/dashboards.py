@@ -4,7 +4,6 @@ import time
 from datetime import date
 from decimal import Decimal
 
-from django.http import JsonResponse
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 
@@ -19,7 +18,6 @@ __all__ = [
     'default_buckets_dashboard',
     'manual_classification_dashboard',
     'spending_income_dashboard',
-    'spending_income_top_transactions',
     'expense_details_dashboard',
     'expense_range_dashboard',
     'chart_comparison',
@@ -670,8 +668,6 @@ def spending_income_dashboard(request, display_currency, time_group):
         display_currency=display_currency,
         category_level=category_level,
     )
-    context['range_start'] = start_date.isoformat() if start_date else ''
-    context['range_end'] = end_date.isoformat() if end_date else ''
     context['expense_summary'] = _expense_summary(
         request.user, display_currency, start_date, end_date, period_type, period_key,
         {'month': months, 'quarter': quarters, 'semester': semesters, 'year': years},
@@ -686,50 +682,6 @@ def spending_income_dashboard(request, display_currency, time_group):
     context['period_semesters'] = semesters
     context['period_years'] = years
     return context
-
-
-@login_required
-def spending_income_top_transactions(request):
-    """JSON: the 20 largest expense transactions in a date range, optionally within a category subtree."""
-    from django.db.models import Q
-    from django.db.models.functions import Abs
-    from django.urls import reverse
-    from ..services.stats import category_depths
-
-    currency = 'USD' if request.GET.get('display_currency') == 'USD' else 'CRC'
-    amount_field = 'amount_crc' if currency == 'CRC' else 'amount_usd'
-    qs = Transaction.objects.filter(
-        user=request.user, category_v2__group__slug='expense',
-    ).exclude(**{f'{amount_field}__isnull': True})
-    if request.GET.get('start_date'):
-        qs = qs.filter(date__gte=request.GET['start_date'])
-    if request.GET.get('end_date'):
-        qs = qs.filter(date__lte=request.GET['end_date'])
-
-    category = request.GET.get('category', '')
-    if category.isdigit():
-        nodes, _ = category_depths(request.user)
-        selected = {int(category)} & set(nodes)
-        subtree = set(selected)
-        grew = True
-        while grew:
-            grew = False
-            for n in nodes.values():
-                if n.parent_id in subtree and n.id not in subtree:
-                    subtree.add(n.id)
-                    grew = True
-        qs = qs.filter(category_v2_id__in=subtree)
-
-    rows = (qs.select_related('category_v2').annotate(abs_amount=Abs(amount_field))
-            .order_by('-abs_amount', '-date')[:20])
-    return JsonResponse({'transactions': [{
-        'date': t.date.isoformat(),
-        'description': t.description,
-        'note': t.note,
-        'category': t.category_v2.name if t.category_v2 else '',
-        'amount': float(t.abs_amount),
-        'url': reverse('core:edit_transaction', args=[t.raw_transaction_id]),
-    } for t in rows]})
 
 
 @dashboard_view("chart_comparison", "core/chart_comparison.html")

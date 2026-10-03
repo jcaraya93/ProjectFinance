@@ -119,31 +119,3 @@ class TestSpendingIncomeLevel:
         assert round(sm['unclassified_pct'], 4) == round(sm['unclassified'] / total * 100, 4)
         assert sm['previous'] is None  # nothing earlier than Feb 2025, so no comparison
         assert sm['change_pct'] is None
-
-    def test_top_transactions_endpoint(self, auth_client, sample_data, expense_category, user):
-        from core.models import CategoryNode
-        other = CategoryNode.objects.create(name='Other', group=expense_category.group, user=user)
-        parent = CategoryNode.objects.create(name='Food', group=expense_category.group, user=user)
-        expense_category.parent = parent
-        expense_category.save()
-        txns = sample_data['transactions']
-        for t in txns:
-            t.amount_crc = t.amount
-            t.save()
-        txns[4].category_v2 = other  # the largest amount, outside Food
-        txns[4].save()
-        url = reverse('core:spending_income_top_transactions')
-
-        rows = auth_client.get(url, {'display_currency': 'CRC'}).json()['transactions']
-        assert len(rows) == 5
-        assert [r['amount'] for r in rows] == sorted((r['amount'] for r in rows), reverse=True)
-
-        rows = auth_client.get(url, {'display_currency': 'CRC', 'category': parent.pk}).json()['transactions']
-        assert len(rows) == 4 and all(r['category'] == 'Groceries' for r in rows)
-
-        rows = auth_client.get(url, {'display_currency': 'CRC', 'start_date': '2025-02-03', 'end_date': '2025-02-04'}).json()['transactions']
-        assert {r['date'] for r in rows} == {'2025-02-03', '2025-02-04'}
-
-    def test_top_transactions_requires_login(self, client):
-        resp = client.get(reverse('core:spending_income_top_transactions'))
-        assert resp.status_code == 302

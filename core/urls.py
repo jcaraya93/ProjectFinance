@@ -6,7 +6,6 @@ app_name = 'core'
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('spending-income/', views.spending_income_dashboard, name='spending_income_dashboard'),
-    path('spending-income/top-transactions/', views.spending_income_top_transactions, name='spending_income_top_transactions'),
     path('expense-details/', views.expense_details_dashboard, name='expense_details_dashboard'),
     path('expense-range/', views.expense_range_dashboard, name='expense_range_dashboard'),
     path('chart-comparison/', views.chart_comparison, name='chart_comparison'),
