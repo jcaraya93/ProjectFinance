@@ -59,17 +59,17 @@
               <a href="#" class="small check-none">None</a>
             </div>
             <div class="dropdown-divider mt-1 mb-1"></div>
-            {% for grp in category_groups %}
+            {% for entry in category_groups %}
             <div class="dropdown-header small fw-bold group-toggle" role="button" style="cursor: pointer;">
-              <input type="checkbox" name="group" value="{{ grp.slug }}" class="form-check-input me-1" {% if grp.slug in selected_groups %}checked{% endif %}>
-              {{ grp.name }}
+              <input type="checkbox" name="group" value="{{ entry.group.slug }}" class="form-check-input me-1" {% if entry.group.slug in selected_groups %}checked{% endif %}>
+              {{ entry.group.name }}
             </div>
             <div class="category-group-items">
-            {% for cat in grp.categories.all %}
-            <label class="dropdown-item d-flex align-items-center gap-2 px-2 ps-4">
-              <input type="checkbox" name="category" value="{{ cat.id }}" class="form-check-input" {% if cat.id|stringformat:"d" in selected_categories %}checked{% endif %}>
-              <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: {{ cat.color }};"></span>
-              {{ cat.name }}
+            {% for row in entry.rows %}
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2" style="padding-left: {{ row.padding|add:12 }}px !important;">
+              <input type="checkbox" name="category" value="{{ row.node.id }}" class="form-check-input" {% if row.node.id|stringformat:"d" in selected_categories %}checked{% endif %}>
+              <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: {{ row.node.color }};"></span>
+              {{ row.node.name }}
             </label>
             {% endfor %}
             </div>
@@ -261,19 +261,19 @@
           <td class="text-nowrap">{{ txn.date|date:"Y-m-d" }}</td>
           <td class="text-nowrap small text-muted">{{ txn.ledger.statement_import.account.nickname|default:txn.ledger.statement_import.account }}</td>
           <td class="small text-nowrap">
-            {% if txn.classification_method == 'rule' %}<span class="badge bg-primary">Rule</span>
-            {% elif txn.classification_method == 'manual' %}<span class="badge bg-warning text-dark">Manual</span>
+            {% if txn.classification_method_v2 == 'rule' %}<span class="badge bg-primary">Rule</span>
+            {% elif txn.classification_method_v2 == 'manual' %}<span class="badge bg-warning text-dark">Manual</span>
             {% else %}<span class="badge bg-secondary">Unclassified</span>{% endif %}
           </td>
           <td>
-            {% if txn.category %}
-            <span class="badge {% if txn.category.group.slug == 'expense' %}bg-danger{% elif txn.category.group.slug == 'income' %}bg-success{% elif txn.category.group.slug == 'transfer' %}bg-info{% else %}bg-secondary{% endif %}">{{ txn.category.group.name }}</span>
+            {% if txn.category_v2 %}
+            <span class="badge {% if txn.category_v2.group.slug == 'expense' %}bg-danger{% elif txn.category_v2.group.slug == 'income' %}bg-success{% elif txn.category_v2.group.slug == 'transfer' %}bg-info{% else %}bg-secondary{% endif %}">{{ txn.category_v2.group.name }}</span>
             {% endif %}
           </td>
           <td>
-            {% if txn.category %}
-            <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ txn.category.color }};"></span>
-            {{ txn.category.name }}
+            {% if txn.category_v2 %}
+            <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ txn.category_v2.color }};"></span>
+            {{ txn.category_v2.name }}
             {% else %}
             <span class="text-muted">—</span>
             {% endif %}
@@ -338,10 +338,10 @@
     <a href="#" id="selectAllMatching" class="text-light text-decoration-underline small d-none">Select all {{ page_obj.paginator.count }} matching</a>
     <a href="#" id="clearAllMatching" class="text-light text-decoration-underline small d-none">Clear selection</a>
     <select name="category_id" class="form-select form-select-sm bg-white" style="width: 250px;" required>
-      {% for grp in category_groups %}
-      <optgroup label="{{ grp.name }}">
-        {% for cat in grp.categories.all %}
-        <option value="{{ cat.id }}">{{ cat.name }}</option>
+      {% for entry in category_groups %}
+      <optgroup label="{{ entry.group.name }}">
+        {% for row in entry.rows %}
+        <option value="{{ row.node.id }}">{{ row.label }}</option>
         {% endfor %}
       </optgroup>
       {% endfor %}

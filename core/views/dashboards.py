@@ -1329,7 +1329,7 @@ def income_salary_dashboard(request, display_currency, time_group):
             user=request.user, name='Work Salary', group__slug='income',
         ).values_list('id', flat=True)
     )
-    salary_category_ids = '&category='.join(str(cid) for cid in salary_cat_ids)
+    salary_category_ids = '&v1_category='.join(str(cid) for cid in salary_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1398,7 +1398,7 @@ def income_bonus_dashboard(request, display_currency, time_group):
             user=request.user, name__in=EXTRA_INCOME_CATEGORIES, group__slug='income',
         ).values_list('id', flat=True)
     )
-    extras_category_ids = '&category='.join(str(cid) for cid in extras_cat_ids)
+    extras_category_ids = '&v1_category='.join(str(cid) for cid in extras_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1770,7 +1770,7 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
             group__slug='income',
         ).values_list('id', flat=True)
     )
-    reimbursement_category_ids = '&category='.join(str(cid) for cid in reimb_cat_ids)
+    reimbursement_category_ids = '&v1_category='.join(str(cid) for cid in reimb_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1951,7 +1951,7 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
             group__slug='income',
         ).values_list('id', flat=True)
     )
-    bank_category_ids = '&category='.join(str(cid) for cid in bank_cat_ids)
+    bank_category_ids = '&v1_category='.join(str(cid) for cid in bank_cat_ids)
 
     context = {
         'currency_symbol': currency_symbol,

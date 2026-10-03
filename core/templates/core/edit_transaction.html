@@ -71,10 +71,10 @@
                 </td>
                 <td>
                   <select name="split_category" class="form-select form-select-sm" required>
-                    {% for grp in category_groups %}
-                    <optgroup label="{{ grp.name }}">
-                      {% for cat in grp.categories.all %}
-                      <option value="{{ cat.id }}" {% if lt.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                    {% for entry in category_groups %}
+                    <optgroup label="{{ entry.group.name }}">
+                      {% for row in entry.rows %}
+                      <option value="{{ row.node.id }}" {% if lt.category_v2_id == row.node.id %}selected{% endif %}>{{ row.label }}</option>
                       {% endfor %}
                     </optgroup>
                     {% endfor %}

@@ -12,11 +12,12 @@ from django.utils.http import urlencode
 
 from ..models import (
     Transaction, LogicalTransaction, RawTransaction, Category,
-    CategoryGroup, CurrencyLedger, ClassificationRule, UserPreference,
+    CategoryGroup, CategoryNode, CurrencyLedger, ClassificationRule, UserPreference,
 )
 from ..filters import TransactionFilter
 from ..ratelimit import ratelimit
 from ._helpers import _safe_next_url, get_category_groups
+from .categories_v2 import _build_tree
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,21 @@ __all__ = [
 ]
 
 
+def get_category_node_groups(user):
+    """Categories V2 as [{'group', 'rows'}] (depth-first tree rows per CategoryGroup), for dropdowns."""
+    CategoryNode.ensure_protected(user)
+    tree = _build_tree(list(CategoryNode.objects.filter(user=user).select_related('group')))
+    return [
+        {'group': grp, 'rows': [r for r in tree if r['node'].group_id == grp.pk]}
+        for grp in CategoryGroup.objects.order_by('name')
+    ]
+
+
+def _unclassified_node(user):
+    CategoryNode.ensure_protected(user)
+    return CategoryNode.objects.get(user=user, group__slug=CategoryGroup.UNCLASSIFIED, name=CategoryNode.UNCLASSIFIED_NAME)
+
+
 def _apply_transaction_filters(qs, params, user):
     """Apply transaction list filters from query params using TransactionFilter."""
     f = TransactionFilter(params, queryset=qs, user=user)
@@ -40,7 +56,7 @@ def _apply_transaction_filters(qs, params, user):
 def transaction_list(request):
     from django.db.models import Count, Subquery, OuterRef
     qs = Transaction.objects.filter(user=request.user).select_related(
-        'category__group', 'raw_transaction__ledger',
+        'category_v2__group', 'raw_transaction__ledger',
         'raw_transaction__ledger__statement_import',
         'raw_transaction__ledger__statement_import__account'
     ).annotate(
@@ -91,9 +107,9 @@ def transaction_list(request):
     SORT_FIELDS = {
         'date': 'date',
         'account': 'raw_transaction__ledger__statement_import__account__nickname',
-        'method': 'classification_method',
-        'group': 'category__group__name',
-        'category': 'category__name',
+        'method': 'classification_method_v2',
+        'group': 'category_v2__group__name',
+        'category': 'category_v2__name',
         'description': 'description',
         'amount': 'amount',
     }
@@ -113,7 +129,7 @@ def transaction_list(request):
     page_obj = paginator.get_page(page_number)
 
     from ..models import CurrencyLedger
-    category_groups = get_category_groups(request.user)
+    category_groups = get_category_node_groups(request.user)
 
     # Build virtual wallet list (account + currency combos)
     wallets = (
@@ -219,9 +235,8 @@ def bulk_update_category(request):
         messages.error(request, 'No category selected.')
         return redirect(next_url or 'core:transaction_list')
 
-    cat = get_object_or_404(Category.objects.filter(user=request.user).select_related('group'), pk=category_id)
-    is_unclassified = cat.group.slug == 'unclassified' and cat.name == 'Unclassified'
-    method = 'unclassified' if is_unclassified else 'manual'
+    cat = get_object_or_404(CategoryNode.objects.filter(user=request.user).select_related('group'), pk=category_id)
+    method = 'unclassified' if cat.is_protected else 'manual'
 
     if select_all_matching:
         # Re-apply filters from the query string to get all matching transaction IDs
@@ -231,9 +246,9 @@ def bulk_update_category(request):
         qs = Transaction.objects.filter(user=request.user)
         qs = _apply_transaction_filters(qs, params, request.user)
         updated = qs.update(
-            category=cat,
-            classification_method=method,
-            matched_rule=None,
+            category_v2=cat,
+            classification_method_v2=method,
+            matched_rule_v2=None,
         )
     else:
         txn_ids = request.POST.getlist('txn_ids')
@@ -241,9 +256,9 @@ def bulk_update_category(request):
             messages.error(request, 'No transactions selected.')
             return redirect(next_url or 'core:transaction_list')
         updated = Transaction.objects.filter(user=request.user, pk__in=txn_ids).update(
-            category=cat,
-            classification_method=method,
-            matched_rule=None,
+            category_v2=cat,
+            classification_method_v2=method,
+            matched_rule_v2=None,
         )
 
     messages.success(request, f'{updated} transaction{"s" if updated != 1 else ""} updated to {cat.name}.')
@@ -255,8 +270,8 @@ def edit_transaction(request, raw_id):
     """Edit a transaction: change description/category, or split into multiple."""
     from decimal import Decimal, InvalidOperation
     raw = get_object_or_404(RawTransaction, pk=raw_id, user=request.user)
-    logical_txns = list(raw.logical_transactions.select_related('category__group').order_by('pk'))
-    category_groups = get_category_groups(request.user)
+    logical_txns = list(raw.logical_transactions.select_related('category_v2__group').order_by('pk'))
+    category_groups = get_category_node_groups(request.user)
     is_split = len(logical_txns) > 1
     next_url = _safe_next_url(request)
 
@@ -269,14 +284,13 @@ def edit_transaction(request, raw_id):
                 first = logical_txns[0]
                 for lt in logical_txns[1:]:
                     lt.delete()
-                unclassified = Category.get_unclassified(request.user)
                 first.date = raw.date
                 first.description = raw.description
                 first.amount = raw.normalized_amount
-                first.category = unclassified
-                first.classification_method = 'unclassified'
-                first.matched_rule = None
-                first.save(update_fields=['date', 'description', 'amount', 'category', 'classification_method', 'matched_rule'])
+                first.category_v2 = _unclassified_node(request.user)
+                first.classification_method_v2 = 'unclassified'
+                first.matched_rule_v2 = None
+                first.save(update_fields=['date', 'description', 'amount', 'category_v2', 'classification_method_v2', 'matched_rule_v2'])
                 from ..services.exchange_rates import convert_transaction
                 convert_transaction(first)
                 first.save(update_fields=['amount_crc', 'amount_usd'])
@@ -314,14 +328,14 @@ def edit_transaction(request, raw_id):
         from ..services.exchange_rates import convert_transaction
 
         for i, (desc, amt, cat_id) in enumerate(parsed):
-            cat = Category.objects.filter(user=request.user).get(pk=cat_id)
+            cat = get_object_or_404(CategoryNode, pk=cat_id, user=request.user)
             if i == 0 and first_logical:
                 first_logical.description = desc
                 first_logical.amount = amt
-                first_logical.category = cat
-                first_logical.classification_method = 'manual'
-                first_logical.matched_rule = None
-                first_logical.save(update_fields=['description', 'amount', 'category', 'classification_method', 'matched_rule'])
+                first_logical.category_v2 = cat
+                first_logical.classification_method_v2 = 'unclassified' if cat.is_protected else 'manual'
+                first_logical.matched_rule_v2 = None
+                first_logical.save(update_fields=['description', 'amount', 'category_v2', 'classification_method_v2', 'matched_rule_v2'])
                 convert_transaction(first_logical)
                 first_logical.save(update_fields=['amount_crc', 'amount_usd'])
             else:
@@ -331,8 +345,8 @@ def edit_transaction(request, raw_id):
                     date=raw.date,
                     description=desc,
                     amount=amt,
-                    category=cat,
-                    classification_method='manual',
+                    category_v2=cat,
+                    classification_method_v2='unclassified' if cat.is_protected else 'manual',
                 )
                 convert_transaction(txn)
                 txn.save(update_fields=['amount_crc', 'amount_usd'])
@@ -375,14 +389,13 @@ def unsplit_transaction(request, raw_id):
         lt.delete()
 
     # Restore first to match raw
-    unclassified = Category.get_unclassified(request.user)
     first.date = raw.date
     first.description = raw.description
     first.amount = raw.normalized_amount
-    first.category = unclassified
-    first.classification_method = 'unclassified'
-    first.matched_rule = None
-    first.save(update_fields=['date', 'description', 'amount', 'category', 'classification_method', 'matched_rule'])
+    first.category_v2 = _unclassified_node(request.user)
+    first.classification_method_v2 = 'unclassified'
+    first.matched_rule_v2 = None
+    first.save(update_fields=['date', 'description', 'amount', 'category_v2', 'classification_method_v2', 'matched_rule_v2'])
 
     from ..services.exchange_rates import convert_transaction
     convert_transaction(first)

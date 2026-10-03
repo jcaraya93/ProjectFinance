@@ -107,7 +107,7 @@
             </td>
             <td class="small text-muted">{% if rule.detail %}{{ rule.detail }}{% else %}—{% endif %}</td>
             <td class="text-center">
-              <a href="{% url 'core:transaction_list' %}?rule={{ rule.pk }}" class="badge bg-secondary text-decoration-none">{{ rule.txn_count }}</a>
+              <a href="{% url 'core:transaction_list' %}?v1_rule={{ rule.pk }}" class="badge bg-secondary text-decoration-none">{{ rule.txn_count }}</a>
             </td>
             <td class="text-end text-nowrap">
               <a href="{% url 'core:yaml_rule_edit' rule.pk %}?next={{ effective_path|urlencode }}" class="btn btn-sm btn-outline-primary">Edit</a>
