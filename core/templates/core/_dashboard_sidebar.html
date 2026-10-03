@@ -10,7 +10,7 @@
       <div class="list-group list-group-flush">
         {% if dashboard_category == 'overview' %}
         <a href="{% url 'core:dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'overview' %} active{% endif %}">Overview</a>
-        <a href="{% url 'core:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Expense & Income</a>
+        <a href="{% url 'core:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Expense</a>
         <a href="{% url 'core:expense_details_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'expense_details' %} active{% endif %}">Expense Monthly Statistics</a>
         <a href="{% url 'core:expense_range_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'expense_range' %} active{% endif %}">Expense Range</a>
 

@@ -50,7 +50,7 @@ class TestDashboardQueryParams:
         assert resp.status_code == 200
 
 class TestSpendingIncomeLevel:
-    """The Expense & Income page can roll categories up to a tree level."""
+    """The Expense page can roll categories up to a tree level."""
 
     def _breakdown(self, resp):
         import json

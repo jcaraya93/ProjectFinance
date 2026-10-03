@@ -578,7 +578,7 @@ def _build_calendar_periods(earliest, latest):
 
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
 def spending_income_dashboard(request, display_currency, time_group):
-    """Expense & Income breakdown dashboard with a calendar-based period filter:
+    """Expense breakdown dashboard with a calendar-based period filter:
     a specific Month, Quarter, Semester, or Year, or All Time. Defaults to the
     latest month with data.
     """
