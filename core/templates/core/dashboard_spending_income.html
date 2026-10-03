@@ -38,7 +38,7 @@
     <!-- ═══ SPENDING ═══ -->
     <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expense</h5>
 
-    <div id="drillCrumb" class="small mb-2 d-none"></div>
+    <div id="drillCrumb" class="small mb-2"></div>
     <p class="text-muted small mb-2">Click a category to see its subcategories.</p>
 
     <div class="row g-3 mb-4">
@@ -122,8 +122,10 @@
 
   function renderCrumb() {
     crumb.innerHTML = '';
-    crumb.classList.toggle('d-none', !path.length);
-    if (!path.length) return;
+    if (!path.length) {
+      var all = document.createElement('strong'); all.textContent = 'All categories'; crumb.appendChild(all);
+      return;
+    }
     function link(text, depth) {
       var a = document.createElement('a');
       a.href = '#'; a.textContent = text;
