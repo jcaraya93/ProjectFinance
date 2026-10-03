@@ -259,6 +259,17 @@ class TestImport:
         with pytest.raises(DataImportError, match='already has'):
             import_user_data(user, data)
 
+    def test_import_replaces_default_category_tree(self, user, category_groups):
+        from core.models import CategoryNode
+        CategoryNode.load_default_tree(user)
+        assert CategoryNode.objects.filter(user=user).count() > 4
+        data = {'version': 2, 'categories': [
+            {'name': 'Solo', 'group_slug': 'expense', 'color': '#000000', 'parent_name': None},
+        ]}
+        import_user_data(user, data)
+        names = set(CategoryNode.objects.filter(user=user).values_list('name', flat=True))
+        assert names == {'Unclassified', 'Solo'}
+
     def test_import_atomic_rollback(self, user, full_data):
         """If import fails mid-way, no partial data should remain."""
         data = self._export_and_clear(user)

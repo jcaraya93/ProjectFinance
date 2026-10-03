@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.core.exceptions import ValidationError
@@ -44,6 +47,10 @@ class User(AbstractBaseUser, PermissionsMixin):
                 defaults={'color': '#adb5bd'},
             )
         CategoryNode.ensure_protected(self)
+
+    def load_default_category_tree(self):
+        """Copy the bundled default category tree into this user's account."""
+        CategoryNode.load_default_tree(self)
 
 
 class CategoryGroup(models.Model):
@@ -149,6 +156,22 @@ class CategoryNode(models.Model):
                 user=user,
                 defaults={'color': cls.UNCLASSIFIED_COLOR},
             )
+
+    DEFAULT_TREE_PATH = Path(__file__).resolve().parent / 'data' / 'default_categories.json'
+
+    @classmethod
+    def load_default_tree(cls, user):
+        """Create the bundled default categories (parents before children). Existing nodes are kept."""
+        cls.ensure_protected(user)
+        created = {}
+        for row in json.loads(cls.DEFAULT_TREE_PATH.read_text(encoding='utf-8')):
+            group = CategoryGroup.get_group(row['group'])
+            parent = created.get((row['group'], row['parent'])) if row['parent'] else None
+            node, _ = cls.objects.get_or_create(
+                name=row['name'], group=group, user=user,
+                defaults={'color': row['color'], 'parent': parent},
+            )
+            created[(row['group'], row['name'])] = node
 
     @property
     def is_leaf(self):

@@ -70,6 +70,7 @@ def register_view(request):
             password=form.cleaned_data['password'],
         )
         user.create_default_categories()
+        user.load_default_category_tree()
         login(request, user)
         messages.success(request, 'Account created successfully.')
         return redirect('core:dashboard')

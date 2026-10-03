@@ -58,7 +58,6 @@ ProjectFinance/
 │   │   ├── exchange_rates.py         # CRC↔USD rate fetching & conversion
 │   │   └── stats.py                  # Dashboard aggregation queries
 │   ├── management/commands/
-│   │   ├── seed_categories.py        # Import categories & rules from YAML
 │   │   └── rename_app_prep.py        # Migration helper (transactions → core)
 │   ├── templates/core/               # 22 HTML templates (+ 2 auth templates)
 │   ├── static/core/                  # CSS and JS assets
@@ -180,9 +179,6 @@ docker compose up -d --build
 
 # Verify both services are running
 docker compose ps
-
-# (Optional) Seed categories and classification rules
-docker compose exec web python manage.py seed_categories
 ```
 
 The entrypoint script automatically waits for PostgreSQL, runs migrations, collects static files, and starts Gunicorn.
@@ -245,7 +241,6 @@ Metadata fields `transaction_code` and `reference_number` are extracted per tran
 
 | Command | Description |
 |---------|-------------|
-| `python manage.py seed_categories` | Import categories, groups, and rules from `classification_rules.yaml` into the database. Only imports rules if the DB has none. |
 | `python manage.py rename_app_prep` | Migration helper to update `django_migrations` table after the app rename from `transactions` to `core`. |
 
 ## URL Routes

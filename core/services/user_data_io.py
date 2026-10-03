@@ -210,18 +210,23 @@ class ImportError(Exception):
 
 
 def _check_user_is_fresh(user):
-    """Raise ImportError if the user already has data beyond defaults."""
-    custom_nodes = CategoryNode.objects.filter(user=user).exclude(
-        parent__isnull=True, name=CategoryNode.UNCLASSIFIED_NAME,
-    )
-    if custom_nodes.exists():
-        raise ImportError('Cannot import: user already has custom categories.')
+    """Raise ImportError if the user already has data beyond the default categories."""
     if ClassificationRuleV2.objects.filter(user=user).exists():
         raise ImportError('Cannot import: user already has classification rules.')
     if Account.objects.filter(user=user).exists():
         raise ImportError('Cannot import: user already has accounts.')
     if StatementImport.objects.filter(user=user).exists():
         raise ImportError('Cannot import: user already has statement imports.')
+
+
+def _clear_default_categories(user):
+    """Drop the starter categories so the backup's own tree is restored exactly."""
+    nodes = CategoryNode.objects.filter(user=user).exclude(
+        parent__isnull=True, name=CategoryNode.UNCLASSIFIED_NAME,
+    )
+    while nodes.exists():
+        leaves = nodes.filter(children__isnull=True)
+        leaves.delete()
 
 
 def import_user_data(user, data):
@@ -260,6 +265,7 @@ def import_user_data(user, data):
             )
 
         # 2. Categories (ensure groups exist first)
+        _clear_default_categories(user)
         CategoryNode.ensure_protected(user)
         cat_lookup = {}  # (group_slug, name) → CategoryNode
         for node in CategoryNode.objects.filter(user=user).select_related('group'):

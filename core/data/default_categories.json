@@ -1,0 +1,482 @@
+[
+ {
+  "name": "Bank",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Car",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Family Pet",
+  "group": "expense",
+  "parent": null,
+  "color": "#00bcd4"
+ },
+ {
+  "name": "Food",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Health",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Housing",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Lifestyle",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Shopping",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Transport",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Travel",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Utilities",
+  "group": "expense",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Bank Fees & Charges",
+  "group": "expense",
+  "parent": "Bank",
+  "color": "#c62828"
+ },
+ {
+  "name": "Bank Insurance",
+  "group": "expense",
+  "parent": "Bank",
+  "color": "#d32f2f"
+ },
+ {
+  "name": "Bank Interest Charges",
+  "group": "expense",
+  "parent": "Bank",
+  "color": "#e53935"
+ },
+ {
+  "name": "Bank Transactions",
+  "group": "expense",
+  "parent": "Bank",
+  "color": "#ef5350"
+ },
+ {
+  "name": "Car Ownership Costs",
+  "group": "expense",
+  "parent": "Car",
+  "color": "#6c757d"
+ },
+ {
+  "name": "Car Running Costs",
+  "group": "expense",
+  "parent": "Car",
+  "color": "#6c757d"
+ },
+ {
+  "name": "Food Delivery",
+  "group": "expense",
+  "parent": "Food",
+  "color": "#e65100"
+ },
+ {
+  "name": "Food Eating Out",
+  "group": "expense",
+  "parent": "Food",
+  "color": "#f57c00"
+ },
+ {
+  "name": "Food Groceries",
+  "group": "expense",
+  "parent": "Food",
+  "color": "#ff9800"
+ },
+ {
+  "name": "Health Dental",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#00695c"
+ },
+ {
+  "name": "Health Fitness",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#00897b"
+ },
+ {
+  "name": "Health Labs",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#009688"
+ },
+ {
+  "name": "Health Medical",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#26a69a"
+ },
+ {
+  "name": "Health Pharmacy",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#4db6ac"
+ },
+ {
+  "name": "Health Vision",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#80cbc4"
+ },
+ {
+  "name": "Health Wellness",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#00bcd4"
+ },
+ {
+  "name": "Housing General",
+  "group": "expense",
+  "parent": "Housing",
+  "color": "#4527a0"
+ },
+ {
+  "name": "Housing Maintenance",
+  "group": "expense",
+  "parent": "Housing",
+  "color": "#5e35b1"
+ },
+ {
+  "name": "Lifestyle Entertainment",
+  "group": "expense",
+  "parent": "Lifestyle",
+  "color": "#ad1457"
+ },
+ {
+  "name": "Lifestyle Gifts & Donations",
+  "group": "expense",
+  "parent": "Lifestyle",
+  "color": "#c2185b"
+ },
+ {
+  "name": "Lifestyle Personal Services",
+  "group": "expense",
+  "parent": "Lifestyle",
+  "color": "#d81b60"
+ },
+ {
+  "name": "Lifestyle Subscriptions",
+  "group": "expense",
+  "parent": "Lifestyle",
+  "color": "#e91e63"
+ },
+ {
+  "name": "Shopping Clothing",
+  "group": "expense",
+  "parent": "Shopping",
+  "color": "#558b2f"
+ },
+ {
+  "name": "Shopping General",
+  "group": "expense",
+  "parent": "Shopping",
+  "color": "#689f38"
+ },
+ {
+  "name": "Shopping Online",
+  "group": "expense",
+  "parent": "Shopping",
+  "color": "#7cb342"
+ },
+ {
+  "name": "Transport General",
+  "group": "expense",
+  "parent": "Transport",
+  "color": "#283593"
+ },
+ {
+  "name": "Transport Uber",
+  "group": "expense",
+  "parent": "Transport",
+  "color": "#3949ab"
+ },
+ {
+  "name": "Travel Activities",
+  "group": "expense",
+  "parent": "Travel",
+  "color": "#bf360c"
+ },
+ {
+  "name": "Travel Agency",
+  "group": "expense",
+  "parent": "Travel",
+  "color": "#d84315"
+ },
+ {
+  "name": "Travel Flights",
+  "group": "expense",
+  "parent": "Travel",
+  "color": "#e64a19"
+ },
+ {
+  "name": "Travel Food",
+  "group": "expense",
+  "parent": "Travel",
+  "color": "#f4511e"
+ },
+ {
+  "name": "Travel General",
+  "group": "expense",
+  "parent": "Travel",
+  "color": "#ff5722"
+ },
+ {
+  "name": "Travel Lodging",
+  "group": "expense",
+  "parent": "Travel",
+  "color": "#ff7043"
+ },
+ {
+  "name": "Utilities Electricity",
+  "group": "expense",
+  "parent": "Utilities",
+  "color": "#fdd835"
+ },
+ {
+  "name": "Utilities General",
+  "group": "expense",
+  "parent": "Utilities",
+  "color": "#546e7a"
+ },
+ {
+  "name": "Utilities Internet",
+  "group": "expense",
+  "parent": "Utilities",
+  "color": "#0277bd"
+ },
+ {
+  "name": "Utilities Phone",
+  "group": "expense",
+  "parent": "Utilities",
+  "color": "#7b1fa2"
+ },
+ {
+  "name": "Utilities Water",
+  "group": "expense",
+  "parent": "Utilities",
+  "color": "#0288d1"
+ },
+ {
+  "name": "Car Gas",
+  "group": "expense",
+  "parent": "Car Running Costs",
+  "color": "#1565c0"
+ },
+ {
+  "name": "Car Insurance",
+  "group": "expense",
+  "parent": "Car Ownership Costs",
+  "color": "#1976d2"
+ },
+ {
+  "name": "Car Maintenance",
+  "group": "expense",
+  "parent": "Car Ownership Costs",
+  "color": "#1e88e5"
+ },
+ {
+  "name": "Car Parking & Toll",
+  "group": "expense",
+  "parent": "Car Running Costs",
+  "color": "#2196f3"
+ },
+ {
+  "name": "Car Tax",
+  "group": "expense",
+  "parent": "Car Ownership Costs",
+  "color": "#42a5f5"
+ },
+ {
+  "name": "Car Wash",
+  "group": "expense",
+  "parent": "Car Running Costs",
+  "color": "#64b5f6"
+ },
+ {
+  "name": "Bank",
+  "group": "income",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Reimbursement",
+  "group": "income",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Work",
+  "group": "income",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Bank Interest CDP",
+  "group": "income",
+  "parent": "Bank",
+  "color": "#2e7d32"
+ },
+ {
+  "name": "Bank Interest Cashback",
+  "group": "income",
+  "parent": "Bank",
+  "color": "#388e3c"
+ },
+ {
+  "name": "Bank Interest Credit",
+  "group": "income",
+  "parent": "Bank",
+  "color": "#43a047"
+ },
+ {
+  "name": "Bank Interest Reversals",
+  "group": "income",
+  "parent": "Bank",
+  "color": "#4caf50"
+ },
+ {
+  "name": "Reimbursement General",
+  "group": "income",
+  "parent": "Reimbursement",
+  "color": "#00838f"
+ },
+ {
+  "name": "Reimbursement Housing",
+  "group": "income",
+  "parent": "Reimbursement",
+  "color": "#0097a7"
+ },
+ {
+  "name": "Reimbursement Insurance",
+  "group": "income",
+  "parent": "Reimbursement",
+  "color": "#00acc1"
+ },
+ {
+  "name": "Reimbursement Partner",
+  "group": "income",
+  "parent": "Reimbursement",
+  "color": "#00bcd4"
+ },
+ {
+  "name": "Work Association",
+  "group": "income",
+  "parent": "Work",
+  "color": "#1b5e20"
+ },
+ {
+  "name": "Work Bonuses",
+  "group": "income",
+  "parent": "Work",
+  "color": "#33691e"
+ },
+ {
+  "name": "Work Government",
+  "group": "income",
+  "parent": "Work",
+  "color": "#827717"
+ },
+ {
+  "name": "Work Salary",
+  "group": "income",
+  "parent": "Work",
+  "color": "#006064"
+ },
+ {
+  "name": "Bank",
+  "group": "transfer",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "Broker",
+  "group": "transfer",
+  "parent": null,
+  "color": "#6c757d"
+ },
+ {
+  "name": "External Cash",
+  "group": "transfer",
+  "parent": null,
+  "color": "#4e342e"
+ },
+ {
+  "name": "Account BAC CDP",
+  "group": "transfer",
+  "parent": "Bank",
+  "color": "#5c6bc0"
+ },
+ {
+  "name": "Account BAC Credit",
+  "group": "transfer",
+  "parent": "Bank",
+  "color": "#3f51b5"
+ },
+ {
+  "name": "Account BAC Debit",
+  "group": "transfer",
+  "parent": "Bank",
+  "color": "#7986cb"
+ },
+ {
+  "name": "Account COOPENAE",
+  "group": "transfer",
+  "parent": "Bank",
+  "color": "#9fa8da"
+ },
+ {
+  "name": "Account MultiMoney",
+  "group": "transfer",
+  "parent": "Bank",
+  "color": "#303f9f"
+ },
+ {
+  "name": "Broker Etoro",
+  "group": "transfer",
+  "parent": "Broker",
+  "color": "#ff6f00"
+ },
+ {
+  "name": "Broker Interactive Brokers",
+  "group": "transfer",
+  "parent": "Broker",
+  "color": "#f57f17"
+ }
+]

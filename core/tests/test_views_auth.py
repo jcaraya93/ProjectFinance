@@ -56,6 +56,18 @@ class TestRegisterAction:
         assert resp.status_code == 302
         assert User.objects.filter(email='new@example.com').exists()
 
+    def test_register_loads_default_categories(self, client, db):
+        client.post('/auth/register/', {
+            'email': 'seeded@example.com',
+            'password': 'Str0ngP@ssword!',
+            'password_confirm': 'Str0ngP@ssword!',
+        })
+        from core.models import CategoryNode
+        nodes = CategoryNode.objects.filter(user__email='seeded@example.com')
+        assert nodes.count() > 4
+        assert nodes.filter(parent__isnull=False).exists()
+        assert nodes.filter(name='Unclassified', parent__isnull=True).count() == 4
+
     def test_register_duplicate_email(self, client, user):
         resp = client.post('/auth/register/', {
             'email': 'test@example.com',

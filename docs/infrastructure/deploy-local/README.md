@@ -76,12 +76,6 @@ PostgreSQL variables (`POSTGRES_DB`, `POSTGRES_USER`, etc.) are present in `.env
 python manage.py createsuperuser --settings=config.settings_local
 ```
 
-### Seed categories and classification rules
-
-```bash
-python manage.py seed_categories --settings=config.settings_local
-```
-
 ### Run tests
 
 Tests use their own settings module (`config.settings_test`) with an in-memory SQLite database:

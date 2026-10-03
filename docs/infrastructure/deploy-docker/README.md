@@ -66,12 +66,6 @@ Set `OTEL_EXPORTER=console` to print telemetry to stdout instead of sending it t
 docker compose exec web python manage.py createsuperuser
 ```
 
-### Seed categories and classification rules
-
-```bash
-docker compose exec web python manage.py seed_categories
-```
-
 ### View logs
 
 ```bash
