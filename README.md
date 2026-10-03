@@ -60,7 +60,6 @@ ProjectFinance/
 │   │   └── stats.py                  # Dashboard aggregation queries
 │   ├── management/commands/
 │   │   ├── seed_categories.py        # Import categories & rules from YAML
-│   │   ├── export_rules.py           # Export DB rules back to YAML
 │   │   ├── ai_classify.py            # AI-assisted bulk classification
 │   │   └── rename_app_prep.py        # Migration helper (transactions → core)
 │   ├── templates/core/               # 22 HTML templates (+ 2 auth templates)
@@ -249,7 +248,6 @@ Metadata fields `transaction_code` and `reference_number` are extracted per tran
 | Command | Description |
 |---------|-------------|
 | `python manage.py seed_categories` | Import categories, groups, and rules from `classification_rules.yaml` into the database. Only imports rules if the DB has none. |
-| `python manage.py export_rules` | Export current DB rules back to `classification_rules.yaml`. |
 | `python manage.py ai_classify` | Classify unclassified transactions using Google Gemini AI. Supports `--dry-run`. |
 | `python manage.py rename_app_prep` | Migration helper to update `django_migrations` table after the app rename from `transactions` to `core`. |
 
@@ -289,16 +287,6 @@ Metadata fields `transaction_code` and `reference_number` are extracted per tran
 ### Categories & Rules
 | URL | Description |
 |-----|-------------|
-| `/categories/` | Category management |
-| `/categories/add/` | Add a new category |
-| `/categories/delete/` | Delete a category |
-| `/categories/rename/` | Rename a category |
-| `/categories/export/` | Export categories |
-| `/categories/import/` | Import categories |
-| `/rules/` | Classification rules list |
-| `/rules/add/` | Add a new rule |
-| `/rules/<id>/edit/` | Edit a rule |
-| `/rules/<id>/delete/` | Delete a rule |
 | `/rules/reclassify/` | Re-run all rules on non-manual transactions |
 | `/rules/classify-unclassified/` | Run rules only on unclassified transactions |
 

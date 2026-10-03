@@ -18,7 +18,6 @@ ProjectFinance is a personal finance web application for importing Costa Rican b
 | **Dev server (Docker)** | `docker compose up -d --build` |
 | **Migrations** | `python manage.py makemigrations core && python manage.py migrate` |
 | **Seed categories** | `python manage.py seed_categories` |
-| **Export rules** | `python manage.py export_rules` |
 
 ### Environment Variables (tests)
 
@@ -75,7 +74,7 @@ ProjectFinance/
 │   │   ├── exchange_rates.py   # CRC↔USD via Frankfurter API
 │   │   ├── stats.py            # Dashboard aggregation queries
 │   │   └── user_data_io.py     # Full data export/import (JSON)
-│   ├── management/commands/    # seed_categories, export_rules, ai_classify
+│   ├── management/commands/    # seed_categories, ai_classify
 │   ├── templates/core/         # HTML templates (Bootstrap 5)
 │   ├── static/core/            # CSS + JS assets
 │   ├── templatetags/           # Custom template filters

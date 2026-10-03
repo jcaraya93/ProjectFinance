@@ -36,12 +36,12 @@ class TestLoginAction:
         assert resp.status_code == 200  # Re-renders form
 
     def test_login_redirect_next(self, client, user):
-        resp = client.post('/auth/login/?next=/categories/', {
+        resp = client.post('/auth/login/?next=/categories-v2/', {
             'email': 'test@example.com',
             'password': 'testpass123!',
         })
         assert resp.status_code == 302
-        assert resp.url == '/categories/'
+        assert resp.url == '/categories-v2/'
 
 
 class TestRegisterAction:
@@ -86,10 +86,10 @@ class TestUnauthenticatedRedirect:
     """Protected pages redirect to login."""
 
     @pytest.mark.parametrize('url', [
-        '/categories/',
+        '/categories-v2/',
         '/transactions/',
         '/statements/',
-        '/rules/',
+        '/rules-v2/',
         '/upload/',
         '/',
     ])

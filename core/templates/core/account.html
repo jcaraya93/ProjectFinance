@@ -116,50 +116,6 @@
       </div>
     </div>
 
-    <!-- Advanced: YAML Categories & Rules — collapsible -->
-    <div class="card mb-4">
-      <div class="card-header p-0">
-        <button class="btn btn-link text-decoration-none w-100 text-start px-3 py-2 d-flex justify-content-between align-items-center"
-                type="button" data-bs-toggle="collapse" data-bs-target="#advancedSection">
-          <h6 class="mb-0 text-muted">Advanced: Categories &amp; Rules (YAML)</h6>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-down text-muted" viewBox="0 0 16 16">
-            <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"/>
-          </svg>
-        </button>
-      </div>
-      <div class="collapse" id="advancedSection">
-        <div class="card-body">
-          <p class="text-muted small mb-3">Export or import just categories and classification rules as YAML. Useful for sharing rule sets between accounts.</p>
-          <div class="d-flex gap-2">
-            <a href="{% url 'core:export_categories' %}" class="btn btn-sm btn-outline-secondary flex-fill">Export YAML</a>
-            <button type="button" class="btn btn-sm btn-outline-secondary flex-fill" data-bs-toggle="modal" data-bs-target="#importYamlModal">Import YAML</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Import YAML Modal -->
-    <div class="modal fade" id="importYamlModal" tabindex="-1">
-      <div class="modal-dialog modal-sm">
-        <div class="modal-content">
-          <form method="post" action="{% url 'core:import_categories' %}" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="modal-header">
-              <h6 class="modal-title">Import Categories &amp; Rules</h6>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-              <input type="file" name="file" accept=".yaml,.yml" class="form-control form-control-sm" required>
-              <div class="small text-muted mt-2">Existing items won't be duplicated.</div>
-            </div>
-            <div class="modal-footer">
-              <button type="submit" class="btn btn-sm btn-primary">Import</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
     <!-- Danger Zone -->
     {% if has_data %}
     <div class="card mb-4 border-danger">
