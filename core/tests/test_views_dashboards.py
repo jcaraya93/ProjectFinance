@@ -83,6 +83,15 @@ class TestSpendingIncomeLevel:
             assert resp.status_code == 200
             assert resp.context['category_level'] == 1
 
+    def test_transactions_link_carries_period_and_group(self, auth_client, sample_data):
+        url = reverse('core:spending_income_dashboard')
+        resp = auth_client.get(url, {'period_type': 'all'})
+        assert resp.context['expense_transactions_url'] == reverse('core:transaction_list') + '?group=expense'
+        resp = auth_client.get(url)
+        link = resp.context['expense_transactions_url']
+        assert 'group=expense' in link and 'start_date=' in link and 'end_date=' in link
+        assert 'group=expense' in resp.context['expense_transactions_url']
+
     def test_drill_data_lists_children_and_direct_amounts(self, auth_client, sample_data, expense_category, user):
         import json
         from core.models import CategoryNode

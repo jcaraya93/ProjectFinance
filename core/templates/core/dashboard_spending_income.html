@@ -108,6 +108,7 @@
   var drill = DashboardCharts.parseJSON('expenseDrillData') || {};
   var path = [];  // ids of the categories drilled into, outermost first
   var crumb = document.getElementById('drillCrumb');
+  var txBase = '{{ expense_transactions_url|escapejs }}';
 
   function fmt(v) { return Math.round(v).toLocaleString(); }
   function current() { return path.length ? drill[path[path.length - 1]] : base; }
@@ -157,6 +158,11 @@
     var share = document.createElement('span');
     share.className = 'text-muted float-end';
     share.textContent = path.length ? fmt(sum) + ' (' + (baseSum > 0 ? (sum / baseSum * 100).toFixed(1) : 0) + '% of total)' : 'Total ' + fmt(sum);
+    var tx = document.createElement('a');
+    tx.className = 'float-end ms-3';
+    tx.textContent = 'View transactions \u2192';
+    tx.href = txBase + (path.length ? '&category=' + path[path.length - 1] : '');
+    crumb.appendChild(tx);
     crumb.appendChild(share);
     if (!path.length) {
       var all = document.createElement('strong'); all.textContent = 'All categories'; crumb.appendChild(all);

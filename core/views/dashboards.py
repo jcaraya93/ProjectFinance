@@ -5,6 +5,8 @@ from datetime import date
 from decimal import Decimal
 
 from django.shortcuts import render
+from django.urls import reverse
+from urllib.parse import urlencode
 from django.contrib.auth.decorators import login_required
 
 from ..models import Transaction, LogicalTransaction, CategoryNode, ClassificationRuleV2
@@ -675,6 +677,12 @@ def spending_income_dashboard(request, display_currency, time_group):
     )
     context['category_level'] = category_level
     context['category_levels'] = EXPENSE_LEVELS
+    tx_params = {'group': 'expense'}
+    if start_date:
+        tx_params['start_date'] = start_date.isoformat()
+    if end_date:
+        tx_params['end_date'] = end_date.isoformat()
+    context['expense_transactions_url'] = reverse('core:transaction_list') + '?' + urlencode(tx_params)
     context['period_type'] = period_type
     context['period_key'] = period_key
     context['period_label'] = period_label
