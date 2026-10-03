@@ -1,20 +1,16 @@
 """Rule matching and V1 import for ClassificationRuleV2.
 
 Reuses the V1 matcher and phase ordering (transfer, specific, Unclassified) so both
-rule sets behave identically. Nothing here writes to transactions.
+rule sets behave identically. Only classify_transactions_v2 writes to transactions, and only their V2 fields.
 """
 from django.core.exceptions import ValidationError
 from django.db import transaction as db_transaction
 
-from core.models import Category, CategoryNode, ClassificationRule, ClassificationRuleV2
+from core.models import CategoryNode, ClassificationRule, ClassificationRuleV2, LogicalTransaction
 from core.services.yaml_classifier import _match_rule, _rule_phase
 
 
-def find_matching_rule(user, transaction):
-    """Return the best ClassificationRuleV2 for a transaction, or None."""
-    rules = list(
-        ClassificationRuleV2.objects.filter(user=user).select_related('category__group')
-    )
+def _best_rule(flats, transaction):
     desc_upper = transaction.description.upper()
     metadata = transaction.account_metadata or {}
     try:
@@ -22,7 +18,6 @@ def find_matching_rule(user, transaction):
     except AttributeError:
         account_type = ''
 
-    flats = [(rule, rule.to_flat_dict()) for rule in rules]
     for phase in (0, 1, 2):
         best, best_specificity = None, 0
         for rule, flat in flats:
@@ -38,6 +33,53 @@ def find_matching_rule(user, transaction):
         if best:
             return best
     return None
+
+
+def _load_flats(user):
+    rules = ClassificationRuleV2.objects.filter(user=user).select_related('category__group')
+    return [(rule, rule.to_flat_dict()) for rule in rules]
+
+
+def find_matching_rule(user, transaction):
+    """Return the best ClassificationRuleV2 for a transaction, or None."""
+    return _best_rule(_load_flats(user), transaction)
+
+
+def classify_transactions_v2(user, dry_run=False):
+    """Assign V2 categories to a user's transactions using V2 rules.
+
+    Writes only category_v2, matched_rule_v2 and classification_method_v2; V1 fields are never
+    touched. Transactions whose V2 method is 'manual' are skipped, and transactions that match no
+    rule are left as they are. Returns (total, changed, skipped_manual, unmatched).
+    """
+    flats = _load_flats(user)
+    queryset = LogicalTransaction.objects.filter(user=user).select_related(
+        'raw_transaction__ledger__statement_import__account'
+    )
+    total = changed = skipped_manual = unmatched = 0
+    to_update = []
+    for txn in queryset.iterator(chunk_size=500):
+        total += 1
+        if txn.classification_method_v2 == 'manual':
+            skipped_manual += 1
+            continue
+        rule = _best_rule(flats, txn)
+        if rule is None:
+            unmatched += 1
+            continue
+        if txn.category_v2_id == rule.category_id and txn.matched_rule_v2_id == rule.pk \
+                and txn.classification_method_v2 == 'rule':
+            continue
+        txn.category_v2_id = rule.category_id
+        txn.matched_rule_v2_id = rule.pk
+        txn.classification_method_v2 = 'rule'
+        to_update.append(txn)
+        changed += 1
+    if to_update and not dry_run:
+        LogicalTransaction.objects.bulk_update(
+            to_update, ['category_v2', 'matched_rule_v2', 'classification_method_v2'], batch_size=500
+        )
+    return total, changed, skipped_manual, unmatched
 
 
 def import_v1_rules(user):
