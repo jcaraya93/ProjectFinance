@@ -131,14 +131,28 @@
             </div>
           </div>
         </div>
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+            Search in {% if search_in != 'both' %}<span class="badge bg-primary">1</span>{% endif %}
+          </button>
+          <div class="dropdown-menu p-2" style="min-width: 160px;">
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="radio" name="search_in" value="both" class="form-check-input auto-submit" {% if search_in == 'both' %}checked{% endif %}>
+              Description + Note
+            </label>
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="radio" name="search_in" value="description" class="form-check-input auto-submit" {% if search_in == 'description' %}checked{% endif %}>
+              Description
+            </label>
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="radio" name="search_in" value="note" class="form-check-input auto-submit" {% if search_in == 'note' %}checked{% endif %}>
+              Note
+            </label>
+          </div>
+        </div>
         <input type="text" name="search"class="form-control form-control-sm" placeholder="Search..." value="{{ search }}"
                onkeydown="if(event.key==='Enter'){document.getElementById('filterForm').submit();}"
                onblur="if(this.value!=='{{ search }}'){document.getElementById('filterForm').submit();}" style="width: 180px;">
-        <select name="search_in" class="form-select form-select-sm" style="width: 130px;" title="Where the text search looks" onchange="document.getElementById('filterForm').submit();">
-          <option value="both" {% if search_in == 'both' %}selected{% endif %}>Desc. + Note</option>
-          <option value="description" {% if search_in == 'description' %}selected{% endif %}>Description</option>
-          <option value="note" {% if search_in == 'note' %}selected{% endif %}>Note</option>
-        </select>
         <button type="submit" class="btn btn-sm btn-primary">Apply</button>
         <a href="{% url 'core:transaction_list' %}" class="btn btn-outline-secondary btn-sm">Clear</a>
         <a href="#" class="small text-decoration-none ms-auto" data-bs-toggle="collapse" data-bs-target="#advancedSearch">
