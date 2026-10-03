@@ -81,3 +81,22 @@ class TestSpendingIncomeLevel:
             resp = auth_client.get(url, {'period_type': 'all', 'level': bad})
             assert resp.status_code == 200
             assert resp.context['category_level'] == 0
+
+    def test_drill_data_lists_children_and_direct_amounts(self, auth_client, sample_data, expense_category, user):
+        import json
+        from core.models import CategoryNode
+        parent = CategoryNode.objects.create(name='Food', group=expense_category.group, user=user, color='#111111')
+        expense_category.parent = parent
+        expense_category.save()
+        for t in sample_data['transactions']:
+            t.amount_crc = t.amount
+            t.save()
+        resp = auth_client.get(reverse('core:spending_income_dashboard'), {'period_type': 'all', 'level': 1})
+        drill = json.loads(resp.context['expense_drill_data'])
+        entry = drill[str(parent.pk)]
+        assert entry['name'] == 'Food'
+        assert entry['labels'] == ['Groceries']
+        assert entry['ids'] == [expense_category.pk]
+        top = json.loads(resp.context['expense_category_data'])
+        assert top['ids'] == [parent.pk]
+        assert entry['values'][0] == top['values'][0]

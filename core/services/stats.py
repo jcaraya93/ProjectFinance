@@ -18,7 +18,7 @@ class DecimalEncoder(json.JSONEncoder):
 
 def category_depths(user):
     """Return ({node_id: node}, {node_id: depth}) for the user's category tree; top level is depth 1."""
-    nodes = {n.id: n for n in CategoryNode.objects.filter(user=user)}
+    nodes = {n.id: n for n in CategoryNode.objects.filter(user=user).select_related('group')}
     depths = {}
 
     def depth(node):
@@ -49,13 +49,54 @@ def category_breakdown(qs, group_slug, amount_field, nodes, depths, level=None, 
     ordered = sorted(totals.items(), key=lambda kv: -kv[1])
     if limit:
         ordered = ordered[:limit]
-    data = {'labels': [], 'values': [], 'colors': []}
+    data = {'labels': [], 'values': [], 'colors': [], 'ids': []}
     for key, total in ordered:
         node = nodes.get(key)
+        data['ids'].append(key)
         data['labels'].append(node.name if node else 'Uncategorized')
         data['values'].append(total)
         data['colors'].append((node.color if node else None) or '#6c757d')
     return data
+
+
+def category_drilldown(qs, group_slug, amount_field, nodes):
+    """For every node with children: its children's subtree totals, keyed by node id.
+
+    Amounts assigned directly to the parent appear as an extra "<name> (direct)" entry with id None.
+    """
+    own = {}
+    for r in (qs.filter(category_v2__group__slug=group_slug)
+              .values('category_v2_id').annotate(t=Sum(Abs(amount_field)))):
+        own[r['category_v2_id']] = float(r['t'] or 0)
+    subtree = {}
+    for node_id, total in own.items():
+        node = nodes.get(node_id)
+        while node is not None:
+            subtree[node.id] = subtree.get(node.id, 0) + total
+            node = nodes.get(node.parent_id) if node.parent_id else None
+
+    children = {}
+    for n in nodes.values():
+        if n.parent_id:
+            children.setdefault(n.parent_id, []).append(n)
+
+    drill = {}
+    for parent_id, kids in children.items():
+        parent = nodes[parent_id]
+        if parent.group.slug != group_slug or not subtree.get(parent_id):
+            continue
+        items = [(k.id, k.name, k.color, subtree.get(k.id, 0)) for k in kids if subtree.get(k.id, 0)]
+        if own.get(parent_id):
+            items.append((None, f'{parent.name} (direct)', parent.color, own[parent_id]))
+        items.sort(key=lambda it: -it[3])
+        drill[parent_id] = {
+            'name': parent.name,
+            'ids': [i[0] for i in items],
+            'labels': [i[1] for i in items],
+            'colors': [i[2] or '#6c757d' for i in items],
+            'values': [i[3] for i in items],
+        }
+    return drill
 
 
 def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='CRC', wallet_filter=None, groups=None, categories=None, time_group='monthly', category_level=None):
@@ -341,6 +382,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     expense_category_data = category_breakdown(qs, 'expense', amount_field, nodes, depths, category_level)
     income_category_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level)
     top_categories_data = category_breakdown(qs, 'expense', amount_field, nodes, depths, category_level, limit=10)
+    expense_drill_data = category_drilldown(qs, 'expense', amount_field, nodes)
     top_income_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level, limit=10)
 
     # ── Monthly trend (dual line) ─────────────────────────────
@@ -358,6 +400,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
         'summary': summary,
         'monthly_data': json.dumps(monthly_data, cls=DecimalEncoder),
         'expense_category_data': json.dumps(expense_category_data, cls=DecimalEncoder),
+        'expense_drill_data': json.dumps(expense_drill_data, cls=DecimalEncoder),
         'income_category_data': json.dumps(income_category_data, cls=DecimalEncoder),
         'top_categories_data': json.dumps(top_categories_data, cls=DecimalEncoder),
         'top_income_data': json.dumps(top_income_data, cls=DecimalEncoder),
