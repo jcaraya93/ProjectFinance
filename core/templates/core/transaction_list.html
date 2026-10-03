@@ -51,6 +51,30 @@
         </div>
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+            Method {% if selected_cls_methods %}<span class="badge bg-primary">{{ selected_cls_methods|length }}</span>{% endif %}
+          </button>
+          <div class="dropdown-menu p-2" style="min-width: 180px;">
+            <div class="d-flex justify-content-between mb-1 px-2">
+              <a href="#" class="small check-all">All</a>
+              <a href="#" class="small check-none">None</a>
+            </div>
+            <div class="dropdown-divider mt-1 mb-1"></div>
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="checkbox" name="cls_method" value="unclassified" class="form-check-input auto-submit" {% if 'unclassified' in selected_cls_methods %}checked{% endif %}>
+              Unclassified
+            </label>
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="checkbox" name="cls_method" value="rule" class="form-check-input auto-submit" {% if 'rule' in selected_cls_methods %}checked{% endif %}>
+              Rule
+            </label>
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="checkbox" name="cls_method" value="manual" class="form-check-input auto-submit" {% if 'manual' in selected_cls_methods %}checked{% endif %}>
+              Manual
+            </label>
+          </div>
+        </div>
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
             Classification {% if selected_groups or selected_categories %}<span class="badge bg-primary">{{ selected_groups|length|add:selected_categories|length }}</span>{% endif %}
           </button>
           <div class="dropdown-menu p-2" style="max-height: 500px; overflow-y: auto; min-width: 280px;">
@@ -74,30 +98,6 @@
             {% endfor %}
             </div>
             {% endfor %}
-          </div>
-        </div>
-        <div class="dropdown">
-          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
-            Method {% if selected_cls_methods %}<span class="badge bg-primary">{{ selected_cls_methods|length }}</span>{% endif %}
-          </button>
-          <div class="dropdown-menu p-2" style="min-width: 180px;">
-            <div class="d-flex justify-content-between mb-1 px-2">
-              <a href="#" class="small check-all">All</a>
-              <a href="#" class="small check-none">None</a>
-            </div>
-            <div class="dropdown-divider mt-1 mb-1"></div>
-            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-              <input type="checkbox" name="cls_method" value="unclassified" class="form-check-input auto-submit" {% if 'unclassified' in selected_cls_methods %}checked{% endif %}>
-              Unclassified
-            </label>
-            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-              <input type="checkbox" name="cls_method" value="rule" class="form-check-input auto-submit" {% if 'rule' in selected_cls_methods %}checked{% endif %}>
-              Rule
-            </label>
-            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-              <input type="checkbox" name="cls_method" value="manual" class="form-check-input auto-submit" {% if 'manual' in selected_cls_methods %}checked{% endif %}>
-              Manual
-            </label>
           </div>
         </div>
         <div class="dropdown">
