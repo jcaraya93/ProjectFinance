@@ -68,6 +68,8 @@ class TransactionFilter(django_filters.FilterSet):
         selected = {node.pk for node in value}
         if not selected:
             return queryset
+        if self.data.get('category_scope') == 'direct':
+            return queryset.filter(category_v2_id__in=selected)
         return queryset.filter(category_v2_id__in=self._with_descendants(selected))
 
     def _with_descendants(self, ids):

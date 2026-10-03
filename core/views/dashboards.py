@@ -576,13 +576,25 @@ def _build_calendar_periods(earliest, latest):
     return months, quarters, semesters, years
 
 
+def _months_before(value, months):
+    from calendar import monthrange
+
+    total_months = (value.year * 12 + value.month - 1) - months
+    year = total_months // 12
+    month = total_months % 12 + 1
+    day = min(value.day, monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
 EXPENSE_LEVELS = [1, 2]
 
 
-def _expense_summary(user, display_currency, start_date, end_date, period_type, period_key, period_lists):
-    """Total expense for the period, the change versus the previous period, and the Unclassified share."""
+def _expense_summary(user, display_currency, start_date, end_date, period_type):
+    """Selected expense total versus the median calendar period, plus the Unclassified share."""
+    from collections import defaultdict
+    from statistics import median
     from django.db.models import Sum
-    from django.db.models.functions import Abs
+    from django.db.models.functions import Abs, TruncMonth
 
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     base = Transaction.objects.filter(user=user, category_v2__group__slug='expense')
@@ -601,21 +613,33 @@ def _expense_summary(user, display_currency, start_date, end_date, period_type, 
     current = total(current_qs)
     unclassified = total(current_qs.filter(category_v2__name='Unclassified'))
 
-    previous = previous_label = change_pct = None
-    items = period_lists.get(period_type) or []
-    keys = [p['key'] for p in items]
-    if period_key in keys and keys.index(period_key) + 1 < len(items):
-        prev = items[keys.index(period_key) + 1]  # periods are listed newest first
-        previous = total(in_range(base, prev['start'], prev['end']))
-        previous_label = prev['label']
-        change_pct = ((current - previous) / previous * 100) if previous else None
+    median_total = change_pct = None
+    period_sizes = {'month': 1, 'quarter': 3, 'semester': 6, 'year': 12}
+    period_months = period_sizes.get(period_type)
+    median_label = f'Median {period_type.title()}' if period_months else None
+    if period_months:
+        monthly_totals = (
+            base.filter(**{f'{amount_field}__isnull': False})
+            .annotate(month=TruncMonth('date'))
+            .values('month')
+            .annotate(total=Sum(Abs(amount_field)))
+            .order_by()
+        )
+        period_totals = defaultdict(Decimal)
+        for row in monthly_totals:
+            month = row['month']
+            period = (month.year, (month.month - 1) // period_months)
+            period_totals[period] += row['total']
+        if period_totals:
+            median_total = float(median(period_totals.values()))
+            change_pct = ((current - median_total) / median_total * 100) if median_total else None
 
     return {
         'total': current,
         'unclassified': unclassified,
         'unclassified_pct': (unclassified / current * 100) if current else 0,
-        'previous': previous,
-        'previous_label': previous_label,
+        'median': median_total,
+        'median_label': median_label,
         'change_pct': change_pct,
         'symbol': '₡' if display_currency == 'CRC' else '$',
     }
@@ -623,14 +647,36 @@ def _expense_summary(user, display_currency, start_date, end_date, period_type, 
 
 @dashboard_view("spending_income", "core/dashboard_spending_income.html")
 def spending_income_dashboard(request, display_currency, time_group):
-    """Expense breakdown dashboard with a calendar-based period filter:
-    a specific Month, Quarter, Semester, or Year, or All Time. Defaults to the
-    latest month with data.
+    """Expense breakdown with calendar and rolling periods, compared to calendar medians.
+
+    Defaults to the latest month with data.
     """
     from django.db.models import Min, Max
 
     date_range = Transaction.objects.filter(user=request.user).aggregate(earliest=Min('date'), latest=Max('date'))
     months, quarters, semesters, years = _build_calendar_periods(date_range['earliest'], date_range['latest'])
+    today = date.today()
+    rolling_year = {
+        'key': 'last-12-months',
+        'label': 'Last 12 Months',
+        'start': _months_before(today, 12),
+        'end': today,
+    }
+    rolling_semester = {
+        'key': 'last-6-months',
+        'label': 'Last 6 Months',
+        'start': _months_before(today, 6),
+        'end': today,
+    }
+    rolling_quarter = {
+        'key': 'last-3-months',
+        'label': 'Last 3 Months',
+        'start': _months_before(today, 3),
+        'end': today,
+    }
+    years.insert(0, rolling_year)
+    semesters.insert(0, rolling_semester)
+    quarters.insert(0, rolling_quarter)
     period_lookup = {
         'month': {p['key']: p for p in months},
         'quarter': {p['key']: p for p in quarters},
@@ -670,8 +716,7 @@ def spending_income_dashboard(request, display_currency, time_group):
         category_level=category_level,
     )
     context['expense_summary'] = _expense_summary(
-        request.user, display_currency, start_date, end_date, period_type, period_key,
-        {'month': months, 'quarter': quarters, 'semester': semesters, 'year': years},
+        request.user, display_currency, start_date, end_date, period_type,
     )
     context['category_level'] = category_level
     context['category_levels'] = EXPENSE_LEVELS

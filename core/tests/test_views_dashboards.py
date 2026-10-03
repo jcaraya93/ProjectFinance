@@ -127,5 +127,200 @@ class TestSpendingIncomeLevel:
         assert sm['total'] == total
         assert sm['unclassified'] == abs(float(txns[4].amount_crc))
         assert round(sm['unclassified_pct'], 4) == round(sm['unclassified'] / total * 100, 4)
-        assert sm['previous'] is None  # nothing earlier than Feb 2025, so no comparison
-        assert sm['change_pct'] is None
+        assert sm['median'] == total
+        assert sm['median_label'] == 'Median Month'
+        assert sm['change_pct'] == 0
+
+    def test_last_12_months_year_filter(self, auth_client, sample_data):
+        from datetime import date, timedelta
+        from core.views.dashboards import _months_before
+
+        today = date.today()
+        rolling_start = _months_before(today, 12)
+        previous_start = _months_before(rolling_start, 12)
+        transactions = sample_data['transactions']
+        for transaction in transactions:
+            transaction.date = previous_start - timedelta(days=1)
+            transaction.amount_crc = transaction.amount
+            transaction.save()
+        transactions[0].date = today
+        transactions[0].save()
+        transactions[1].date = previous_start
+        transactions[1].save()
+
+        response = auth_client.get(reverse('core:spending_income_dashboard'), {
+            'period_type': 'year',
+            'period': 'last-12-months',
+        })
+
+        assert response.status_code == 200
+        assert response.context['period_label'] == 'Last 12 Months'
+        assert response.context['period_years'][0]['key'] == 'last-12-months'
+        assert 'Last 12 Months' in response.content.decode()
+        assert response.context['expense_summary']['total'] == abs(float(transactions[0].amount))
+        assert response.context['expense_summary']['median'] is not None
+        assert response.context['expense_summary']['median_label'] == 'Median Year'
+
+    @pytest.mark.parametrize(
+        ('period_type', 'period_key', 'label', 'window_months'),
+        [
+            ('semester', 'last-6-months', 'Last 6 Months', 6),
+            ('quarter', 'last-3-months', 'Last 3 Months', 3),
+        ],
+    )
+    def test_rolling_semester_and_quarter_filters(
+        self, auth_client, sample_data, period_type, period_key, label, window_months,
+    ):
+        from datetime import date, timedelta
+        from core.views.dashboards import _months_before
+
+        today = date.today()
+        rolling_start = _months_before(today, window_months)
+        previous_start = _months_before(rolling_start, window_months)
+        transactions = sample_data['transactions']
+        for transaction in transactions:
+            transaction.date = previous_start - timedelta(days=1)
+            transaction.amount_crc = transaction.amount
+            transaction.save()
+        transactions[0].date = today
+        transactions[0].save()
+        transactions[1].date = previous_start
+        transactions[1].save()
+
+        response = auth_client.get(reverse('core:spending_income_dashboard'), {
+            'period_type': period_type,
+            'period': period_key,
+        })
+
+        assert response.status_code == 200
+        assert response.context['period_label'] == label
+        assert response.context[f'period_{period_type}s'][0]['key'] == period_key
+        assert label in response.content.decode()
+        assert response.context['expense_summary']['total'] == abs(float(transactions[0].amount))
+        assert response.context['expense_summary']['median'] is not None
+        assert response.context['expense_summary']['median_label'] == f'Median {period_type.title()}'
+
+
+class TestExpenseMedianComparison:
+    @pytest.mark.parametrize(
+        ('period_type', 'period_key', 'period_months'),
+        [
+            ('month', '2020-01', 1),
+            ('quarter', '2020-Q1', 3),
+            ('semester', '2020-H1', 6),
+            ('year', '2020', 12),
+        ],
+    )
+    @pytest.mark.parametrize('odd_period_count', [False, True])
+    def test_median_of_period_totals(
+        self, auth_client, sample_data, period_type, period_key, period_months, odd_period_count,
+    ):
+        from datetime import date
+
+        offsets = [0, 0, 1, 2, 2 if odd_period_count else 3]
+        amounts = [100, 300, 900, 2000, 4000]
+        for transaction, offset, amount in zip(sample_data['transactions'], offsets, amounts):
+            month_index = offset * period_months * 2
+            transaction.date = date(2020 + month_index // 12, month_index % 12 + 1, 1)
+            transaction.amount_crc = -amount * 2
+            transaction.amount_usd = -amount
+            transaction.save()
+
+        expected_median = 900 if odd_period_count else 1450
+        for currency, factor in [('CRC', 2), ('USD', 1)]:
+            response = auth_client.get(reverse('core:spending_income_dashboard'), {
+                'period_type': period_type,
+                'period': period_key,
+                'display_currency': currency,
+            })
+            summary = response.context['expense_summary']
+            assert summary['total'] == 400 * factor
+            assert summary['median'] == expected_median * factor
+            assert summary['change_pct'] == pytest.approx((400 - expected_median) / expected_median * 100)
+            assert f'vs Median {period_type.title()}' in response.content.decode()
+            assert 'median expense' in response.content.decode()
+            assert 'previously' not in response.content.decode()
+
+    @pytest.mark.parametrize(
+        ('period_type', 'period_key'),
+        [
+            ('quarter', 'last-3-months'),
+            ('semester', 'last-6-months'),
+            ('year', 'last-12-months'),
+        ],
+    )
+    def test_rolling_window_uses_calendar_median(
+        self, auth_client, sample_data, monkeypatch, period_type, period_key,
+    ):
+        from datetime import date
+        from core.views import dashboards
+
+        class FixedDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 10, 3)
+
+        monkeypatch.setattr(dashboards, 'date', FixedDate)
+        amounts = [100, 300, 900, 2000, 4000]
+        for index, (transaction, amount) in enumerate(zip(sample_data['transactions'], amounts)):
+            transaction.date = date(2026 if index == 0 else 2020 + index, 10, 3)
+            transaction.amount_crc = -amount
+            transaction.save()
+
+        response = auth_client.get(reverse('core:spending_income_dashboard'), {
+            'period_type': period_type,
+            'period': period_key,
+        })
+        summary = response.context['expense_summary']
+        assert summary['total'] == 100
+        assert summary['median'] == 900
+        assert summary['change_pct'] == pytest.approx((100 - 900) / 900 * 100)
+        assert summary['median_label'] == f'Median {period_type.title()}'
+
+    def test_median_excludes_other_users_and_non_expenses(
+        self, auth_client, sample_data, income_category,
+    ):
+        from core.tests.factories import LogicalTransactionFactory, CategoryNodeFactory
+
+        for transaction in sample_data['transactions']:
+            transaction.amount_crc = transaction.amount
+            transaction.save()
+        sample_data['transactions'][4].category_v2 = income_category
+        sample_data['transactions'][4].save()
+        other_category = CategoryNodeFactory()
+        LogicalTransactionFactory(
+            user=other_category.user, category_v2=other_category, amount_crc=-1000000,
+        )
+        response = auth_client.get(reverse('core:spending_income_dashboard'), {
+            'period_type': 'month', 'period': '2025-02',
+        })
+        assert response.context['expense_summary']['median'] == 10000
+
+    def test_zero_median_has_no_percentage(self, auth_client, sample_data):
+        for transaction in sample_data['transactions']:
+            transaction.amount_crc = 0
+            transaction.save()
+        response = auth_client.get(reverse('core:spending_income_dashboard'), {
+            'period_type': 'month', 'period': '2025-02',
+        })
+        summary = response.context['expense_summary']
+        assert summary['median'] == 0
+        assert summary['change_pct'] is None
+        assert 'median expense' in response.content.decode()
+
+    def test_empty_rolling_period_has_no_median(self, auth_client):
+        response = auth_client.get(reverse('core:spending_income_dashboard'), {
+            'period_type': 'year', 'period': 'last-12-months',
+        })
+        summary = response.context['expense_summary']
+        assert summary['median'] is None
+        assert summary['change_pct'] is None
+        assert 'No expense data for comparison' in response.content.decode()
+
+    def test_all_time_has_no_median_comparison(self, auth_client, sample_data):
+        response = auth_client.get(reverse('core:spending_income_dashboard'), {'period_type': 'all'})
+        summary = response.context['expense_summary']
+        assert summary['median'] is None
+        assert summary['median_label'] is None
+        assert summary['change_pct'] is None
+        assert 'Select a month, quarter, semester, or year' in response.content.decode()

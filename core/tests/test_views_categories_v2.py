@@ -31,6 +31,50 @@ class TestCategoryV2List:
         content = auth_client.get(reverse('core:category_v2_list')).content.decode()
         assert 'SecretCategory' not in content
 
+    def test_direct_transaction_counts(self, auth_client, user, sample_data, expense_category):
+        from core.tests.factories import LogicalTransactionFactory
+
+        parent = make_node(user, 'Food')
+        expense_category.parent = parent
+        expense_category.save()
+        empty = make_node(user, 'Empty')
+        protected = CategoryNode.objects.get(user=user, group__slug='expense', name='Unclassified')
+        raw = sample_data['transactions'][0].raw_transaction
+        for category in (parent, protected):
+            LogicalTransactionFactory(user=user, raw_transaction=raw, category_v2=category)
+        # Another split in the same category is a separate logical transaction.
+        split = LogicalTransactionFactory(user=user, raw_transaction=raw, category_v2=expense_category)
+        other = User.objects.create_user(email='other@example.com', password='x')
+        LogicalTransactionFactory(user=other, category_v2=expense_category)
+
+        url = reverse('core:category_v2_list')
+        response = auth_client.get(url)
+        rows = {row['node'].pk: row for group in response.context['groups'] for row in group['rows']}
+        assert rows[parent.pk]['node'].transaction_count == 1
+        assert rows[expense_category.pk]['node'].transaction_count == 6
+        assert rows[protected.pk]['node'].transaction_count == 1
+        assert rows[empty.pk]['node'].transaction_count == 0
+        assert '<th class="text-center">Transactions</th>' in response.content.decode()
+        for category, count in ((parent, 1), (expense_category, 6), (protected, 1), (empty, 0)):
+            link = (
+                f'{reverse("core:transaction_list")}?category={category.pk}&amp;category_scope=direct'
+            )
+            assert f'href="{link}"' in response.content.decode()
+            filtered = auth_client.get(reverse('core:transaction_list'), {
+                'category': category.pk, 'category_scope': 'direct',
+            })
+            assert filtered.context['page_obj'].paginator.count == count
+
+        split.category_v2 = parent
+        split.save()
+        response = auth_client.get(url)
+        counts = {
+            row['node'].pk: row['node'].transaction_count
+            for group in response.context['groups'] for row in group['rows']
+        }
+        assert counts[parent.pk] == 2
+        assert counts[expense_category.pk] == 5
+
 
 class TestCategoryV2Save:
     def test_create_root(self, auth_client, user, category_groups):

@@ -9,7 +9,8 @@ A personal finance web application for importing bank statements, classifying tr
 - **Transaction Management** — List, filter, sort, search, edit, split/unsplit transactions. Bulk category assignment. Inline category editing.
 - **Rule-Based Classification** — Auto-classify transactions by description keywords, account type, metadata fields, and amount ranges. Rules stored in the database.
 - **Dashboards** — Spending/income trends, category breakdowns, car cost analysis (gas, parking), salary tracking, and chart comparisons.
-- **Categories & Rules CRUD** — Full management interface for category groups, categories, and classification rules.
+- **Expense Comparisons** — Compare a selected month, quarter, semester, or year with the median expense total across all calendar periods of that size with data, including partial and selected periods. Rolling Last 3/6/12 Months options use the median calendar quarter/semester/year respectively; All Time has no median comparison.
+- **Categories & Rules CRUD** — Full management interface for category groups, categories, and classification rules. Category rows show clickable counts of directly assigned logical transactions (including split transactions), opening the Transactions page with that category selected and subcategories excluded. The Transactions page can toggle direct-only filtering; ordinary category filters still include subcategories.
 
 ## Tech Stack
 

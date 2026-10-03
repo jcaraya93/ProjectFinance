@@ -61,6 +61,16 @@ class TestTransactionListFilters:
         assert self._shown(auth_client.get(url, {'category': [snacks.pk]})) == {t[1].pk}
         assert self._shown(auth_client.get(url, {'category': [rent.pk]})) == {t[2].pk}
 
+    def test_direct_category_filter_excludes_subtree(self, auth_client, user, sample_data):
+        food, snacks, rent, t = self._v2_setup(user, sample_data)
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'category': [food.pk], 'category_scope': 'direct',
+        })
+        assert self._shown(response) == {t[0].pk}
+        assert 'category_scope=direct' in response.context['pagination_qs']
+        assert 'category_scope=direct' in response.context['filter_qs']
+        assert 'id="directCategoryScope" checked' in response.content.decode()
+
     def test_method_and_group_filters_use_v2_fields(self, auth_client, user, sample_data):
         food, snacks, rent, t = self._v2_setup(user, sample_data)
         url = reverse('core:transaction_list')

@@ -12,7 +12,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="mb-0">Categories <span class="badge bg-warning text-dark align-middle fs-6">V2</span></h2>
 </div>
-<p class="text-muted">Hierarchical categories used by transactions and rules.</p>
+<p class="text-muted">Hierarchical categories used by transactions and rules. Transaction counts include direct assignments only, not subcategories.</p>
 
 {% for grp in groups %}
 <div class="card mb-4 cat-v2-card" data-group="{{ grp.slug }}">
@@ -40,6 +40,7 @@
         <col>
         <col style="width: 80px;">
         <col style="width: 160px;">
+        <col style="width: 130px;">
         <col style="width: 140px;">
       </colgroup>
       <thead class="table-light">
@@ -50,6 +51,7 @@
           <th>Name</th>
           <th>Color</th>
           <th class="text-center">Subcategories</th>
+          <th class="text-center">Transactions</th>
           <th class="text-end"><span class="visually-hidden">Actions</span></th>
         </tr>
       </thead>
@@ -64,6 +66,7 @@
           </td>
           <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ row.node.color }};"></span></td>
           <td></td>
+          <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
           <td></td>
         </tr>
         {% else %}
@@ -81,6 +84,7 @@
           </td>
           <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ row.node.color }};"></span></td>
           <td class="text-center"><span class="badge bg-secondary">{{ row.child_count }}</span></td>
+          <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
           <td class="text-end text-nowrap">
             <div class="dropdown d-inline-block">
               <button type="button" class="btn btn-sm btn-outline-secondary cat-v2-menu-btn" data-bs-toggle="dropdown"
@@ -98,7 +102,7 @@
         {% endif %}
         {% empty %}
         <tr>
-          <td colspan="5" class="text-center text-muted py-3">No categories in this group.</td>
+          <td colspan="6" class="text-center text-muted py-3">No categories in this group.</td>
         </tr>
         {% endfor %}
       </tbody>

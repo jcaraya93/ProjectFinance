@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -53,7 +54,14 @@ def _build_tree(nodes):
 def category_v2_list(request):
     """Tree view of the user's hierarchical categories, grouped by CategoryGroup."""
     CategoryNode.ensure_protected(request.user)
-    nodes = list(CategoryNode.objects.filter(user=request.user).select_related('group'))
+    nodes = list(
+        CategoryNode.objects.filter(user=request.user)
+        .select_related('group')
+        .annotate(transaction_count=Count(
+            'logical_transactions',
+            filter=Q(logical_transactions__user=request.user),
+        ))
+    )
     rows_by_group = {}
     for node in nodes:
         rows_by_group.setdefault(node.group_id, [])

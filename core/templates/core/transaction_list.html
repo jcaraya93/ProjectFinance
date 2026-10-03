@@ -8,6 +8,10 @@
 <div class="card filter-card mb-3">
   <div class="card-body py-2">
     <form id="filterForm" method="get">
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="category_scope" value="direct" id="directCategoryScope" {% if request.GET.category_scope == 'direct' %}checked{% endif %}>
+        <label class="form-check-label" for="directCategoryScope">Selected categories only (exclude subcategories)</label>
+      </div>
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
