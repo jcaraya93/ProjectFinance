@@ -452,6 +452,68 @@ class ClassificationRule(models.Model):
         return d
 
 
+class ClassificationRuleV2(models.Model):
+    """Rule targeting a hierarchical CategoryNode. Same conditions as ClassificationRule.
+
+    Kept separate from the active model; not used by the live classifier yet.
+    """
+    category = models.ForeignKey(CategoryNode, on_delete=models.CASCADE, related_name='classification_rules')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='classification_rules_v2')
+    description = models.CharField(max_length=200, blank=True, help_text='Case-insensitive substring match')
+    account_type = models.CharField(max_length=20, blank=True, choices=Account.ACCOUNT_TYPES)
+    amount_min = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    amount_max = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True, help_text='Key-value conditions, e.g. {"transaction_code": "PT"}')
+    detail = models.CharField(max_length=500, blank=True, help_text='Documentation note')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['category__group__slug', 'category__name', 'description']
+        verbose_name = 'classification rule (v2)'
+        verbose_name_plural = 'classification rules (v2)'
+
+    def __str__(self):
+        parts = []
+        if self.description:
+            parts.append(self.description)
+        if self.account_type:
+            parts.append(self.account_type)
+        for k, v in self.metadata.items():
+            parts.append(f'{k}={v}')
+        return f"{' | '.join(parts) or '?'} → {self.category.name}"
+
+    def clean(self):
+        super().clean()
+        if self.category_id and self.category.user_id != self.user_id:
+            raise ValidationError({'category': 'Category must belong to the same user as the rule.'})
+        if self.amount_min is not None and self.amount_max is not None and self.amount_min > self.amount_max:
+            raise ValidationError({'amount_min': 'Minimum amount cannot exceed the maximum.'})
+        if not (self.description or self.account_type or self.metadata
+                or self.amount_min is not None or self.amount_max is not None):
+            raise ValidationError('A rule needs at least one condition.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def to_flat_dict(self):
+        """Same flat format as ClassificationRule so the shared matcher can be reused."""
+        d = {'group': self.category.group.slug, 'category': self.category.name}
+        if self.description:
+            d['description'] = self.description
+        if self.account_type:
+            d['account_type'] = self.account_type
+        if self.amount_min is not None:
+            d['amount_min'] = float(self.amount_min)
+        if self.amount_max is not None:
+            d['amount_max'] = float(self.amount_max)
+        for k, v in self.metadata.items():
+            d[f'metadata.{k}'] = v
+        if self.detail:
+            d['detail'] = self.detail
+        return d
+
+
 class UserPreference(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preferences')
     transaction_columns = models.JSONField(

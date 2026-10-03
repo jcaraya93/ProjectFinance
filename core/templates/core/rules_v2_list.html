@@ -1,0 +1,213 @@
+{% extends "core/base.html" %}
+{% block title %}Rules V2 — Project Finance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h2 class="mb-0">Rules <span class="badge bg-warning text-dark align-middle fs-6">V2</span></h2>
+  <div class="d-flex gap-2">
+    <form method="post" action="{% url 'core:rules_v2_import_v1' %}"
+          onsubmit="return confirm('Copy your V1 rules into V2? Rules are matched to V2 categories by group and name. Existing V2 rules are kept, and V1 data and transactions are not changed.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Import from V1</button>
+    </form>
+  </div>
+</div>
+<p class="text-muted">Rules that assign a transaction to a Categories V2 node. Separate from the current rules and not yet used to classify transactions.</p>
+
+<div class="row">
+  <div class="col-md-3">
+    <div class="card mb-3">
+      <div class="card-header fw-bold">Groups &amp; Categories</div>
+      <div class="list-group list-group-flush">
+        <a href="{% url 'core:rules_v2_list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if not selected %}active{% endif %}">
+          <span>All rules</span><span class="badge bg-secondary rounded-pill">{{ rule_count }}</span>
+        </a>
+        {% for sec in sections %}
+        <div class="list-group-item fw-semibold bg-light">
+          {% if sec.slug == 'expense' %}<span class="badge bg-danger">{{ sec.name }}</span>
+          {% elif sec.slug == 'income' %}<span class="badge bg-success">{{ sec.name }}</span>
+          {% elif sec.slug == 'transfer' %}<span class="badge bg-info">{{ sec.name }}</span>
+          {% else %}<span class="badge bg-secondary">{{ sec.name }}</span>{% endif %}
+        </div>
+        {% for row in sec.rows %}
+        <a href="?node={{ row.node.pk }}"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1 {% if selected and selected.node.pk == row.node.pk %}active{% endif %}"
+           style="padding-left: {{ row.padding }}px;">
+          <span class="small {% if row.is_protected %}fst-italic{% endif %}">{{ row.node.name }}</span>
+          {% if row.rule_count %}<span class="badge bg-secondary rounded-pill">{{ row.rule_count }}</span>{% endif %}
+        </a>
+        {% empty %}
+        <div class="list-group-item small text-muted ps-4">No categories.</div>
+        {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-9">
+    <div class="d-flex align-items-center mb-3">
+      {% if selected %}
+        <span class="badge bg-secondary me-2">{{ selected.node.group.name }}</span>
+        <h5 class="mb-0">{{ selected.node.name }}</h5>
+      {% else %}
+        <h5 class="mb-0">All rules</h5>
+      {% endif %}
+      <span class="badge bg-secondary ms-auto">{{ rules|length }} rule{{ rules|length|pluralize }}</span>
+      <button type="button" class="btn btn-sm btn-primary ms-2 rule-v2-add"
+              {% if selected %}data-category="{{ selected.node.pk }}"{% endif %}>+ Add Rule</button>
+    </div>
+    {% if rules %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle table-sm">
+        <thead class="table-light">
+          <tr><th style="width: 22%;">Category</th><th>Conditions</th><th>Note</th><th style="width: 130px;"></th></tr>
+        </thead>
+        <tbody>
+          {% for rule in rules %}
+          <tr data-id="{{ rule.pk }}" data-category="{{ rule.category_id }}"
+              data-description="{{ rule.description }}" data-account-type="{{ rule.account_type }}"
+              data-amount-min="{{ rule.amount_min|default_if_none:'' }}" data-amount-max="{{ rule.amount_max|default_if_none:'' }}"
+              data-detail="{{ rule.detail }}"
+              data-metadata="{% for k, v in rule.metadata.items %}{{ k }}={{ v }}&#10;{% endfor %}">
+            <td>
+              <span class="small text-muted">{{ rule.category.group.name }}</span><br>{{ rule.category.name }}
+            </td>
+            <td>
+              {% if rule.description %}<span class="badge bg-light text-dark border">contains &ldquo;{{ rule.description }}&rdquo;</span>{% endif %}
+              {% if rule.account_type %}<span class="badge bg-light text-dark border">{{ rule.get_account_type_display }}</span>{% endif %}
+              {% if rule.amount_min is not None %}<span class="badge bg-light text-dark border">&ge; {{ rule.amount_min }}</span>{% endif %}
+              {% if rule.amount_max is not None %}<span class="badge bg-light text-dark border">&le; {{ rule.amount_max }}</span>{% endif %}
+              {% for k, v in rule.metadata.items %}<span class="badge bg-light text-dark border">{{ k }} = {{ v }}</span>{% endfor %}
+            </td>
+            <td class="text-muted small">{{ rule.detail }}</td>
+            <td class="text-end text-nowrap">
+              <button type="button" class="btn btn-sm btn-outline-primary rule-v2-edit">Edit</button>
+              <button type="button" class="btn btn-sm btn-outline-danger rule-v2-delete">Delete</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="alert alert-light border text-center">No rules{% if selected %} for this category{% endif %}.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="modal fade" id="ruleV2Modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'core:rules_v2_save' %}" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="id" id="ruleV2Id">
+      <input type="hidden" name="selected_node" value="{% if selected %}{{ selected.node.pk }}{% endif %}">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ruleV2Title">Add Rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label" for="ruleV2Category">Assign to category</label>
+          <select class="form-select" name="category" id="ruleV2Category" required>
+            <option value="">Select a category…</option>
+            {% for row in category_options %}
+            <option value="{{ row.node.pk }}" data-group="{{ row.node.group.slug }}">{{ row.node.group.name }}: {{ row.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <p class="text-muted small mb-2">A transaction must match <strong>all</strong> conditions you fill in. At least one is required.</p>
+        <div class="mb-3">
+          <label class="form-label" for="ruleV2Description">Description contains</label>
+          <input type="text" class="form-control" name="description" id="ruleV2Description" maxlength="200">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="ruleV2AccountType">Account type</label>
+          <select class="form-select" name="account_type" id="ruleV2AccountType">
+            <option value="">Any</option>
+            {% for value, label in account_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="row mb-3">
+          <div class="col">
+            <label class="form-label" for="ruleV2Min">Min amount</label>
+            <input type="number" step="0.01" class="form-control" name="amount_min" id="ruleV2Min">
+          </div>
+          <div class="col">
+            <label class="form-label" for="ruleV2Max">Max amount</label>
+            <input type="number" step="0.01" class="form-control" name="amount_max" id="ruleV2Max">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="ruleV2Metadata">Metadata (one <code>key=value</code> per line)</label>
+          <textarea class="form-control" rows="2" name="metadata" id="ruleV2Metadata"></textarea>
+        </div>
+        <div class="mb-0">
+          <label class="form-label" for="ruleV2Detail">Note</label>
+          <input type="text" class="form-control" name="detail" id="ruleV2Detail" maxlength="500">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="ruleV2DeleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'core:rules_v2_delete' %}" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="id" id="ruleV2DeleteId">
+      <input type="hidden" name="selected_node" value="{% if selected %}{{ selected.node.pk }}{% endif %}">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">Delete this rule? This cannot be undone.</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var formModal = new bootstrap.Modal(document.getElementById('ruleV2Modal'));
+  var deleteModal = new bootstrap.Modal(document.getElementById('ruleV2DeleteModal'));
+  function $(id) { return document.getElementById(id); }
+
+  function openForm(title, d) {
+    d = d || {};
+    $('ruleV2Title').textContent = title;
+    $('ruleV2Id').value = d.id || '';
+    $('ruleV2Category').value = d.category || '';
+    $('ruleV2Description').value = d.description || '';
+    $('ruleV2AccountType').value = d.accountType || '';
+    $('ruleV2Min').value = d.amountMin || '';
+    $('ruleV2Max').value = d.amountMax || '';
+    $('ruleV2Metadata').value = (d.metadata || '').trim();
+    $('ruleV2Detail').value = d.detail || '';
+    formModal.show();
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.rule-v2-add'), function (btn) {
+    btn.addEventListener('click', function () { openForm('Add Rule', { category: btn.dataset.category }); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.rule-v2-edit'), function (btn) {
+    btn.addEventListener('click', function () { openForm('Edit Rule', btn.closest('tr').dataset); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.rule-v2-delete'), function (btn) {
+    btn.addEventListener('click', function () {
+      $('ruleV2DeleteId').value = btn.closest('tr').dataset.id;
+      deleteModal.show();
+    });
+  });
+  $('ruleV2Modal').addEventListener('shown.bs.modal', function () { $('ruleV2Description').focus(); });
+})();
+</script>
+{% endblock %}

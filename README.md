@@ -109,7 +109,8 @@ ExchangeRate
 - **RawTransaction** — Immutable record imported from the bank statement. Never modified after import.
 - **LogicalTransaction** — Mutable, derived record for classification and analysis. One raw transaction can have multiple logical transactions (splits). This is the main model used for filtering, dashboards, and reporting.
 - **ClassificationRule** — Defines conditions (description substring, account type, metadata key-value, amount range) that map to a target category. Used by the rule engine to auto-classify transactions.
-- **CategoryNode** — Parallel hierarchical category model for progressive migration. Parent and child nodes must share a user and group, and names remain unique per user and group. It is managed from the Categories V2 page (`/categories-v2/`: add, edit, delete, move, and group under a new parent) but is not yet linked to transactions or rules; the existing `Category` model remains active.
+- **CategoryNode** — Parallel hierarchical category model for progressive migration. Parent and child nodes must share a user and group, and names remain unique per user and group. It is managed from the Categories V2 page (`/categories-v2/`: add, edit, delete, move, and group under a new parent) but is not yet linked to transactions; the existing `Category` model remains active. Each group has a protected top-level `Unclassified` node.
+- **ClassificationRuleV2** — Parallel rule model targeting a `CategoryNode` (same flat conditions as `ClassificationRule`; transfer / specific / Unclassified phase ordering is shared with the live classifier). `core/services/rules_v2.py` provides `find_matching_rule` and `import_v1_rules`; run `python manage.py import_rules_v2 <email>` to copy V1 rules (idempotent). It is not used by the live classifier yet.
 
 ### Classification Lifecycle
 
