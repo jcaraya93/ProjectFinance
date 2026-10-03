@@ -346,10 +346,25 @@ class LogicalTransaction(models.Model):
     matched_rule = models.ForeignKey(
         'ClassificationRule', on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions'
     )
+    # Categories V2 assignment, tracked in parallel with the V1 fields above and not yet used by the live classifier.
+    category_v2 = models.ForeignKey(
+        'CategoryNode', on_delete=models.SET_NULL, null=True, blank=True, related_name='logical_transactions'
+    )
+    classification_method_v2 = models.CharField(max_length=15, choices=CLASSIFICATION_METHODS, default='unclassified')
+    matched_rule_v2 = models.ForeignKey(
+        'ClassificationRuleV2', on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-date', '-id']
+
+    def clean(self):
+        super().clean()
+        if self.category_v2_id and self.category_v2.user_id != self.user_id:
+            raise ValidationError({'category_v2': 'Category must belong to the same user.'})
+        if self.matched_rule_v2_id and self.matched_rule_v2.user_id != self.user_id:
+            raise ValidationError({'matched_rule_v2': 'Rule must belong to the same user.'})
 
     @property
     def currency(self):
