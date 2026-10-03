@@ -251,7 +251,7 @@
         <th><a href="?{{ filter_qs }}&sort=group&dir={% if sc == 'group' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Group{% if sc == 'group' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=category&dir={% if sc == 'category' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Category{% if sc == 'category' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=description&dir={% if sc == 'description' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Description{% if sc == 'description' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
-        <th>Note</th>
+        <th><a href="?{{ filter_qs }}&sort=note&dir={% if sc == 'note' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Note{% if sc == 'note' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th>Metadata</th>
         <th class="text-end"><a href="?{{ filter_qs }}&sort=amount&dir={% if sc == 'amount' and sd == 'desc' %}asc{% else %}desc{% endif %}" class="text-decoration-none text-dark">Amount{% if sc == 'amount' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th class="text-end" style="width: 100px;">Actions</th>

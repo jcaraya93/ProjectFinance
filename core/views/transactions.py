@@ -111,6 +111,7 @@ def transaction_list(request):
         'group': 'category_v2__group__name',
         'category': 'category_v2__name',
         'description': 'description',
+        'note': 'note',
         'amount': 'amount',
     }
     sort_col = request.GET.get('sort', 'date')

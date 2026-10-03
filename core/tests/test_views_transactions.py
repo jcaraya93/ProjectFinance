@@ -82,6 +82,14 @@ class TestTransactionListFilters:
         })
         assert resp.status_code == 200
 
+    def test_sort_by_note(self, auth_client, sample_data):
+        t = sample_data['transactions']
+        for txn, note in zip(t, ['b', 'a', 'd', 'c', 'e']):
+            txn.note = note
+            txn.save()
+        resp = auth_client.get(reverse('core:transaction_list'), {'sort': 'note', 'dir': 'asc'})
+        assert [x.note for x in resp.context['page_obj']] == ['a', 'b', 'c', 'd', 'e']
+
     def test_search(self, auth_client, sample_data):
         resp = auth_client.get(reverse('core:transaction_list'), {
             'search': 'TRANSACTION 1',
