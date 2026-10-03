@@ -75,7 +75,7 @@
         </div>
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
-            Classification {% if selected_groups or selected_categories %}<span class="badge bg-primary">{{ selected_groups|length|add:selected_categories|length }}</span>{% endif %}
+            Categories {% if selected_groups or selected_categories %}<span class="badge bg-primary">{{ selected_groups|length|add:selected_categories|length }}</span>{% endif %}
           </button>
           <div class="dropdown-menu p-2" style="max-height: 500px; overflow-y: auto; min-width: 280px;">
             <div class="d-flex justify-content-between mb-1 px-2">
