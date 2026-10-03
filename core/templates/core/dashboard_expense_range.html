@@ -16,43 +16,55 @@
           <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
           <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
         </button>
-        {% include "core/_currency_toggle.html" with extra_params="period_type="|add:period_type|add:"&period="|add:period_key %}
+        {% with lv=category_level|stringformat:"d" %}
+        {% include "core/_currency_toggle.html" with extra_params="period_type="|add:period_type|add:"&period="|add:period_key|add:"&compare_month="|add:selected_month|add:"&level="|add:lv %}
+        {% endwith %}
       </div>
     </div>
 
-    <!-- Controls: range, compare, sort -->
-    <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-      <div>
-        <span class="small text-muted me-1">Range:</span>
-        {% include "core/_period_filter.html" with all_first=True %}
-      </div>
-      <div>
-        <span class="small text-muted me-1">Compare:</span>
-        <select class="form-select form-select-sm d-inline-block" style="width:auto" onchange="location.href='?display_currency={{ display_currency }}&period_type={{ period_type }}&period={{ period_key }}&compare_month='+this.value+'&only_present='+(document.getElementById('onlySelectedMonth').checked ? '1' : '0')">
+    <div id="rangeFilters" class="d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3">
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="rangeMonth">Month</label>
+        <select id="rangeMonth" class="form-select form-select-sm" style="width:auto">
           {% for m in range_months reversed %}
           <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
           {% endfor %}
         </select>
       </div>
-      <div>
-        <span class="small text-muted me-1">Sort:</span>
-        <div class="btn-group btn-group-sm" role="group">
-          <button type="button" class="btn btn-primary sort-btn" data-sort="deviation">Deviation</button>
-          <button type="button" class="btn btn-outline-secondary sort-btn" data-sort="compare">Selected Month</button>
-          <button type="button" class="btn btn-outline-secondary sort-btn" data-sort="median">Median</button>
-        </div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="rangePeriod">Range</label>
+        <select id="rangePeriod" class="form-select form-select-sm" style="width:auto">
+          {% for year in period_years %}
+          <option value="{{ year.key }}" {% if period_type == 'year' and period_key == year.key %}selected{% endif %}>{{ year.label }}</option>
+          {% endfor %}
+          <option value="all" {% if period_type == 'all' %}selected{% endif %}>All Time</option>
+        </select>
       </div>
-      <div class="d-flex align-items-center">
-        <label class="small text-muted me-2" for="onlySelectedMonth">Only present:</label>
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input" type="checkbox" role="switch" id="onlySelectedMonth">
-        </div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="rangeLevel">Level</label>
+        <select id="rangeLevel" class="form-select form-select-sm" style="width:auto">
+          {% for level in category_levels %}
+          <option value="{{ level }}" {% if level == category_level %}selected{% endif %}>Level {{ level }}{% if level == 1 %} (top){% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="rangeSort">Sort</label>
+        <select id="rangeSort" class="form-select form-select-sm" style="width:auto">
+          <option value="compare" selected>Month amount</option>
+          <option value="deviation">Deviation</option>
+          <option value="median">Median</option>
+        </select>
+      </div>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="onlySelectedMonth">
+        <label class="form-check-label small" for="onlySelectedMonth">Only present</label>
       </div>
     </div>
 
     <!-- Overall summary cards -->
     <div class="row g-3 mb-3">
-      <div class="col-sm-6 col-lg-3">
+      <div class="col-sm-6">
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">{{ selected_month }}</h6>
@@ -60,27 +72,11 @@
           </div>
         </div>
       </div>
-      <div class="col-sm-6 col-lg-3">
+      <div class="col-sm-6">
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">Period Median</h6>
             <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ overall_median|format_number }}</h3>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card h-100">
-          <div class="card-body">
-            <h6 class="card-subtitle text-muted">Typical Low (P25)</h6>
-            <h3 class="card-title mb-1 text-muted" data-sensitive>{{ currency_symbol }}{{ overall_p25|format_number }}</h3>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card h-100">
-          <div class="card-body">
-            <h6 class="card-subtitle text-muted">Typical High (P75)</h6>
-            <h3 class="card-title mb-1 text-muted" data-sensitive>{{ currency_symbol }}{{ overall_p75|format_number }}</h3>
           </div>
         </div>
       </div>
@@ -109,6 +105,23 @@
 {% block extra_js %}
 <script>
 (function() {
+  var onlySelected = document.getElementById('onlySelectedMonth');
+  var params = new URLSearchParams(location.search);
+  onlySelected.checked = params.get('only_present') !== '0';
+
+  ['rangeMonth', 'rangePeriod', 'rangeLevel'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', function() {
+      var url = new URL(location.href);
+      var period = document.getElementById('rangePeriod').value;
+      url.searchParams.set('period_type', period === 'all' ? 'all' : 'year');
+      url.searchParams.set('period', period === 'all' ? '' : period);
+      url.searchParams.set('compare_month', document.getElementById('rangeMonth').value);
+      url.searchParams.set('level', document.getElementById('rangeLevel').value);
+      url.searchParams.set('only_present', onlySelected.checked ? '1' : '0');
+      location.href = url.href;
+    });
+  });
+
   var isPrivacy = dashboardPrivacy.isOn();
   window._dashCharts = [];
   var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
@@ -173,9 +186,7 @@
           return '<div style="padding:8px 12px;font-size:13px">' +
             '<strong>' + c.name + '</strong><br>' +
             'Selected Month: <strong style="color:' + color + '">' + fmtNum(c.compare) + '</strong> (' + (c.deviation >= 0 ? '+' : '') + c.deviation + '%)<br>' +
-            '<span style="color:#999">P25: ' + fmtNum(c.p25) +
-            ' · Median: ' + fmtNum(c.median) +
-            ' · P75: ' + fmtNum(c.p75) +
+            '<span style="color:#999">Median: ' + fmtNum(c.median) +
             ' · Min: ' + fmtNum(c.min) +
             ' · Max: ' + fmtNum(c.max) + '</span></div>';
         }
@@ -192,17 +203,14 @@
     window._dashCharts.push(rangeChart);
   }
 
-  var currentSort = 'deviation';
-  var onlySelected = document.getElementById('onlySelectedMonth');
+  var sortSelect = document.getElementById('rangeSort');
 
   function refresh() {
     var cats = allCats.filter(function(c) { return !onlySelected.checked || c.compare > 0; });
-    renderChart(cats.sort(sortFns[currentSort] || sortFns.median));
+    renderChart(cats.sort(sortFns[sortSelect.value] || sortFns.compare));
   }
 
   // Keep the toggle in the URL and carry it through range/compare/currency links
-  var params = new URLSearchParams(location.search);
-  onlySelected.checked = params.get('only_present') !== '0';
 
   function syncUrl() {
     var u = new URL(location.href);
@@ -221,19 +229,7 @@
   refresh();
   onlySelected.addEventListener('change', function() { syncUrl(); refresh(); });
 
-  // Sort button handlers
-  document.querySelectorAll('.sort-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('.sort-btn').forEach(function(b) {
-        b.classList.remove('btn-primary');
-        b.classList.add('btn-outline-secondary');
-      });
-      this.classList.remove('btn-outline-secondary');
-      this.classList.add('btn-primary');
-      currentSort = this.dataset.sort;
-      refresh();
-    });
-  });
+  sortSelect.addEventListener('change', refresh);
 
   dashboardPrivacy.apply(window._dashCharts);
 })();

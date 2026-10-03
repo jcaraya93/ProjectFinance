@@ -6,6 +6,7 @@ from django.urls import reverse
 DASHBOARD_URLS = [
     'core:dashboard',
     'core:spending_income_dashboard',
+    'core:expense_range_dashboard',
     'core:chart_comparison',
     'core:car_dashboard',
     'core:car_gas_dashboard',
@@ -56,6 +57,18 @@ class TestSpendingIncomeLevel:
         import json
         data = json.loads(resp.context['expense_category_data'])
         return dict(zip(data['labels'], data['values']))
+
+    def test_period_buttons_use_styled_toolbar(self, auth_client, sample_data):
+        content = auth_client.get(reverse('core:spending_income_dashboard')).content.decode()
+        assert 'id="expenseFilters" class="d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3"' in content
+        toolbar = content.split('id="expenseFilters"')[1].split('<!-- ═══ SPENDING ═══ -->')[0]
+        assert '>Period</span>' in toolbar
+        assert 'Level 1' in toolbar
+        assert 'Level 1' not in content.split('id="expenseFilters"')[0]
+        assert '<div class="btn-group btn-group-sm" role="group">' in content
+        assert 'btn-group btn-group-sm mb-3' not in content
+        for period in ('month', 'quarter', 'semester', 'year'):
+            assert f'period_type={period}' in content
 
     def test_level_rolls_up_to_ancestor(self, auth_client, sample_data, expense_category, user):
         from core.models import CategoryNode
@@ -199,6 +212,174 @@ class TestSpendingIncomeLevel:
         assert response.context['expense_summary']['total'] == abs(float(transactions[0].amount))
         assert response.context['expense_summary']['median'] is not None
         assert response.context['expense_summary']['median_label'] == f'Median {period_type.title()}'
+
+
+class TestExpenseRangePeriods:
+    def test_percentiles_are_not_displayed(self, auth_client, sample_data):
+        import json
+
+        for transaction in sample_data['transactions']:
+            transaction.amount_crc = transaction.amount
+            transaction.save()
+        response = auth_client.get(reverse('core:expense_range_dashboard'), {'period_type': 'all'})
+        content = response.content.decode()
+        assert 'P25' not in content
+        assert 'P75' not in content
+        assert 'Period Median' in content
+        for category in json.loads(response.context['expense_data']):
+            assert 'p25' not in category
+            assert 'p75' not in category
+
+    def test_category_levels_roll_up_before_statistics(self, auth_client, sample_data, expense_category, user):
+        import json
+        from datetime import date
+        from core.models import CategoryNode
+
+        parent = CategoryNode.objects.create(user=user, name='Food', group=expense_category.group, color='#123456')
+        expense_category.parent = parent
+        expense_category.save()
+        grandchild = CategoryNode.objects.create(
+            user=user, name='Produce', group=expense_category.group, parent=expense_category,
+        )
+        transactions = sample_data['transactions']
+        assignments = [parent, expense_category, grandchild, expense_category, grandchild]
+        for index, (transaction, category) in enumerate(zip(transactions, assignments)):
+            transaction.category_v2 = category
+            transaction.date = date(2025, 2 if index < 3 else 3, 1)
+            transaction.amount_crc = -(index + 1) * 100
+            transaction.save()
+        url = reverse('core:expense_range_dashboard')
+        for level in (1, 2):
+            response = auth_client.get(url, {
+                'period_type': 'all', 'level': level, 'compare_month': '2025-02',
+            })
+            data = {row['name']: row for row in json.loads(response.context['expense_data'])}
+            assert response.context['compare_total'] == 600
+            assert response.context['overall_median'] == 750
+            assert 'id="rangeLevel"' in response.content.decode()
+            assert "['rangeMonth', 'rangePeriod', 'rangeLevel']" in response.content.decode()
+            assert "onchange=\"var url=new URL" not in response.content.decode()
+            assert f'&amp;level={level}' in response.content.decode() or f'&level={level}' in response.content.decode()
+            if level == 1:
+                assert set(data) == {'Food'}
+                assert data['Food']['median'] == 750
+                assert data['Food']['compare'] == 600
+                assert data['Food']['color'] == '#123456'
+            else:
+                assert set(data) == {'Food', 'Groceries'}
+                assert data['Groceries']['median'] == 700
+                assert data['Groceries']['compare'] == 500
+
+    @pytest.mark.parametrize('level', [None, '0', '3', 'bad'])
+    def test_category_level_defaults_to_one(self, auth_client, level):
+        params = {'level': level} if level is not None else {}
+        response = auth_client.get(reverse('core:expense_range_dashboard'), params)
+        assert response.context['category_level'] == 1
+
+    def test_compare_control_comes_first(self, auth_client):
+        content = auth_client.get(reverse('core:expense_range_dashboard')).content.decode()
+        toolbar = content.split('id="rangeFilters"')[1].split('<!-- Overall summary cards -->')[0]
+        ids = ['rangeMonth', 'rangePeriod', 'rangeLevel', 'rangeSort', 'onlySelectedMonth']
+        positions = [toolbar.index(f'id="{field}"') for field in ids]
+        assert positions == sorted(positions)
+        assert toolbar.count('class="d-flex align-items-center gap-2"') == 4
+
+    def test_selected_month_is_default_sort(self, auth_client):
+        content = auth_client.get(reverse('core:expense_range_dashboard')).content.decode()
+        assert '<select id="rangeSort"' in content
+        assert '<option value="compare" selected>Month amount</option>' in content
+        assert '<option value="deviation">Deviation</option>' in content
+        assert '<option value="median">Median</option>' in content
+        assert "sortSelect.addEventListener('change', refresh);" in content
+        assert 'sort-btn' not in content
+
+    def test_default_is_last_12_months(self, auth_client):
+        response = auth_client.get(reverse('core:expense_range_dashboard'))
+        assert response.context['period_type'] == 'year'
+        assert response.context['period_key'] == 'last-12-months'
+        assert response.context['period_label'] == 'Last 12 Months'
+        content = response.content.decode()
+        assert content.index('<option value="last-12-months" selected>') < content.index('<option value="all"')
+
+    def test_explicit_all_time_overrides_default(self, auth_client, sample_data):
+        for transaction in sample_data['transactions']:
+            transaction.amount_crc = transaction.amount
+            transaction.save()
+        response = auth_client.get(reverse('core:expense_range_dashboard'), {'period_type': 'all'})
+        assert response.context['period_type'] == 'all'
+        assert response.context['period_label'] == 'All Time'
+        assert response.context['range_months'] == ['2025-02']
+
+    def test_last_12_months_filters_exact_dates(self, auth_client, sample_data, monkeypatch):
+        import json
+        from datetime import date
+        from core.views import dashboards
+
+        class FixedDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 10, 3)
+
+        monkeypatch.setattr(dashboards, 'date', FixedDate)
+        dates = [
+            date(2025, 10, 2), date(2025, 10, 3), date(2026, 5, 1),
+            date(2026, 10, 3), date(2026, 10, 4),
+        ]
+        for index, (transaction, transaction_date) in enumerate(zip(sample_data['transactions'], dates)):
+            transaction.date = transaction_date
+            transaction.amount_crc = -(index + 1) * 100
+            transaction.save()
+        response = auth_client.get(reverse('core:expense_range_dashboard'), {
+            'period_type': 'year', 'period': 'last-12-months',
+        })
+        assert response.status_code == 200
+        assert response.context['period_label'] == 'Last 12 Months'
+        assert response.context['period_years'][0]['key'] == 'last-12-months'
+        assert response.context['range_months'] == ['2025-10', '2026-05', '2026-10']
+        assert response.context['selected_month'] == '2026-10'
+        assert response.context['compare_total'] == 400
+        category = json.loads(response.context['expense_data'])[0]
+        assert (category['min'], category['median'], category['max']) == (200, 300, 400)
+        assert 'Last 12 Months' in response.content.decode()
+
+    def test_last_12_months_available_without_data(self, auth_client):
+        response = auth_client.get(reverse('core:expense_range_dashboard'), {
+            'period_type': 'year', 'period': 'last-12-months',
+        })
+        assert response.status_code == 200
+        assert response.context['period_label'] == 'Last 12 Months'
+        assert response.context['range_months'] == []
+        assert response.context['compare_total'] == 0
+
+    def test_only_all_time_and_year_controls(self, auth_client, sample_data):
+        response = auth_client.get(reverse('core:expense_range_dashboard'))
+        content = response.content.decode()
+        assert '<option value="all"' in content
+        assert '<option value="2025"' in content
+        assert 'period_type=semester' not in content
+        assert 'period_type=quarter' not in content
+
+    def test_year_filter_still_works(self, auth_client, sample_data):
+        for transaction in sample_data['transactions']:
+            transaction.amount_crc = transaction.amount
+            transaction.save()
+        response = auth_client.get(reverse('core:expense_range_dashboard'), {
+            'period_type': 'year', 'period': '2025',
+        })
+        assert response.context['period_type'] == 'year'
+        assert response.context['period_label'] == '2025'
+        assert response.context['range_months'] == ['2025-02']
+
+    @pytest.mark.parametrize(
+        ('period_type', 'period_key'),
+        [('quarter', '2025-Q1'), ('semester', '2025-H1')],
+    )
+    def test_removed_periods_fall_back_to_all_time(self, auth_client, sample_data, period_type, period_key):
+        response = auth_client.get(reverse('core:expense_range_dashboard'), {
+            'period_type': period_type, 'period': period_key,
+        })
+        assert response.context['period_type'] == 'all'
+        assert response.context['period_key'] == ''
 
 
 class TestExpenseMedianComparison:

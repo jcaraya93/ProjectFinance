@@ -31,6 +31,12 @@ def category_depths(user):
     return nodes, depths
 
 
+def category_at_level(node, nodes, depths, level):
+    while node is not None and level and depths[node.id] > level:
+        node = nodes[node.parent_id]
+    return node
+
+
 def category_breakdown(qs, group_slug, amount_field, nodes, depths, level=None, limit=None):
     """Totals per category for one group, rolled up to `level` (None = as assigned).
 
@@ -40,9 +46,7 @@ def category_breakdown(qs, group_slug, amount_field, nodes, depths, level=None, 
             .values('category_v2_id').annotate(abs_total=Sum(Abs(amount_field))))
     totals = {}
     for r in rows:
-        node = nodes.get(r['category_v2_id'])
-        while node is not None and level and depths[node.id] > level:
-            node = nodes[node.parent_id]
+        node = category_at_level(nodes.get(r['category_v2_id']), nodes, depths, level)
         key = node.id if node else None
         totals[key] = totals.get(key, 0) + float(r['abs_total'] or 0)
 

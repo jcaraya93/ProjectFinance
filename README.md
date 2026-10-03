@@ -10,6 +10,7 @@ A personal finance web application for importing bank statements, classifying tr
 - **Rule-Based Classification** — Auto-classify transactions by description keywords, account type, metadata fields, and amount ranges. Rules stored in the database.
 - **Dashboards** — Spending/income trends, category breakdowns, car cost analysis (gas, parking), salary tracking, and chart comparisons.
 - **Expense Comparisons** — Compare a selected month, quarter, semester, or year with the median expense total across all calendar periods of that size with data, including partial and selected periods. Rolling Last 3/6/12 Months options use the median calendar quarter/semester/year respectively; All Time has no median comparison.
+- **Expense Range** — View monthly expense ranges over All Time, a calendar Year, or Last 12 Months through today (the default), with a selected month for comparison. Select category Level 1 (top level, the default) or Level 2; deeper categories roll up before monthly statistics are calculated. Rolling ranges include only transactions within their date boundaries, including partial months.
 - **Categories & Rules CRUD** — Full management interface for category groups, categories, and classification rules. Category rows show clickable counts of directly assigned logical transactions (including split transactions), opening the Transactions page with that category selected and subcategories excluded. The Transactions page can toggle direct-only filtering; ordinary category filters still include subcategories.
 
 ## Tech Stack

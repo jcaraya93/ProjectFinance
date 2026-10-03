@@ -3025,25 +3025,54 @@ def transaction_pairing_dashboard(request, display_currency, time_group):
 def expense_range_dashboard(request, display_currency, time_group):
     """Expense range chart: min/median/max per category with selected month marker."""
     from collections import defaultdict
-    from django.db.models import Sum
+    from django.db.models import Min, Max, Sum
     from django.db.models.functions import TruncMonth, Abs
+    from ..services.stats import category_at_level, category_depths
 
     user = request.user
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
+    try:
+        category_level = int(request.GET.get('level', 1))
+    except ValueError:
+        category_level = 1
+    if category_level not in EXPENSE_LEVELS:
+        category_level = 1
+    nodes, depths = category_depths(user)
 
-    # Get all expense data first (unfiltered) to know available months
+    date_range = Transaction.objects.filter(user=user).aggregate(earliest=Min('date'), latest=Max('date'))
+    _, _, _, years = _build_calendar_periods(date_range['earliest'], date_range['latest'])
+    today = date.today()
+    years.insert(0, {
+        'key': 'last-12-months',
+        'label': 'Last 12 Months',
+        'start': _months_before(today, 12),
+        'end': today,
+    })
+    period_lookup = {'year': {p['key']: p for p in years}}
+    if 'period_type' in request.GET:
+        period_type = request.GET['period_type']
+        period_key = request.GET.get('period', '')
+    else:
+        period_type, period_key = 'year', 'last-12-months'
+    chosen = period_lookup.get(period_type, {}).get(period_key)
+    period_label = chosen['label'] if chosen else 'All Time'
+    if not chosen:
+        period_type, period_key = 'all', ''
+
     base_qs = LogicalTransaction.objects.filter(
         user=user, category_v2__isnull=False, category_v2__group__slug='expense',
         **{f'{amount_field}__isnull': False},
     ).exclude(category_v2__name='Unclassified')
+    if chosen:
+        base_qs = base_qs.filter(date__gte=chosen['start'], date__lte=chosen['end'])
 
     all_monthly = (
         base_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category_v2__name', 'category_v2__color')
+        .values('month', 'category_v2_id')
         .annotate(total=Sum(abs_field))
-        .order_by('category_v2__name', 'month')
+        .order_by('category_v2_id', 'month')
     )
 
     # Build full month→category→amount map
@@ -3051,35 +3080,14 @@ def expense_range_dashboard(request, display_currency, time_group):
     cat_colors = {}
     all_month_set = set()
     for r in all_monthly:
-        key = r['category_v2__name']
+        node = category_at_level(nodes[r['category_v2_id']], nodes, depths, category_level)
+        key = node.name
         m_key = r['month'].strftime('%Y-%m')
-        full_cat_months[key][m_key] = float(r['total'] or 0)
-        cat_colors[key] = r['category_v2__color'] or '#6c757d'
+        full_cat_months[key][m_key] += float(r['total'] or 0)
+        cat_colors[key] = node.color or '#6c757d'
         all_month_set.add(r['month'])
 
-    sorted_all_months = sorted(all_month_set)
-    all_month_labels = [m.strftime('%Y-%m') for m in sorted_all_months]
-
-    # Calendar period filter (All Time, Year, Semester, Quarter)
-    from django.db.models import Min, Max
-    date_range = Transaction.objects.filter(user=user).aggregate(earliest=Min('date'), latest=Max('date'))
-    _, quarters, semesters, years = _build_calendar_periods(date_range['earliest'], date_range['latest'])
-    period_lookup = {
-        'quarter': {p['key']: p for p in quarters},
-        'semester': {p['key']: p for p in semesters},
-        'year': {p['key']: p for p in years},
-    }
-    period_type = request.GET.get('period_type', 'all')
-    period_key = request.GET.get('period', '')
-    period_label = 'All Time'
-    chosen = period_lookup.get(period_type, {}).get(period_key)
-    if chosen:
-        period_label = chosen['label']
-        range_months = [m for m in sorted_all_months
-                        if chosen['start'] <= m <= chosen['end']]
-    else:
-        period_type, period_key = 'all', ''
-        range_months = sorted_all_months
+    range_months = sorted(all_month_set)
     range_month_labels = [m.strftime('%Y-%m') for m in range_months]
 
     # Selected comparison month (default: latest in range)
@@ -3117,7 +3125,6 @@ def expense_range_dashboard(request, display_currency, time_group):
             'compare': round(compare_val),
             'min': round(stats['min']), 'median': round(stats['median']),
             'avg': round(stats['avg']), 'max': round(stats['max']),
-            'p25': round(stats['p25']), 'p75': round(stats['p75']),
         })
 
     expense_categories.sort(key=lambda x: x['median'], reverse=True)
@@ -3133,11 +3140,11 @@ def expense_range_dashboard(request, display_currency, time_group):
     context = {
         'currency_symbol': currency_symbol,
         'expense_data': json.dumps(expense_categories, cls=DecimalEncoder),
+        'category_level': category_level,
+        'category_levels': EXPENSE_LEVELS,
         'period_type': period_type,
         'period_key': period_key,
         'period_label': period_label,
-        'period_quarters': quarters,
-        'period_semesters': semesters,
         'period_years': years,
         'range_months': range_month_labels,
         'selected_month': selected_month,
