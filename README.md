@@ -95,6 +95,10 @@ CategoryGroup                                      └── RawTransaction (imm
         ├── amount_min/max
         └── detail
 
+CategoryNode (parallel hierarchical model)
+├── user, group, name, color
+└── parent → CategoryNode (optional; children may nest to any depth)
+
 ExchangeRate
 ├── date
 └── usd_to_crc
@@ -105,6 +109,7 @@ ExchangeRate
 - **RawTransaction** — Immutable record imported from the bank statement. Never modified after import.
 - **LogicalTransaction** — Mutable, derived record for classification and analysis. One raw transaction can have multiple logical transactions (splits). This is the main model used for filtering, dashboards, and reporting.
 - **ClassificationRule** — Defines conditions (description substring, account type, metadata key-value, amount range) that map to a target category. Used by the rule engine to auto-classify transactions.
+- **CategoryNode** — Parallel hierarchical category model for progressive migration. Parent and child nodes must share a user and group, and names remain unique per user and group. It is managed from the Categories V2 page (`/categories-v2/`: add, edit, delete, move, and group under a new parent) but is not yet linked to transactions or rules; the existing `Category` model remains active.
 
 ### Classification Lifecycle
 

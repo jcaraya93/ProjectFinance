@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.exceptions import ValidationError
 
 
 class UserManager(BaseUserManager):
@@ -104,6 +105,58 @@ class Category(models.Model):
             defaults={'color': '#adb5bd'},
         )
         return cat
+
+
+class CategoryNode(models.Model):
+    """Hierarchical category kept separate from the active flat Category model."""
+    name = models.CharField(max_length=100)
+    color = models.CharField(max_length=7, default='#6c757d', help_text='Hex color for charts')
+    group = models.ForeignKey(CategoryGroup, on_delete=models.PROTECT, related_name='category_nodes')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='category_nodes')
+    parent = models.ForeignKey(
+        'self', on_delete=models.PROTECT, null=True, blank=True, related_name='children',
+    )
+
+    class Meta:
+        ordering = ['group', 'name']
+        unique_together = [['name', 'group', 'user']]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(id=models.F('parent_id')),
+                name='category_node_not_own_parent',
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_leaf(self):
+        return not self.children.exists() if self.pk else True
+
+    def clean(self):
+        super().clean()
+        if not self.parent_id:
+            return
+
+        if self.parent_id == self.pk:
+            raise ValidationError({'parent': 'A category cannot be its own parent.'})
+        if self.parent.user_id != self.user_id or self.parent.group_id != self.group_id:
+            raise ValidationError({'parent': 'Parent and child must belong to the same user and group.'})
+
+        ancestor = self.parent
+        seen = set()
+        while ancestor is not None:
+            if ancestor.pk == self.pk:
+                raise ValidationError({'parent': 'A category cannot be moved beneath its descendant.'})
+            if ancestor.pk in seen:
+                raise ValidationError({'parent': 'The existing category hierarchy contains a cycle.'})
+            seen.add(ancestor.pk)
+            ancestor = ancestor.parent
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class Account(models.Model):

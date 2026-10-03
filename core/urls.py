@@ -37,6 +37,12 @@ urlpatterns = [
     path('transactions/<int:raw_id>/unsplit/', views.unsplit_transaction, name='unsplit_transaction'),
     # Categories management
     path('categories/', views.category_list, name='category_list'),
+    path('categories-v2/', views.category_v2_list, name='category_v2_list'),
+    path('categories-v2/save/', views.category_v2_save, name='category_v2_save'),
+    path('categories-v2/group/', views.category_v2_group, name='category_v2_group'),
+    path('categories-v2/move/', views.category_v2_move, name='category_v2_move'),
+    path('categories-v2/delete/', views.category_v2_delete, name='category_v2_delete'),
+    path('categories-v2/import-v1/', views.category_v2_import_v1, name='category_v2_import_v1'),
     path('categories/suggestions/', views.category_suggestions, name='category_suggestions'),
     path('categories/export/', views.export_categories, name='export_categories'),
     path('categories/import/', views.import_categories, name='import_categories'),
