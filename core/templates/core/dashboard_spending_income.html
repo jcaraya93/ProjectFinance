@@ -151,6 +151,8 @@
     donut.updateOptions({ series: d.values.map(Math.round), labels: d.labels, colors: d.colors });
     bars.updateOptions({ series: [{ name: 'Amount', data: t.values.map(Math.round) }], colors: t.colors, xaxis: { categories: t.labels } });
     renderCrumb();
+    // Keep the drill path in the URL so Back from the transactions page restores it.
+    history.replaceState(null, '', path.length ? '#drill=' + path.join(',') : location.pathname + location.search);
   }
 
   function renderCrumb() {
@@ -185,6 +187,12 @@
         crumb.appendChild(link(drill[id].name, i + 1));
       }
     });
+  }
+
+  var saved = (location.hash.match(/^#drill=([\d,]+)$/) || [])[1];
+  if (saved) {
+    var ids = saved.split(',').map(Number);
+    if (ids.every(function(id) { return drill[id]; })) path = ids;
   }
 
   Promise.all([donut.render(), bars.render()]).then(render);
