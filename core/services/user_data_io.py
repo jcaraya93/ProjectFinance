@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from core.models import (
-    User, UserPreference, CategoryGroup, Category, CategoryNode, ClassificationRuleV2,
+    User, UserPreference, CategoryGroup, CategoryNode, ClassificationRuleV2,
     Account, CreditAccount, DebitAccount, StatementImport, CurrencyLedger,
     RawTransaction, LogicalTransaction, ExchangeRate,
 )
@@ -413,8 +413,6 @@ def import_user_data(user, data):
                                 amount=_to_decimal(ltxn_data['amount']),
                                 amount_crc=_to_decimal(ltxn_data.get('amount_crc')),
                                 amount_usd=_to_decimal(ltxn_data.get('amount_usd')),
-                                # V1 category is not part of the backup; keep it at Unclassified
-                                category=Category.get_unclassified(user),
                                 category_v2=ltxn_cat,
                                 classification_method_v2=ltxn_data.get('classification_method', 'unclassified'),
                                 matched_rule_v2=matched_rule,

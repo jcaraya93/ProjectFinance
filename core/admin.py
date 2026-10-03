@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Account, CreditAccount, DebitAccount, Category, CategoryGroup, CurrencyLedger, StatementImport, RawTransaction, LogicalTransaction, Transaction, TransactionPair
+from .models import User, Account, CreditAccount, DebitAccount, CategoryGroup, CategoryNode, ClassificationRuleV2, CurrencyLedger, StatementImport, RawTransaction, LogicalTransaction, Transaction, TransactionPair
 
 
 @admin.register(User)
@@ -41,11 +41,18 @@ class CategoryGroupAdmin(admin.ModelAdmin):
         return False
 
 
-@admin.register(Category)
-class CategoryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'color', 'group']
+@admin.register(CategoryNode)
+class CategoryNodeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'parent', 'color', 'group', 'user']
     list_filter = ['group']
     search_fields = ['name']
+
+
+@admin.register(ClassificationRuleV2)
+class ClassificationRuleV2Admin(admin.ModelAdmin):
+    list_display = ['description', 'category', 'account_type', 'user']
+    list_filter = ['category__group']
+    search_fields = ['description']
 
 
 @admin.register(RawTransaction)
@@ -58,10 +65,10 @@ class RawTransactionAdmin(admin.ModelAdmin):
 
 @admin.register(LogicalTransaction)
 class LogicalTransactionAdmin(admin.ModelAdmin):
-    list_display = ['date', 'description', 'amount', 'category', 'classification_method']
-    list_filter = ['classification_method', 'category__group', 'category', 'date']
+    list_display = ['date', 'description', 'amount', 'category_v2', 'classification_method_v2']
+    list_filter = ['classification_method_v2', 'category_v2__group', 'date']
     search_fields = ['description']
-    list_editable = ['category']
+    raw_id_fields = ['category_v2', 'matched_rule_v2']
     date_hierarchy = 'date'
     list_per_page = 50
 

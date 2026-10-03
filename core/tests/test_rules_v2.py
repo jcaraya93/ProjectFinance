@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import pytest
 from django.core.exceptions import ValidationError
 
-from core.models import Category, CategoryGroup, CategoryNode, ClassificationRule, ClassificationRuleV2, User
-from core.services.rules_v2 import find_matching_rule, import_v1_rules
+from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2, User
+from core.services.rules_v2 import find_matching_rule
 
 
 def node(user, name, slug='expense', parent=None):
@@ -92,30 +92,11 @@ class TestFindMatchingRule:
         assert find_matching_rule(user, txn('x', account_type='credit_account', metadata={'code': 'pt'})) == rule
         assert find_matching_rule(user, txn('x', account_type='debit_account', metadata={'code': 'PT'})) is None
 
-
-@pytest.mark.django_db
-class TestImportV1Rules:
-    def test_imports_by_group_and_name_and_is_idempotent(self, user, category_groups):
-        expense = CategoryGroup.get_group(CategoryGroup.EXPENSE)
-        v1_food = Category.objects.create(name='Food', group=expense, user=user)
-        v1_gone = Category.objects.create(name='Gone', group=expense, user=user)
-        ClassificationRule.objects.create(
-            category=v1_food, user=user, description='SUPER', amount_min=Decimal('5'), metadata={'k': 'v'},
+    def test_amount_range_conditions(self, user):
+        food = node(user, 'Food')
+        rule = ClassificationRuleV2.objects.create(
+            category=food, user=user, amount_min=Decimal('10'), amount_max=Decimal('20'),
         )
-        ClassificationRule.objects.create(category=v1_gone, user=user, description='GONE')
-        node(user, 'Food')
-
-        assert import_v1_rules(user) == (1, 0, 1)
-        assert import_v1_rules(user) == (0, 1, 1)
-
-        rule = ClassificationRuleV2.objects.get(user=user)
-        assert rule.category.name == 'Food' and rule.description == 'SUPER'
-        assert rule.amount_min == Decimal('5') and rule.metadata == {'k': 'v'}
-        assert ClassificationRule.objects.filter(user=user).count() == 2
-
-    def test_unclassified_rules_map_to_protected_node(self, user, category_groups):
-        expense = CategoryGroup.get_group(CategoryGroup.EXPENSE)
-        v1 = Category.objects.get(name='Unclassified', group=expense, user=user)
-        ClassificationRule.objects.create(category=v1, user=user, description='MISC')
-        assert import_v1_rules(user) == (1, 0, 0)
-        assert ClassificationRuleV2.objects.get(user=user).category.is_protected
+        assert find_matching_rule(user, txn('x', amount='15')) == rule
+        assert find_matching_rule(user, txn('x', amount='25')) is None
+        assert find_matching_rule(user, txn('x', amount='5')) is None

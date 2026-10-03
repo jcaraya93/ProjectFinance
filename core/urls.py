@@ -42,11 +42,9 @@ urlpatterns = [
     path('categories-v2/group/', views.category_v2_group, name='category_v2_group'),
     path('categories-v2/move/', views.category_v2_move, name='category_v2_move'),
     path('categories-v2/delete/', views.category_v2_delete, name='category_v2_delete'),
-    path('categories-v2/import-v1/', views.category_v2_import_v1, name='category_v2_import_v1'),
     path('rules-v2/', views.rules_v2_list, name='rules_v2_list'),
     path('rules-v2/save/', views.rules_v2_save, name='rules_v2_save'),
     path('rules-v2/delete/', views.rules_v2_delete, name='rules_v2_delete'),
-    path('rules-v2/import-v1/', views.rules_v2_import_v1, name='rules_v2_import_v1'),
     path('categories/delete-all/', views.yaml_category_delete_all, name='yaml_category_delete_all'),
     # Rules management
     path('rules/delete-all/', views.delete_all_rules, name='delete_all_rules'),

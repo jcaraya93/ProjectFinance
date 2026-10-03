@@ -262,28 +262,6 @@ class TestCategoryV2Protected:
         assert CategoryNode.objects.filter(user=user, name='Unclassified', group__slug='expense').count() == 1
 
 
-class TestCategoryV2ImportV1:
-    def test_imports_v1_as_top_level_and_is_idempotent(self, auth_client, user, category_groups):
-        from core.models import Category, CategoryGroup
-        expense = CategoryGroup.objects.get(slug='expense')
-        unclassified = CategoryGroup.objects.get(slug=CategoryGroup.UNCLASSIFIED)
-        Category.objects.create(name='Rent', group=expense, user=user, color='#112233')
-        Category.objects.get_or_create(name='Unclassified', group=unclassified, user=user)
-        make_node(user, 'Existing')
-        Category.objects.create(name='Existing', group=expense, user=user)
-
-        url = reverse('core:category_v2_import_v1')
-        v1_count = Category.objects.filter(user=user).count()
-        auth_client.post(url)
-        auth_client.post(url)
-
-        rent = CategoryNode.objects.get(user=user, name='Rent')
-        assert rent.parent is None and rent.color == '#112233' and rent.group == expense
-        assert CategoryNode.objects.filter(user=user, name='Existing').count() == 1
-        assert CategoryNode.objects.filter(user=user, name='Unclassified').count() == 4
-        assert Category.objects.filter(user=user).count() == v1_count
-
-
 class TestCategoryV2Delete:
     def test_delete_leaf(self, auth_client, user, category_groups):
         node = make_node(user, 'Food')

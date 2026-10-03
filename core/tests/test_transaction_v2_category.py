@@ -7,24 +7,24 @@ from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2, User
 @pytest.mark.django_db
 class TestTransactionV2Category:
     def test_defaults_to_unassigned(self, sample_data):
-        txn = sample_data['transactions'][0]
+        from core.tests.factories import LogicalTransactionFactory
+        base = sample_data['transactions'][0]
+        txn = LogicalTransactionFactory(raw_transaction=base.raw_transaction, user=base.user)
         assert txn.category_v2 is None
         assert txn.matched_rule_v2 is None
         assert txn.classification_method_v2 == 'unclassified'
 
-    def test_can_assign_any_level_without_touching_v1(self, user, sample_data):
+    def test_can_assign_any_level(self, user, sample_data):
         txn = sample_data['transactions'][0]
         group = CategoryGroup.get_group('expense')
         parent = CategoryNode.objects.create(name='Food', user=user, group=group)
         child = CategoryNode.objects.create(name='Snacks', user=user, group=group, parent=parent)
-        v1_category = txn.category
         for node in (parent, child):
             txn.category_v2 = node
             txn.full_clean()
             txn.save()
         txn.refresh_from_db()
         assert txn.category_v2 == child
-        assert txn.category == v1_category
         assert list(child.logical_transactions.all()) == [txn]
 
     def test_other_users_node_or_rule_is_rejected(self, user, sample_data):

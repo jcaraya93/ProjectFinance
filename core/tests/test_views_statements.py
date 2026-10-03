@@ -106,14 +106,14 @@ class TestDeleteAllTransactions:
     def test_deletes_transactions_keeps_accounts_categories_rules(self, auth_client, sample_data):
         from core.models import (
             LogicalTransaction, RawTransaction, StatementImport, CurrencyLedger,
-            Category, ClassificationRule,
+            CategoryNode, ClassificationRuleV2,
         )
         user = sample_data['account'].user
-        cats, rules = Category.objects.filter(user=user).count(), ClassificationRule.objects.filter(user=user).count()
+        cats, rules = CategoryNode.objects.filter(user=user).count(), ClassificationRuleV2.objects.filter(user=user).count()
         resp = auth_client.post(reverse('core:delete_all_transactions'), {'confirm': 'DELETE TRANSACTIONS'})
         assert resp.status_code == 302
         for model in (LogicalTransaction, RawTransaction, StatementImport, CurrencyLedger):
             assert not model.objects.filter(user=user).exists()
         assert Account.objects.filter(user=user).exists()
-        assert Category.objects.filter(user=user).count() == cats
-        assert ClassificationRule.objects.filter(user=user).count() == rules
+        assert CategoryNode.objects.filter(user=user).count() == cats
+        assert ClassificationRuleV2.objects.filter(user=user).count() == rules

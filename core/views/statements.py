@@ -11,8 +11,8 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 
 from ..models import (
-    Transaction, LogicalTransaction, RawTransaction, Category,
-    ClassificationRule, CurrencyLedger, Account, CreditAccount, DebitAccount,
+    Transaction, LogicalTransaction, RawTransaction,
+    CurrencyLedger, Account, CreditAccount, DebitAccount,
     CategoryNode, ClassificationRuleV2, StatementImport, TransactionPair,
 )
 from ..ratelimit import ratelimit
@@ -154,11 +154,9 @@ def purge_all_data(request):
         return redirect('core:account_page')
 
     user = request.user
-    ClassificationRule.objects.filter(user=user).delete()
     ClassificationRuleV2.objects.filter(user=user).delete()
     _delete_transaction_data(user)
     Account.objects.filter(user=user).delete()
-    Category.objects.filter(user=user).exclude(name=Category.UNCLASSIFIED_NAME).delete()
     _delete_category_nodes(user)
 
     messages.success(request, 'All data has been deleted.')

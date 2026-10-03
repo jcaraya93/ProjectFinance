@@ -11,12 +11,12 @@ from django.views.decorators.http import require_POST
 from django.utils.http import urlencode
 
 from ..models import (
-    Transaction, LogicalTransaction, RawTransaction, Category,
-    CategoryGroup, CategoryNode, CurrencyLedger, ClassificationRule, UserPreference,
+    Transaction, LogicalTransaction, RawTransaction,
+    CategoryGroup, CategoryNode, CurrencyLedger, UserPreference,
 )
 from ..filters import TransactionFilter
 from ..ratelimit import ratelimit
-from ._helpers import _safe_next_url, get_category_groups
+from ._helpers import _safe_next_url
 from .categories_v2 import _build_tree
 
 logger = logging.getLogger(__name__)

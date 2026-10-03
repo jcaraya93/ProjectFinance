@@ -39,7 +39,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     if groups:
         qs = qs.filter(category_v2__group__slug__in=groups)
     if categories:
-        qs = qs.filter(category_id__in=categories)
+        qs = qs.filter(category_v2_id__in=categories)
 
     # ── Summary cards (using converted amounts) ───────────────
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'

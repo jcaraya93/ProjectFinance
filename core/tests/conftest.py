@@ -2,26 +2,14 @@ import pytest
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import patch
 
 from django.test import Client
 
-from core.models import User, CategoryGroup, Category, ExchangeRate
+from core.models import User, CategoryGroup, CategoryNode, ExchangeRate
 from core.tests.factories import (
     CreditAccountFactory, StatementImportFactory, CurrencyLedgerFactory,
-    RawTransactionFactory, LogicalTransactionFactory, ClassificationRuleFactory,
+    RawTransactionFactory, LogicalTransactionFactory, ClassificationRuleV2Factory,
 )
-
-FIXTURES = Path(__file__).parent / 'fixtures'
-
-
-@pytest.fixture(autouse=True)
-def _mock_yaml_sync(tmp_path):
-    """Prevent tests from writing to the real classification_rules.yaml."""
-    yaml_path = tmp_path / 'classification_rules.yaml'
-    yaml_path.write_text('')
-    with patch('core.services.yaml_classifier.get_rules_path', return_value=yaml_path):
-        yield
 
 FIXTURES = Path(__file__).parent / 'fixtures'
 
@@ -29,7 +17,7 @@ FIXTURES = Path(__file__).parent / 'fixtures'
 @pytest.fixture
 def user(db):
     u = User.objects.create_user(email='test@example.com', password='testpass123!')
-    u.create_default_categories()
+    CategoryNode.ensure_protected(u)
     return u
 
 
@@ -49,12 +37,14 @@ def category_groups(db):
 
 @pytest.fixture
 def unclassified_category(user):
-    return Category.get_unclassified(user)
+    return CategoryNode.objects.get(
+        user=user, group__slug='unclassified', name=CategoryNode.UNCLASSIFIED_NAME,
+    )
 
 
 @pytest.fixture
 def expense_category(user, category_groups):
-    cat, _ = Category.objects.get_or_create(
+    cat, _ = CategoryNode.objects.get_or_create(
         name='Groceries', group=category_groups['expense'], user=user,
         defaults={'color': '#ff6384'},
     )
@@ -63,7 +53,7 @@ def expense_category(user, category_groups):
 
 @pytest.fixture
 def transfer_category(user, category_groups):
-    cat, _ = Category.objects.get_or_create(
+    cat, _ = CategoryNode.objects.get_or_create(
         name='Transfer', group=category_groups['transfer'], user=user,
         defaults={'color': '#36a2eb'},
     )
@@ -72,7 +62,7 @@ def transfer_category(user, category_groups):
 
 @pytest.fixture
 def income_category(user, category_groups):
-    cat, _ = Category.objects.get_or_create(
+    cat, _ = CategoryNode.objects.get_or_create(
         name='Salary Main', group=category_groups['income'], user=user,
         defaults={'color': '#4bc0c0'},
     )
@@ -97,12 +87,12 @@ def sample_data(user, expense_category, transfer_category, income_category, exch
         logical = LogicalTransactionFactory(
             raw_transaction=raw, user=user,
             date=raw.date, description=raw.description, amount=raw.normalized_amount,
-            category=expense_category,
-            classification_method='rule',
+            category_v2=expense_category,
+            classification_method_v2='rule',
         )
         txns.append(logical)
 
-    rule = ClassificationRuleFactory(
+    rule = ClassificationRuleV2Factory(
         category=expense_category, user=user, description='TRANSACTION',
     )
 

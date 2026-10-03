@@ -11,13 +11,8 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="mb-0">Categories <span class="badge bg-warning text-dark align-middle fs-6">V2</span></h2>
-  <form method="post" action="{% url 'core:category_v2_import_v1' %}"
-        onsubmit="return confirm('Copy your V1 categories into V2 as top-level categories? Existing V2 categories are kept, and V1 data and transactions are not changed.');">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-sm btn-outline-secondary">Import from V1</button>
-  </form>
 </div>
-<p class="text-muted">Hierarchical categories. These are separate from the current categories and are not yet used by transactions or rules.</p>
+<p class="text-muted">Hierarchical categories used by transactions and rules.</p>
 
 {% for grp in groups %}
 <div class="card mb-4 cat-v2-card" data-group="{{ grp.slug }}">

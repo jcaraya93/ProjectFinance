@@ -7,7 +7,7 @@ import pytest
 from django.test import Client
 
 from core.models import (
-    User, UserPreference, CategoryGroup, Category, CategoryNode, ClassificationRuleV2,
+    User, UserPreference, CategoryGroup, CategoryNode, ClassificationRuleV2,
     CreditAccount, DebitAccount, Account, StatementImport, CurrencyLedger,
     RawTransaction, LogicalTransaction, ExchangeRate,
 )
@@ -21,7 +21,7 @@ from core.tests.factories import (
 
 
 @pytest.fixture
-def full_data(user, category_groups, expense_category, income_category, exchange_rates):
+def full_data(user, category_groups, exchange_rates):
     """Build a complete data set for export testing."""
     # Preferences
     UserPreference.objects.update_or_create(
@@ -227,7 +227,6 @@ class TestImport:
         assert walmart.matched_rule_v2 is not None
         assert walmart.matched_rule_v2.description == 'WALMART'
         assert walmart.category_v2.name == 'Groceries'
-        assert walmart.category.name == 'Unclassified'
         assert walmart.amount_crc == Decimal('-25000')
 
     def test_round_trip_preserves_metadata(self, user, full_data):

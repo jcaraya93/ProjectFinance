@@ -2,7 +2,7 @@
 import pytest
 from django.urls import reverse
 
-from core.models import ClassificationRule, Transaction, Category
+from core.models import Transaction
 
 
 class TestReclassify:

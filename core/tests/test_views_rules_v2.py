@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from core.models import Category, CategoryGroup, CategoryNode, ClassificationRule, ClassificationRuleV2, User
+from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2, User
 
 
 def make_node(user, name, slug='expense'):
@@ -84,17 +84,6 @@ class TestRulesV2Views:
         auth_client.post(reverse('core:rules_v2_delete'), {'id': rule.pk})
         assert not ClassificationRuleV2.objects.exists()
 
-    def test_import_from_v1(self, auth_client, user, category_groups):
-        expense = CategoryGroup.get_group(CategoryGroup.EXPENSE)
-        v1 = Category.objects.create(name='Food', group=expense, user=user)
-        ClassificationRule.objects.create(category=v1, user=user, description='SUPER')
-        make_node(user, 'Food')
-        url = reverse('core:rules_v2_import_v1')
-        auth_client.post(url)
-        auth_client.post(url)
-        assert ClassificationRuleV2.objects.filter(user=user).count() == 1
-        assert ClassificationRule.objects.filter(user=user).count() == 1
-
     def test_requires_login(self, client, db):
         assert client.get(reverse('core:rules_v2_list')).status_code == 302
 
@@ -116,28 +105,23 @@ class TestAccountDeleteAllV2:
         t.save()
         return t
 
-    def test_delete_all_rules_only_touches_v2(self, auth_client, user, sample_data, category_groups):
+    def test_delete_all_rules_resets_transactions(self, auth_client, user, sample_data, category_groups):
         food, kid, rule = self._setup(user)
         t = self._txn(user, kid, rule, 'rule')
-        v1 = (t.category_id, t.classification_method)
         auth_client.post(reverse('core:delete_all_rules'))
         t.refresh_from_db()
         assert not ClassificationRuleV2.objects.filter(user=user).exists()
-        assert ClassificationRule.objects.filter(user=user).exists()
         assert t.classification_method_v2 == 'unclassified' and t.category_v2.name == 'Unclassified'
-        assert (t.category_id, t.classification_method) == v1
 
     def test_delete_all_categories_removes_tree_keeps_protected(self, auth_client, user, sample_data, category_groups):
         food, kid, rule = self._setup(user)
         t = self._txn(user, kid, rule, 'manual')
-        v1_count = Category.objects.filter(user=user).count()
         auth_client.post(reverse('core:yaml_category_delete_all'))
         t.refresh_from_db()
         names = set(CategoryNode.objects.filter(user=user).values_list('name', flat=True))
         assert names == {'Unclassified'}
         assert not ClassificationRuleV2.objects.filter(user=user).exists()
         assert t.category_v2.name == 'Unclassified' and t.classification_method_v2 == 'unclassified'
-        assert Category.objects.filter(user=user).count() == v1_count
 
     def test_delete_all_categories_single_group(self, auth_client, user, sample_data, category_groups):
         food, kid, rule = self._setup(user)
@@ -151,24 +135,25 @@ class TestAccountDeleteAllV2:
 class TestTransactionsPageClassifyActions:
     def _prep(self, user):
         from core.models import LogicalTransaction
+        LogicalTransaction.objects.filter(user=user).update(
+            category_v2=None, matched_rule_v2=None, classification_method_v2='unclassified',
+        )
+        ClassificationRuleV2.objects.filter(user=user).delete()
         node = make_node(user, 'Food')
         txns = list(LogicalTransaction.objects.filter(user=user).order_by('pk'))
         ClassificationRuleV2.objects.create(category=node, user=user, description=txns[0].description)
         return node, txns
 
-    def test_reclassify_all_keeps_manual_and_v1(self, auth_client, user, sample_data, category_groups):
+    def test_reclassify_all_keeps_manual(self, auth_client, user, sample_data, category_groups):
         node, txns = self._prep(user)
         manual = txns[-1]
         manual.category_v2, manual.classification_method_v2 = node, 'manual'
         manual.save()
-        v1 = [(t.pk, t.category_id, t.classification_method) for t in txns]
         auth_client.post(reverse('core:reclassify_all'))
         first = type(txns[0]).objects.get(pk=txns[0].pk)
         assert first.category_v2 == node and first.classification_method_v2 == 'rule'
         manual.refresh_from_db()
         assert manual.classification_method_v2 == 'manual'
-        now = [(t.pk, t.category_id, t.classification_method) for t in type(txns[0]).objects.filter(user=user).order_by('pk')]
-        assert now == v1
 
     def test_classify_unclassified_and_clear(self, auth_client, user, sample_data, category_groups):
         node, txns = self._prep(user)

@@ -7,7 +7,7 @@ A personal finance web application for importing bank statements, classifying tr
 - **Statement Import** — Upload credit card (Credit-2918) and debit card (Debit-2651) CSV files with auto-detection, SHA-256 duplicate prevention, and multi-file upload support.
 - **Dual Currency** — Handles CRC (Costa Rican Colón) and USD with automatic exchange rate conversion.
 - **Transaction Management** — List, filter, sort, search, edit, split/unsplit transactions. Bulk category assignment. Inline category editing.
-- **Rule-Based Classification** — Auto-classify transactions by description keywords, account type, metadata fields, and amount ranges. Rules stored in the database with YAML sync.
+- **Rule-Based Classification** — Auto-classify transactions by description keywords, account type, metadata fields, and amount ranges. Rules stored in the database.
 - **Dashboards** — Spending/income trends, category breakdowns, car cost analysis (gas, parking), salary tracking, and chart comparisons.
 - **Categories & Rules CRUD** — Full management interface for category groups, categories, and classification rules.
 
@@ -53,7 +53,6 @@ ProjectFinance/
 │   │   └── debit_card.py             # Debit-2651 CSV parser
 │   ├── services/
 │   │   ├── classifier.py             # Classification entry point
-│   │   ├── yaml_classifier.py        # Rule matching engine (reads from DB)
 │   │   ├── import_service.py         # Statement import orchestration
 │   │   ├── exchange_rates.py         # CRC↔USD rate fetching & conversion
 │   │   └── stats.py                  # Dashboard aggregation queries
@@ -82,18 +81,15 @@ User (custom, email-based)            Account (base)
 CategoryGroup                                      └── RawTransaction (immutable)
 ├── slug: expense|income|                              └── LogicalTransaction (1:N)
 │         transfer|unclassified                            ├── description
-└── Category                                               ├── amount, amount_crc, amount_usd
-    ├── name, color                                        ├── category → Category
-    └── ClassificationRule                                 ├── classification_method
-        ├── description (keyword match)                    └── matched_rule → ClassificationRule
+└── CategoryNode                                           ├── amount, amount_crc, amount_usd
+    ├── user, name, color                                  ├── category_v2 → CategoryNode
+    ├── parent → CategoryNode (any depth)                  ├── classification_method_v2
+    └── ClassificationRuleV2                               └── matched_rule_v2 → ClassificationRuleV2
+        ├── description (keyword match)
         ├── account_type
         ├── metadata (JSON conditions)
         ├── amount_min/max
         └── detail
-
-CategoryNode (parallel hierarchical model)
-├── user, group, name, color
-└── parent → CategoryNode (optional; children may nest to any depth)
 
 ExchangeRate
 ├── date
@@ -103,20 +99,19 @@ ExchangeRate
 ### Key Model Relationships
 
 - **RawTransaction** — Immutable record imported from the bank statement. Never modified after import.
-- **LogicalTransaction** — Mutable, derived record for classification and analysis. One raw transaction can have multiple logical transactions (splits). This is the main model used for filtering, dashboards, and reporting. It also carries parallel Categories V2 fields (`category_v2` → `CategoryNode`, `matched_rule_v2` → `ClassificationRuleV2`, `classification_method_v2`), nullable and any-level for now; they are not populated by the live classifier yet and the V1 fields are unchanged.
-- **ClassificationRule** — Defines conditions (description substring, account type, metadata key-value, amount range) that map to a target category. Used by the rule engine to auto-classify transactions.
-- **CategoryNode** — Parallel hierarchical category model for progressive migration. Parent and child nodes must share a user and group, and names remain unique per user and group. It is managed from the Categories V2 page (`/categories-v2/`: add, edit, delete, move, and group under a new parent) but is not yet linked to transactions; the existing `Category` model remains active. Each group has a protected top-level `Unclassified` node.
-- **ClassificationRuleV2** — Parallel rule model targeting a `CategoryNode` (same flat conditions as `ClassificationRule`; transfer / specific / Unclassified phase ordering is shared with the live classifier). `core/services/rules_v2.py` provides `find_matching_rule` and `import_v1_rules`; run `python manage.py import_rules_v2 <email>` to copy V1 rules (idempotent). It is not used by the live classifier yet. `python manage.py classify_v2 <email> [--dry-run]` applies V2 rules to transactions, writing only the V2 fields (V1 fields are never touched; transactions with `classification_method_v2 = manual` are skipped). Add `--sync-manual` to copy V1 manual classifications into V2 (matched by group and name, marked manual) instead of running rules.
+- **LogicalTransaction** — Mutable, derived record for classification and analysis. One raw transaction can have multiple logical transactions (splits). This is the main model used for filtering, dashboards, and reporting. It carries the classification fields `category_v2` → `CategoryNode`, `matched_rule_v2` → `ClassificationRuleV2` and `classification_method_v2`.
+- **CategoryNode** — Hierarchical category. Parent and child nodes share a user and group; names are unique per user and group. Managed from the Categories page (`/categories-v2/`). Each group has a protected top-level `Unclassified` node. New users are loaded with the starter tree in `core/data/default_categories.json`.
+- **ClassificationRuleV2** — Conditions (description substring, account type, metadata key-value, amount range) that map to a `CategoryNode`; phase ordering is transfer → specific → Unclassified. `core/services/rules_v2.py` provides `find_matching_rule` and `classify_transactions_v2`; `python manage.py classify_v2 <email> [--dry-run]` applies rules, skipping `manual` transactions.
 
 ### Classification Lifecycle
 
-Each `LogicalTransaction` has a `classification_method` field:
+Each `LogicalTransaction` has a `classification_method_v2` field:
 
 | Method | Meaning |
 |--------|---------|
-| `unclassified` | No classification applied. Category is Default. |
-| `rule` | Auto-classified by a matching `ClassificationRule`. `matched_rule` is set. |
-| `manual` | Manually assigned by user. `matched_rule` is cleared. |
+| `unclassified` | No classification applied. Category is Unclassified. |
+| `rule` | Auto-classified by a matching `ClassificationRuleV2`. `matched_rule_v2` is set. |
+| `manual` | Manually assigned by user. `matched_rule_v2` is cleared. |
 
 **Transitions:**
 - On import → `unclassified`

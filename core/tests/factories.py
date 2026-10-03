@@ -4,9 +4,9 @@ from datetime import date
 from decimal import Decimal
 
 from core.models import (
-    User, CategoryGroup, Category, CreditAccount, DebitAccount,
+    User, CategoryGroup, CategoryNode, CreditAccount, DebitAccount,
     StatementImport, CurrencyLedger, RawTransaction, LogicalTransaction,
-    ClassificationRule, ExchangeRate, TransactionPair,
+    ClassificationRuleV2, ExchangeRate, TransactionPair,
 )
 
 
@@ -25,9 +25,9 @@ class CategoryGroupFactory(factory.django.DjangoModelFactory):
     slug = 'expense'
 
 
-class CategoryFactory(factory.django.DjangoModelFactory):
+class CategoryNodeFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Category
+        model = CategoryNode
         django_get_or_create = ('name', 'group', 'user')
     name = 'Test Category'
     color = '#6c757d'
@@ -96,10 +96,10 @@ class LogicalTransactionFactory(factory.django.DjangoModelFactory):
     amount = Decimal('5000.00')
 
 
-class ClassificationRuleFactory(factory.django.DjangoModelFactory):
+class ClassificationRuleV2Factory(factory.django.DjangoModelFactory):
     class Meta:
-        model = ClassificationRule
-    category = factory.SubFactory(CategoryFactory)
+        model = ClassificationRuleV2
+    category = factory.SubFactory(CategoryNodeFactory)
     user = factory.SubFactory(UserFactory)
     description = 'STARBUCKS'
 

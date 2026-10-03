@@ -4,15 +4,8 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-2">
   <h2 class="mb-0">Rules <span class="badge bg-warning text-dark align-middle fs-6">V2</span></h2>
-  <div class="d-flex gap-2">
-    <form method="post" action="{% url 'core:rules_v2_import_v1' %}"
-          onsubmit="return confirm('Copy your V1 rules into V2? Rules are matched to V2 categories by group and name. Existing V2 rules are kept, and V1 data and transactions are not changed.');">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-sm btn-outline-secondary">Import from V1</button>
-    </form>
-  </div>
 </div>
-<p class="text-muted">Rules that assign a transaction to a Categories V2 node. Separate from the current rules and not yet used to classify transactions.</p>
+<p class="text-muted">Rules that assign transactions to categories.</p>
 
 <div class="row">
   <div class="col-md-3">

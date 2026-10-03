@@ -36,18 +36,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
-    def create_default_categories(self):
-        """Create a protected Default category in each group for this user."""
-        for slug, _ in CategoryGroup.SLUG_CHOICES:
-            group = CategoryGroup.get_group(slug)
-            Category.objects.get_or_create(
-                name=Category.UNCLASSIFIED_NAME,
-                group=group,
-                user=self,
-                defaults={'color': '#adb5bd'},
-            )
-        CategoryNode.ensure_protected(self)
-
     def load_default_category_tree(self):
         """Copy the bundled default category tree into this user's account."""
         CategoryNode.load_default_tree(self)
@@ -81,42 +69,8 @@ class CategoryGroup(models.Model):
         return group
 
 
-class Category(models.Model):
-    UNCLASSIFIED_NAME = 'Unclassified'
-
-    name = models.CharField(max_length=100)
-    color = models.CharField(max_length=7, default='#6c757d', help_text='Hex color for charts')
-    group = models.ForeignKey(CategoryGroup, on_delete=models.PROTECT, related_name='categories')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
-
-    PROTECTED_NAMES = {'Unclassified'}
-
-    class Meta:
-        verbose_name_plural = 'categories'
-        ordering = ['group', 'name']
-        unique_together = [['name', 'group', 'user']]
-
-    @property
-    def is_protected(self):
-        return self.name in self.PROTECTED_NAMES
-
-    def __str__(self):
-        return self.name
-
-    @classmethod
-    def get_unclassified(cls, user):
-        group = CategoryGroup.get_group(CategoryGroup.UNCLASSIFIED)
-        cat, _ = cls.objects.get_or_create(
-            name=cls.UNCLASSIFIED_NAME,
-            group=group,
-            user=user,
-            defaults={'color': '#adb5bd'},
-        )
-        return cat
-
-
 class CategoryNode(models.Model):
-    """Hierarchical category kept separate from the active flat Category model."""
+    """Hierarchical category: a node in a per-user tree under a CategoryGroup."""
     UNCLASSIFIED_NAME = 'Unclassified'
     UNCLASSIFIED_COLOR = '#adb5bd'
 
@@ -362,14 +316,6 @@ class LogicalTransaction(models.Model):
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     amount_crc = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     amount_usd = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
-    category = models.ForeignKey(
-        Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='logical_transactions'
-    )
-    classification_method = models.CharField(max_length=15, choices=CLASSIFICATION_METHODS, default='unclassified')
-    matched_rule = models.ForeignKey(
-        'ClassificationRule', on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions'
-    )
-    # Categories V2 assignment, tracked in parallel with the V1 fields above and not yet used by the live classifier.
     category_v2 = models.ForeignKey(
         'CategoryNode', on_delete=models.SET_NULL, null=True, blank=True, related_name='logical_transactions'
     )
@@ -448,53 +394,8 @@ class TransactionPair(models.Model):
         return f"{self.status}: {out_desc} ↔ {in_desc}"
 
 
-class ClassificationRule(models.Model):
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='classification_rules')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='classification_rules')
-    description = models.CharField(max_length=200, blank=True, help_text='Case-insensitive substring match')
-    account_type = models.CharField(max_length=20, blank=True, choices=Account.ACCOUNT_TYPES)
-    amount_min = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
-    amount_max = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
-    metadata = models.JSONField(default=dict, blank=True, help_text='Key-value conditions, e.g. {"transaction_code": "PT"}')
-    detail = models.CharField(max_length=500, blank=True, help_text='Documentation note')
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['category__group__slug', 'category__name', 'description']
-
-    def __str__(self):
-        parts = []
-        if self.description:
-            parts.append(self.description)
-        if self.account_type:
-            parts.append(self.account_type)
-        for k, v in self.metadata.items():
-            parts.append(f'{k}={v}')
-        return f"{' | '.join(parts) or '?'} → {self.category.name}"
-
-    def to_flat_dict(self):
-        """Convert to the flat dict format used by the classifier."""
-        d = {'group': self.category.group.slug, 'category': self.category.name}
-        if self.description:
-            d['description'] = self.description
-        if self.account_type:
-            d['account_type'] = self.account_type
-        if self.amount_min is not None:
-            d['amount_min'] = float(self.amount_min)
-        if self.amount_max is not None:
-            d['amount_max'] = float(self.amount_max)
-        for k, v in self.metadata.items():
-            d[f'metadata.{k}'] = v
-        if self.detail:
-            d['detail'] = self.detail
-        return d
-
-
 class ClassificationRuleV2(models.Model):
-    """Rule targeting a hierarchical CategoryNode. Same conditions as ClassificationRule.
-
-    Kept separate from the active model; not used by the live classifier yet.
-    """
+    """Rule targeting a CategoryNode. All conditions must match; the most specific rule wins."""
     category = models.ForeignKey(CategoryNode, on_delete=models.CASCADE, related_name='classification_rules')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='classification_rules_v2')
     description = models.CharField(max_length=200, blank=True, help_text='Case-insensitive substring match')
@@ -535,7 +436,7 @@ class ClassificationRuleV2(models.Model):
         return super().save(*args, **kwargs)
 
     def to_flat_dict(self):
-        """Same flat format as ClassificationRule so the shared matcher can be reused."""
+        """Flat dict format consumed by the rule matcher."""
         d = {'group': self.category.group.slug, 'category': self.category.name}
         if self.description:
             d['description'] = self.description

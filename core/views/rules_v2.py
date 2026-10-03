@@ -8,14 +8,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from ..models import Account, CategoryGroup, CategoryNode, ClassificationRuleV2
-from ..services.rules_v2 import import_v1_rules
 from .categories_v2 import _build_tree
 
 __all__ = [
     'rules_v2_list',
     'rules_v2_save',
     'rules_v2_delete',
-    'rules_v2_import_v1',
 ]
 
 
@@ -144,22 +142,3 @@ def rules_v2_delete(request):
     rule.delete()
     messages.success(request, 'Rule deleted.')
     return _back(request)
-
-
-@login_required
-@require_POST
-def rules_v2_import_v1(request):
-    """Copy V1 rules into V2. Idempotent; V1 data and transactions are untouched."""
-    created, existing, skipped = import_v1_rules(request.user)
-    if created:
-        extra = []
-        if existing:
-            extra.append(f'{existing} already existed')
-        if skipped:
-            extra.append(f'{skipped} skipped: no matching V2 category or no conditions')
-        messages.success(request, f'Imported {created} rules from V1' + (f' ({"; ".join(extra)}).' if extra else '.'))
-    elif skipped:
-        messages.warning(request, f'Nothing imported: {skipped} V1 rules have no matching V2 category or no conditions.')
-    else:
-        messages.info(request, 'Nothing to import: all V1 rules already exist in V2.')
-    return redirect('core:rules_v2_list')

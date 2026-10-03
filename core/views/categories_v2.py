@@ -6,10 +6,9 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from ..models import Category, CategoryGroup, CategoryNode
+from ..models import CategoryGroup, CategoryNode
 
 __all__ = [
-    'category_v2_import_v1',
     'category_v2_list',
     'category_v2_save',
     'category_v2_group',
@@ -217,33 +216,6 @@ def category_v2_move(request):
 
     target = f'"{parent.name}"' if parent else 'the top level'
     messages.success(request, f'Moved {len(selected)} categories under {target}.')
-    return redirect('core:category_v2_list')
-
-
-@login_required
-@require_POST
-def category_v2_import_v1(request):
-    """Copy the user's V1 categories into V2 as top-level nodes. Idempotent; V1 data is untouched."""
-    CategoryNode.ensure_protected(request.user)
-    existing = set(
-        CategoryNode.objects.filter(user=request.user).values_list('group_id', 'name')
-    )
-    created = 0
-    with transaction.atomic():
-        v1 = (Category.objects.filter(user=request.user)
-              .exclude(group__slug=CategoryGroup.UNCLASSIFIED)
-              .exclude(name__in=Category.PROTECTED_NAMES))
-        for cat in v1.select_related('group').order_by('group__name', 'name'):
-            if (cat.group_id, cat.name) in existing:
-                continue
-            CategoryNode.objects.create(name=cat.name, color=cat.color, group=cat.group, user=request.user)
-            created += 1
-    skipped = v1.count() - created
-    if created:
-        messages.success(request, f'Imported {created} categories from V1' +
-                         (f' ({skipped} already existed).' if skipped else '.'))
-    else:
-        messages.info(request, 'Nothing to import: all V1 categories already exist in V2.')
     return redirect('core:category_v2_list')
 
 

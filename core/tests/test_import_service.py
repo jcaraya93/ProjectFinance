@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from core.models import (
     CreditAccount, DebitAccount, StatementImport, CurrencyLedger,
-    RawTransaction, LogicalTransaction, ClassificationRule,
+    RawTransaction, LogicalTransaction, ClassificationRuleV2,
 )
 from core.services.import_service import detect_card_type, import_statement
 
@@ -66,27 +66,23 @@ class TestImportCredit:
         assert not result.skipped
 
         for txn in LogicalTransaction.objects.filter(user=user):
-            assert txn.category is not None
-            assert txn.category.name == 'Unclassified'
+            assert txn.category_v2 is not None
+            assert txn.category_v2.name == 'Unclassified'
 
     def test_no_classification_during_import(
         self, mock_fetch, user, expense_category, exchange_rates, credit_csv
     ):
-        ClassificationRule.objects.create(
+        ClassificationRuleV2.objects.create(
             category=expense_category, user=user, description='CAFE CENTRAL',
         )
         result = import_statement(credit_csv, 'credit.csv', 'hash-classify', user)
         assert not result.skipped
 
-        # Transactions should arrive as unclassified — rules are applied separately
+        # V2 rules are applied during import
         rule_txns = LogicalTransaction.objects.filter(
-            user=user, classification_method='rule',
+            user=user, classification_method_v2='rule',
         )
-        assert not rule_txns.exists()
-        unclassified_txns = LogicalTransaction.objects.filter(
-            user=user, classification_method='unclassified',
-        )
-        assert unclassified_txns.exists()
+        assert rule_txns.count() == 1
 
     def test_currency_conversion_during_import(
         self, mock_fetch, user, exchange_rates, credit_csv

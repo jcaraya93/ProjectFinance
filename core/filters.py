@@ -1,7 +1,7 @@
 import django_filters
 from django.db.models import Q
 
-from .models import CategoryNode, ClassificationRule, ClassificationRuleV2, LogicalTransaction
+from .models import CategoryNode, LogicalTransaction
 
 
 class TransactionFilter(django_filters.FilterSet):
@@ -66,30 +66,6 @@ class TransactionFilter(django_filters.FilterSet):
                 stack.extend(children.get(pk, []))
         return result
 
-    def _legacy_filters(self, queryset):
-        """Links from V1 pages carry V1 ids: v1_category (Category pks) and v1_rule (ClassificationRule pk)."""
-        v1_categories = [c for c in self.data.getlist('v1_category') if c.isdigit()]
-        if v1_categories:
-            from .models import Category
-            pairs = Category.objects.filter(user=self.user, pk__in=v1_categories).values_list('group_id', 'name')
-            nodes = CategoryNode.objects.filter(user=self.user)
-            ids = [n.pk for n in nodes if (n.group_id, n.name) in set(pairs)]
-            queryset = queryset.filter(category_v2_id__in=ids)
-        v1_rule = self.data.get('v1_rule', '')
-        if v1_rule.isdigit():
-            rule = ClassificationRule.objects.filter(user=self.user, pk=v1_rule).select_related('category').first()
-            ids = []
-            if rule:
-                ids = [
-                    r.pk for r in ClassificationRuleV2.objects.filter(
-                        user=self.user, category__name=rule.category.name,
-                        category__group_id=rule.category.group_id, description=rule.description,
-                        account_type=rule.account_type, amount_min=rule.amount_min, amount_max=rule.amount_max,
-                    ) if r.metadata == rule.metadata
-                ]
-            queryset = queryset.filter(matched_rule_v2_id__in=ids)
-        return queryset
-
     def filter_wallets(self, queryset, name, value):
         """Handle wallet filters (format: 'account_id:currency')."""
         # This is called per-value; for multi-value we override filter_queryset
@@ -102,7 +78,7 @@ class TransactionFilter(django_filters.FilterSet):
     def filter_queryset(self, queryset):
         """Override to handle multi-value wallet and metadata filters."""
         # Let django-filter handle all standard filters first
-        qs = self._legacy_filters(super().filter_queryset(queryset))
+        qs = super().filter_queryset(queryset)
 
         # Multi-value wallet filter
         wallet_values = self.data.getlist('wallet')

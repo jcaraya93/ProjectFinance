@@ -66,8 +66,6 @@ ProjectFinance/
 │   │   ├── credit_card.py      # Credit card CSV parser
 │   │   └── debit_card.py       # Debit card CSV parser
 │   ├── services/
-│   │   ├── classifier.py       # Thin façade → yaml_classifier
-│   │   ├── yaml_classifier.py  # Rule matching engine (reads ClassificationRule from DB)
 │   │   ├── import_service.py   # Statement import orchestration (parse → classify → bulk write)
 │   │   ├── exchange_rates.py   # CRC↔USD via Frankfurter API
 │   │   ├── stats.py            # Dashboard aggregation queries
@@ -110,13 +108,13 @@ The central design revolves around an **immutable/mutable split**:
 |-------|---------|
 | `User` | Custom user model (email-based auth, no username) |
 | `CategoryGroup` | Fixed slugs: `expense`, `income`, `transaction`, `unclassified` |
-| `Category` | User-scoped. Each group has a protected `Default` category |
+| `CategoryNode` | User-scoped hierarchical category. Each group has a protected `Unclassified` node |
 | `Account` → `CreditAccount` / `DebitAccount` | Bank accounts (MTI pattern) |
 | `StatementImport` | One per uploaded CSV file. SHA-256 duplicate detection |
 | `CurrencyLedger` | Links statement to currency (`CRC` or `USD`) with balances |
 | `RawTransaction` | Immutable bank data. Has `account_metadata` JSONField |
-| `LogicalTransaction` | Mutable. Has `category`, `classification_method`, `matched_rule` |
-| `ClassificationRule` | Conditions → target category. Supports description, account_type, metadata, amount range |
+| `LogicalTransaction` | Mutable. Has `category_v2`, `classification_method_v2`, `matched_rule_v2` |
+| `ClassificationRuleV2` | Conditions → target category. Supports description, account_type, metadata, amount range |
 | `ExchangeRate` | Daily USD→CRC rates from Frankfurter API |
 | `UserPreference` | One-to-one with User. Stores column visibility as JSON |
 
@@ -132,9 +130,9 @@ LogicalTransaction.objects.filter(user=request.user)
 
 | Method | Meaning |
 |--------|---------|
-| `unclassified` | No classification. Category = Default |
-| `rule` | Auto-classified by `ClassificationRule`. `matched_rule` is set |
-| `manual` | User manually assigned. `matched_rule` is cleared |
+| `unclassified` | No classification. Category = Unclassified |
+| `rule` | Auto-classified by `ClassificationRuleV2`. `matched_rule_v2` is set |
+| `manual` | User manually assigned. `matched_rule_v2` is cleared |
 
 Rules never override `manual` classifications. When a rule is deleted, its linked transactions reset to `unclassified`.
 
@@ -156,8 +154,7 @@ Rules never override `manual` classifications. When a rule is deleted, its linke
 Business logic lives in `core/services/`, not in views. Views are thin orchestrators.
 
 - **`import_service.py`** — Handles the full import pipeline: detect card type → parse → duplicate check → exchange rate fetch → atomic bulk write.
-- **`yaml_classifier.py`** — Rule matching engine with phase ordering (transfers → specific → fallback). Caches rules in memory.
-- **`classifier.py`** — Thin façade that delegates to `yaml_classifier`.
+- **`rules_v2.py`** — Rule matching engine (`find_matching_rule`, `classify_transactions_v2`) with phase ordering (transfers → specific → Unclassified).
 - **`exchange_rates.py`** — Fetches from Frankfurter API, caches in `ExchangeRate` model.
 - **`stats.py`** — Dashboard aggregation queries.
 
@@ -196,7 +193,6 @@ from core.instrumentation import tracer, dashboard_duration
 ### Conventions
 
 - Test files follow `test_<feature>.py` naming under `core/tests/`.
-- The `conftest.py` autouse fixture `_mock_yaml_sync` prevents tests from writing to the real `classification_rules.yaml`.
 - Use `auth_client` fixture for authenticated view tests.
 - Use factories (not raw `Model.objects.create`) when building test data.
 - The `sample_data` fixture provides a complete object graph: account → statement → ledger → raw → logical transactions + a rule.
@@ -286,7 +282,6 @@ pytest core/tests/ -n auto
 
 - **Never modify `RawTransaction` records** after import. All user-facing changes go through `LogicalTransaction`.
 - **Always filter by `user`** — this is a multi-tenant app. Forgetting the user filter leaks data.
-- **`classification_rules.yaml`** is synced with the database. The DB is the source of truth at runtime; YAML is for import/export.
 - **The `Transaction` alias** (`Transaction = LogicalTransaction`) exists for migration compatibility. Prefer `LogicalTransaction` in new code.
 - **Exchange rates** come from the Frankfurter API. Tests mock this; the `exchange_rates` fixture seeds static rates.
 - **`CategoryGroup` slugs are fixed** (`expense`, `income`, `transaction`, `unclassified`). Don't create new ones.

@@ -15,7 +15,7 @@ from django.db import transaction
 
 from core.models import (
     StatementImport, CurrencyLedger, RawTransaction, LogicalTransaction,
-    Category, CategoryGroup, CategoryNode, CreditAccount, DebitAccount, ExchangeRate,
+    CategoryGroup, CategoryNode, CreditAccount, DebitAccount, ExchangeRate,
 )
 from core.parsers.credit_card import CreditCardParser
 from core.parsers.debit_card import DebitCardParser
@@ -164,7 +164,6 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
 
             account_type = account.account_type
             converted = 0
-            unclassified = Category.get_unclassified(user)
             CategoryNode.ensure_protected(user)
             unclassified_v2 = CategoryNode.objects.get(
                 user=user, group__slug=CategoryGroup.UNCLASSIFIED, name=CategoryNode.UNCLASSIFIED_NAME,
@@ -195,7 +194,7 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
                     txn = LogicalTransaction(
                         raw_transaction=raw, user=user,
                         date=raw.date, description=raw.description,
-                        amount=raw.normalized_amount, category=unclassified,
+                        amount=raw.normalized_amount,
                         category_v2=unclassified_v2,
                     )
 

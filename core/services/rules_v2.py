@@ -1,13 +1,59 @@
-"""Rule matching and V1 import for ClassificationRuleV2.
+"""Rule matching and classification for ClassificationRuleV2.
 
-Reuses the V1 matcher and phase ordering (transfer, specific, Unclassified) so both
-rule sets behave identically. Only classify_transactions_v2 writes to transactions, and only their V2 fields.
+Phases: transfer rules first, then specific categories, then the Unclassified fallbacks.
+Within a phase the most specific rule wins (longest description, then most extra conditions).
 """
-from django.core.exceptions import ValidationError
-from django.db import transaction as db_transaction
+from decimal import Decimal
 
-from core.models import CategoryNode, ClassificationRule, ClassificationRuleV2, LogicalTransaction
-from core.services.yaml_classifier import _match_rule, _rule_phase
+from core.models import ClassificationRuleV2, LogicalTransaction
+
+
+def _match_rule(rule, description_upper, metadata, amount, account_type):
+    """Return the number of matched conditions of a flat rule dict, or 0 if any condition fails."""
+    matched = 0
+
+    if 'description' in rule:
+        if rule['description'].upper() in description_upper:
+            matched += 1
+        else:
+            return 0
+
+    if 'amount_min' in rule:
+        if amount >= Decimal(str(rule['amount_min'])):
+            matched += 1
+        else:
+            return 0
+
+    if 'amount_max' in rule:
+        if amount <= Decimal(str(rule['amount_max'])):
+            matched += 1
+        else:
+            return 0
+
+    if 'account_type' in rule:
+        if rule['account_type'].lower() == account_type.lower():
+            matched += 1
+        else:
+            return 0
+
+    for key, value in rule.items():
+        if key.startswith('metadata.'):
+            meta_val = metadata.get(key[len('metadata.'):], '')
+            if str(meta_val).upper() == str(value).upper():
+                matched += 1
+            else:
+                return 0
+
+    return matched
+
+
+def _rule_phase(rule):
+    """0 = transfer group (highest priority), 2 = Unclassified fallback, 1 = everything else."""
+    if rule.category.group.slug == 'transfer':
+        return 0
+    if rule.category.name == 'Unclassified':
+        return 2
+    return 1
 
 
 def _best_rule(flats, transaction):
@@ -87,77 +133,3 @@ def classify_transactions_v2(user, dry_run=False, queryset=None, only_unclassifi
             to_update, ['category_v2', 'matched_rule_v2', 'classification_method_v2'], batch_size=500
         )
     return total, changed, skipped_manual, unmatched
-
-
-def sync_manual_to_v2(user, dry_run=False):
-    """Copy V1 manual classifications to V2, mapping categories by (group, name).
-
-    Writes only the V2 fields. Returns (manual_total, changed, unmapped): unmapped counts manual
-    transactions whose V1 category has no V2 node; those are left unchanged.
-    """
-    CategoryNode.ensure_protected(user)
-    nodes = {(n.group_id, n.name): n for n in CategoryNode.objects.filter(user=user)}
-    manual = LogicalTransaction.objects.filter(
-        user=user, classification_method='manual'
-    ).select_related('category')
-    total = changed = unmapped = 0
-    to_update = []
-    for txn in manual.iterator(chunk_size=500):
-        total += 1
-        node = nodes.get((txn.category.group_id, txn.category.name)) if txn.category_id else None
-        if node is None:
-            unmapped += 1
-            continue
-        if (txn.category_v2_id == node.pk and txn.classification_method_v2 == 'manual'
-                and txn.matched_rule_v2_id is None):
-            continue
-        txn.category_v2_id = node.pk
-        txn.matched_rule_v2_id = None
-        txn.classification_method_v2 = 'manual'
-        to_update.append(txn)
-        changed += 1
-    if to_update and not dry_run:
-        LogicalTransaction.objects.bulk_update(
-            to_update, ['category_v2', 'matched_rule_v2', 'classification_method_v2'], batch_size=500
-        )
-    return total, changed, unmapped
-
-
-def import_v1_rules(user):
-    """Copy V1 rules to V2, targeting the CategoryNode with the same group and name.
-
-    Idempotent. Returns (created, skipped_existing, skipped_unusable): the last counts rules with
-    no matching V2 category or no usable conditions.
-    """
-    CategoryNode.ensure_protected(user)
-    nodes = {(n.group_id, n.name): n for n in CategoryNode.objects.filter(user=user)}
-    existing = {
-        (r.category_id, r.description, r.account_type, r.amount_min, r.amount_max,
-         tuple(sorted(r.metadata.items())))
-        for r in ClassificationRuleV2.objects.filter(user=user)
-    }
-    created = skipped_existing = skipped_missing = 0
-    with db_transaction.atomic():
-        for rule in ClassificationRule.objects.filter(user=user).select_related('category'):
-            node = nodes.get((rule.category.group_id, rule.category.name))
-            if node is None:
-                skipped_missing += 1
-                continue
-            key = (node.pk, rule.description, rule.account_type, rule.amount_min, rule.amount_max,
-                   tuple(sorted(rule.metadata.items())))
-            if key in existing:
-                skipped_existing += 1
-                continue
-            try:
-                ClassificationRuleV2.objects.create(
-                    category=node, user=user, description=rule.description, account_type=rule.account_type,
-                    amount_min=rule.amount_min, amount_max=rule.amount_max, metadata=rule.metadata,
-                    detail=rule.detail,
-                )
-            except ValidationError:
-                # e.g. a V1 rule with no conditions can never match
-                skipped_missing += 1
-                continue
-            existing.add(key)
-            created += 1
-    return created, skipped_existing, skipped_missing

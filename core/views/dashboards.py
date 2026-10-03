@@ -1993,7 +1993,7 @@ def credit_payment_dashboard(request, display_currency, time_group):
     )
     cp_qs = Transaction.objects.filter(
         user=request.user,
-        category_id__in=credit_cat_ids,
+        category_v2_id__in=credit_cat_ids,
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
     ).select_related('raw_transaction__ledger__statement_import__account')
@@ -2402,7 +2402,7 @@ def credit_transfers_dashboard(request, display_currency, time_group):
     )
     cp_qs = Transaction.objects.filter(
         user=request.user,
-        category_id__in=credit_cat_ids,
+        category_v2_id__in=credit_cat_ids,
     ).exclude(
         amount_crc__isnull=True, amount_usd__isnull=True,
     ).select_related('raw_transaction__ledger__statement_import__account')
@@ -2631,7 +2631,7 @@ def transfer_flow_dashboard(request, display_currency, time_group):
         **{f'{amount_field}__isnull': False},
     ).select_related(
         'raw_transaction__ledger__statement_import__account',
-        'category',
+        'category_v2',
     )
 
     # Map income categories to unified labels
