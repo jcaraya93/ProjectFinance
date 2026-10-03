@@ -73,6 +73,9 @@ def transaction_list(request):
     wallet_ids = request.GET.getlist('wallet')
     groups = request.GET.getlist('group')
     search = request.GET.get('search', '').strip()
+    search_in = request.GET.get('search_in', 'both')
+    if search_in not in ('both', 'description', 'note'):
+        search_in = 'both'
     meta_filters = request.GET.getlist('meta')
     cls_methods = request.GET.getlist('cls_method')
     split_filter = request.GET.get('split', '').strip()
@@ -196,6 +199,7 @@ def transaction_list(request):
         'adv_open': request.GET.get('adv_open', ''),
         'metadata_filters': metadata_filters,
         'search': search,
+        'search_in': search_in,
         'pagination_qs': pagination_qs,
         'filter_qs': filter_qs,
         'sort_col': sort_col,

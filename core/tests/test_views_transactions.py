@@ -75,6 +75,38 @@ class TestTransactionListFilters:
         resp = auth_client.get(reverse('core:transaction_list'), {'rule': rule.pk})
         assert self._shown(resp) == {t[3].pk}
 
+    def _search_setup(self, sample_data):
+        t = sample_data['transactions']
+        t[0].description, t[0].note = 'GROCERY STORE', ''
+        t[1].description, t[1].note = 'SINPE MOVIL', 'grocery for party'
+        t[2].description, t[2].note = 'GROCERY MARKET', 'party'
+        t[3].description, t[3].note = 'OTHER', ''
+        t[4].description, t[4].note = 'OTHER 2', ''
+        for x in t:
+            x.save()
+        return t
+
+    def test_search_defaults_to_description_and_note(self, auth_client, sample_data):
+        t = self._search_setup(sample_data)
+        url = reverse('core:transaction_list')
+        assert self._shown(auth_client.get(url, {'search': 'grocery'})) == {t[0].pk, t[1].pk, t[2].pk}
+        assert self._shown(auth_client.get(url, {'search': 'grocery', 'search_in': 'both'})) == {t[0].pk, t[1].pk, t[2].pk}
+
+    def test_search_in_description_only(self, auth_client, sample_data):
+        t = self._search_setup(sample_data)
+        resp = auth_client.get(reverse('core:transaction_list'), {'search': 'grocery', 'search_in': 'description'})
+        assert self._shown(resp) == {t[0].pk, t[2].pk}
+
+    def test_search_in_note_only(self, auth_client, sample_data):
+        t = self._search_setup(sample_data)
+        resp = auth_client.get(reverse('core:transaction_list'), {'search': 'grocery', 'search_in': 'note'})
+        assert self._shown(resp) == {t[1].pk}
+
+    def test_search_in_invalid_value_falls_back_to_both(self, auth_client, sample_data):
+        t = self._search_setup(sample_data)
+        resp = auth_client.get(reverse('core:transaction_list'), {'search': 'party', 'search_in': 'bogus'})
+        assert self._shown(resp) == {t[1].pk, t[2].pk}
+
     def test_sort(self, auth_client, sample_data):
         resp = auth_client.get(reverse('core:transaction_list'), {
             'sort': 'date',

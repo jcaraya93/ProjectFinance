@@ -7,7 +7,9 @@ from .models import CategoryNode, LogicalTransaction
 class TransactionFilter(django_filters.FilterSet):
     start_date = django_filters.DateFilter(field_name='date', lookup_expr='gte')
     end_date = django_filters.DateFilter(field_name='date', lookup_expr='lte')
-    search = django_filters.CharFilter(field_name='description', lookup_expr='icontains')
+    # Text search; search_in picks the field(s): 'both' (default), 'description' or 'note'.
+    search = django_filters.CharFilter(method='filter_search')
+    search_in = django_filters.CharFilter(method='filter_noop')
     # Categories V2: a selected category also matches transactions in its subcategories.
     category = django_filters.ModelMultipleChoiceFilter(
         queryset=CategoryNode.objects.none(),
@@ -47,6 +49,22 @@ class TransactionFilter(django_filters.FilterSet):
             self.filters['category'].queryset = CategoryNode.objects.filter(user=user)
         from .models import CategoryGroup
         self.filters['group'].extra['choices'] = list(CategoryGroup.SLUG_CHOICES)
+
+    def filter_noop(self, queryset, name, value):
+        return queryset
+
+    def filter_search(self, queryset, name, value):
+        value = (value or '').strip()
+        if not value:
+            return queryset
+        target = self.data.get('search_in', 'both')
+        if target == 'description':
+            q = Q(description__icontains=value)
+        elif target == 'note':
+            q = Q(note__icontains=value)
+        else:
+            q = Q(description__icontains=value) | Q(note__icontains=value)
+        return queryset.filter(q)
 
     def filter_category(self, queryset, name, value):
         selected = {node.pk for node in value}
