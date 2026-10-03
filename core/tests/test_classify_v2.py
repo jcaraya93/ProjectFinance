@@ -1,7 +1,7 @@
 import pytest
 
 from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2
-from core.services.rules_v2 import classify_transactions_v2
+from core.services.rules_v2 import classify_transactions_v2, sync_manual_to_v2
 
 
 @pytest.mark.django_db
@@ -47,3 +47,37 @@ class TestClassifyTransactionsV2:
         for t in sample_data['transactions']:
             t.refresh_from_db()
             assert t.category_v2_id is None
+
+
+@pytest.mark.django_db
+class TestSyncManualToV2:
+    def test_copies_manual_and_protects_from_rules(self, user, sample_data):
+        group = CategoryGroup.get_group('expense')
+        txns = sample_data['transactions']
+        v1 = txns[0].category
+        node = CategoryNode.objects.create(name=v1.name, user=user, group=v1.group)
+        txns[0].classification_method = 'manual'
+        txns[0].save()
+        before = [(t.pk, t.category_id, t.matched_rule_id, t.classification_method) for t in txns]
+        ClassificationRuleV2.objects.create(
+            category=CategoryNode.objects.create(name='Other', user=user, group=group),
+            user=user, description='TRANSACTION')
+        assert sync_manual_to_v2(user, dry_run=True) == (1, 1, 0)
+        txns[0].refresh_from_db()
+        assert txns[0].category_v2 is None
+        assert sync_manual_to_v2(user) == (1, 1, 0)
+        assert sync_manual_to_v2(user) == (1, 0, 0)
+        classify_transactions_v2(user)
+        for t in txns:
+            t.refresh_from_db()
+        assert (txns[0].category_v2, txns[0].classification_method_v2) == (node, 'manual')
+        assert all(t.category_v2.name == 'Other' for t in txns[1:])
+        assert [(t.pk, t.category_id, t.matched_rule_id, t.classification_method) for t in txns] == before
+
+    def test_unmapped_manual_is_left_alone(self, user, sample_data):
+        t = sample_data['transactions'][0]
+        t.classification_method = 'manual'
+        t.save()
+        assert sync_manual_to_v2(user) == (1, 0, 1)
+        t.refresh_from_db()
+        assert t.category_v2 is None

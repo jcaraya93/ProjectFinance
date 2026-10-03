@@ -82,6 +82,40 @@ def classify_transactions_v2(user, dry_run=False):
     return total, changed, skipped_manual, unmatched
 
 
+def sync_manual_to_v2(user, dry_run=False):
+    """Copy V1 manual classifications to V2, mapping categories by (group, name).
+
+    Writes only the V2 fields. Returns (manual_total, changed, unmapped): unmapped counts manual
+    transactions whose V1 category has no V2 node; those are left unchanged.
+    """
+    CategoryNode.ensure_protected(user)
+    nodes = {(n.group_id, n.name): n for n in CategoryNode.objects.filter(user=user)}
+    manual = LogicalTransaction.objects.filter(
+        user=user, classification_method='manual'
+    ).select_related('category')
+    total = changed = unmapped = 0
+    to_update = []
+    for txn in manual.iterator(chunk_size=500):
+        total += 1
+        node = nodes.get((txn.category.group_id, txn.category.name)) if txn.category_id else None
+        if node is None:
+            unmapped += 1
+            continue
+        if (txn.category_v2_id == node.pk and txn.classification_method_v2 == 'manual'
+                and txn.matched_rule_v2_id is None):
+            continue
+        txn.category_v2_id = node.pk
+        txn.matched_rule_v2_id = None
+        txn.classification_method_v2 = 'manual'
+        to_update.append(txn)
+        changed += 1
+    if to_update and not dry_run:
+        LogicalTransaction.objects.bulk_update(
+            to_update, ['category_v2', 'matched_rule_v2', 'classification_method_v2'], batch_size=500
+        )
+    return total, changed, unmapped
+
+
 def import_v1_rules(user):
     """Copy V1 rules to V2, targeting the CategoryNode with the same group and name.
 
