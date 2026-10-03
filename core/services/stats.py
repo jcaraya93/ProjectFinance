@@ -59,8 +59,10 @@ def category_breakdown(qs, group_slug, amount_field, nodes, depths, level=None, 
     return data
 
 
-def category_drilldown(qs, group_slug, amount_field, nodes):
+def category_drilldown(qs, group_slug, amount_field, nodes, depths, max_level=None):
     """For every node with children: its children's subtree totals, keyed by node id.
+
+    With max_level, only nodes above that level can be drilled into, so children never go deeper than it.
 
     Amounts assigned directly to the parent appear as an extra "<name> (direct)" entry with id None.
     """
@@ -84,6 +86,8 @@ def category_drilldown(qs, group_slug, amount_field, nodes):
     for parent_id, kids in children.items():
         parent = nodes[parent_id]
         if parent.group.slug != group_slug or not subtree.get(parent_id):
+            continue
+        if max_level and depths[parent_id] >= max_level:
             continue
         items = [(k.id, k.name, k.color, subtree.get(k.id, 0)) for k in kids if subtree.get(k.id, 0)]
         if own.get(parent_id):
@@ -382,7 +386,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     expense_category_data = category_breakdown(qs, 'expense', amount_field, nodes, depths, category_level)
     income_category_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level)
     top_categories_data = category_breakdown(qs, 'expense', amount_field, nodes, depths, category_level, limit=10)
-    expense_drill_data = category_drilldown(qs, 'expense', amount_field, nodes)
+    expense_drill_data = category_drilldown(qs, 'expense', amount_field, nodes, depths, max_level=category_level and 2)
     top_income_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level, limit=10)
 
     # ── Monthly trend (dual line) ─────────────────────────────

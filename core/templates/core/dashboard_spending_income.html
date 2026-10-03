@@ -19,10 +19,9 @@
         {% with lv=category_level|stringformat:"d" %}
         <div class="btn-group btn-group-sm">
           <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-            {% if category_level %}Level {{ category_level }}{% else %}Detailed{% endif %}
+            Level {{ category_level }}
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
-            <li><a class="dropdown-item{% if not category_level %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ period_type }}&period={{ period_key }}">Detailed (as assigned)</a></li>
             {% for n in category_levels %}
             <li><a class="dropdown-item{% if category_level == n %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ period_type }}&period={{ period_key }}&level={{ n }}">Level {{ n }}{% if n == 1 %} (top){% endif %}</a></li>
             {% endfor %}

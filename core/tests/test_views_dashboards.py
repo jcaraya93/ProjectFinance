@@ -65,22 +65,23 @@ class TestSpendingIncomeLevel:
         url = reverse('core:spending_income_dashboard')
         base = {'period_type': 'all'}
 
-        detailed = self._breakdown(auth_client.get(url, base))
+        default = self._breakdown(auth_client.get(url, base))
+        assert list(default) == ['Food']  # level 1 is the default
+
+        detailed = self._breakdown(auth_client.get(url, {**base, 'level': 2}))
         assert list(detailed) == ['Groceries']
 
         level1 = self._breakdown(auth_client.get(url, {**base, 'level': 1}))
         assert list(level1) == ['Food']
         assert level1['Food'] == detailed['Groceries']
 
-        level2 = self._breakdown(auth_client.get(url, {**base, 'level': 2}))
-        assert level2 == detailed
 
-    def test_invalid_level_falls_back_to_detailed(self, auth_client, sample_data):
+    def test_invalid_level_falls_back_to_level_one(self, auth_client, sample_data):
         url = reverse('core:spending_income_dashboard')
-        for bad in ('0', '99', 'abc'):
+        for bad in ('0', '3', '99', 'abc'):
             resp = auth_client.get(url, {'period_type': 'all', 'level': bad})
             assert resp.status_code == 200
-            assert resp.context['category_level'] == 0
+            assert resp.context['category_level'] == 1
 
     def test_drill_data_lists_children_and_direct_amounts(self, auth_client, sample_data, expense_category, user):
         import json
