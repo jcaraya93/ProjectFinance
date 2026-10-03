@@ -124,7 +124,7 @@
       </div>
       <div class="card-body">
 
-        {% if rule_count > 0 %}
+        {% if rule_v2_count > 0 %}
         <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
           <div>
             <p class="mb-0 fw-bold">Delete all rules</p>
@@ -133,36 +133,70 @@
           <form method="post" action="{% url 'core:delete_all_rules' %}" class="ms-3 flex-shrink-0"
                 onsubmit="return confirm('Delete ALL rules? Transactions classified by rules will become unclassified.')">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline-danger btn-sm">Delete Rules</button>
+            <button type="submit" class="btn btn-outline-danger btn-sm" style="width: 10rem;">Delete Rules</button>
           </form>
         </div>
         {% endif %}
 
-        {% if cat_count > 0 %}
+        {% if cat_v2_count > 0 %}
         <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
           <div>
             <p class="mb-0 fw-bold">Delete all categories</p>
-            <p class="text-muted small mb-0">Remove all custom categories and their rules. Default categories are kept. Affected transactions become unclassified.</p>
+            <p class="text-muted small mb-0">Remove all categories and their rules. The protected Unclassified categories are kept. Affected transactions become unclassified.</p>
           </div>
           <form method="post" action="{% url 'core:yaml_category_delete_all' %}" class="ms-3 flex-shrink-0"
                 onsubmit="return confirm('Delete ALL custom categories and their rules? Affected transactions will become unclassified.')">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline-danger btn-sm">Delete Categories</button>
+            <button type="submit" class="btn btn-outline-danger btn-sm" style="width: 10rem;">Delete Categories</button>
           </form>
+        </div>
+        {% endif %}
+
+        {% if txn_count > 0 %}
+        <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+          <div>
+            <p class="mb-0 fw-bold">Delete all transactions</p>
+            <p class="text-muted small mb-0">Remove all statements, transactions and transfer pairs. Accounts, categories and rules are kept.</p>
+          </div>
+          <button type="button" class="btn btn-outline-danger btn-sm ms-3 flex-shrink-0" data-bs-toggle="modal" data-bs-target="#deleteTxnModal" style="width: 10rem;">Delete Transactions</button>
         </div>
         {% endif %}
 
         <div class="d-flex justify-content-between align-items-center">
           <div>
             <p class="mb-0 fw-bold">Delete all data</p>
-            <p class="text-muted small mb-0">Permanently remove all accounts, statements, transactions, categories, and rules. This cannot be undone.</p>
+            <p class="text-muted small mb-0">Permanently remove all accounts, statements, transactions, categories, and rules (including V2 categories and rules). This cannot be undone.</p>
           </div>
-          <button type="button" class="btn btn-outline-danger ms-3 flex-shrink-0" data-bs-toggle="modal" data-bs-target="#purgeModal">Delete All Data</button>
+          <button type="button" class="btn btn-outline-danger btn-sm ms-3 flex-shrink-0" data-bs-toggle="modal" data-bs-target="#purgeModal" style="width: 10rem;">Delete All Data</button>
         </div>
 
       </div>
     </div>
     {% endif %}
+
+    <!-- Delete Transactions Modal -->
+    <div class="modal fade" id="deleteTxnModal" tabindex="-1">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+          <form method="post" action="{% url 'core:delete_all_transactions' %}">
+            {% csrf_token %}
+            <div class="modal-header">
+              <h6 class="modal-title text-danger">Confirm Deletion</h6>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <p class="small">This will permanently delete <strong>{{ txn_count }}</strong> transaction{{ txn_count|pluralize }}, {{ stmt_count }} statement{{ stmt_count|pluralize }} and all transfer pairs. Accounts, categories and rules are kept.</p>
+              <label for="delete-txn-confirm" class="form-label small fw-bold">Type <code>DELETE TRANSACTIONS</code> to confirm:</label>
+              <input type="text" name="confirm" id="delete-txn-confirm" class="form-control form-control-sm" autocomplete="off" required>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-sm btn-danger">Delete Transactions</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <!-- Purge Confirmation Modal -->
     <div class="modal fade" id="purgeModal" tabindex="-1">

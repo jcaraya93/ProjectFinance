@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 from ..models import (
     Transaction, LogicalTransaction, RawTransaction, Category,
     ClassificationRule, CurrencyLedger, Account, CreditAccount, DebitAccount,
+    CategoryNode, ClassificationRuleV2, StatementImport, TransactionPair,
 )
 from ..ratelimit import ratelimit
 from ._helpers import _safe_next_url
@@ -24,6 +25,7 @@ ALLOWED_UPLOAD_EXTENSIONS = {'.csv'}
 __all__ = [
     'statement_list',
     'purge_all_data',
+    'delete_all_transactions',
     'upload',
     'upload_file_api',
 ]
@@ -151,13 +153,46 @@ def purge_all_data(request):
         messages.error(request, 'Purge cancelled — confirmation text did not match.')
         return redirect('core:account_page')
 
-    ClassificationRule.objects.filter(user=request.user).delete()
-    Account.objects.filter(user=request.user).delete()
-    LogicalTransaction.objects.filter(user=request.user).delete()
-    RawTransaction.objects.filter(user=request.user).delete()
-    Category.objects.filter(user=request.user).exclude(name=Category.UNCLASSIFIED_NAME).delete()
+    user = request.user
+    ClassificationRule.objects.filter(user=user).delete()
+    ClassificationRuleV2.objects.filter(user=user).delete()
+    _delete_transaction_data(user)
+    Account.objects.filter(user=user).delete()
+    Category.objects.filter(user=user).exclude(name=Category.UNCLASSIFIED_NAME).delete()
+    _delete_category_nodes(user)
 
     messages.success(request, 'All data has been deleted.')
+    return redirect('core:account_page')
+
+
+def _delete_transaction_data(user):
+    """Delete pairs, transactions, ledgers and statements for the user. Returns the transaction count."""
+    txn_count = LogicalTransaction.objects.filter(user=user).count()
+    TransactionPair.objects.filter(user=user).delete()
+    LogicalTransaction.objects.filter(user=user).delete()
+    RawTransaction.objects.filter(user=user).delete()
+    CurrencyLedger.objects.filter(user=user).delete()
+    StatementImport.objects.filter(user=user).delete()
+    return txn_count
+
+
+def _delete_category_nodes(user):
+    """Delete V2 categories, leaves first because the parent FK is PROTECT."""
+    nodes = CategoryNode.objects.filter(user=user)
+    while nodes.exists():
+        nodes.filter(children__isnull=True).delete()
+
+
+@login_required
+@require_POST
+def delete_all_transactions(request):
+    """Delete all statements, transactions and their pairs. Accounts, categories and rules are kept."""
+    if request.POST.get('confirm', '') != 'DELETE TRANSACTIONS':
+        messages.error(request, 'Deletion cancelled — confirmation text did not match.')
+        return redirect('core:account_page')
+
+    count = _delete_transaction_data(request.user)
+    messages.success(request, f'Deleted {count} transactions and all statements.')
     return redirect('core:account_page')
 
 

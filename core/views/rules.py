@@ -5,11 +5,11 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.utils.http import urlencode
 
-from ..models import Transaction, Category, CategoryGroup, ClassificationRule
+from ..models import Transaction, Category, CategoryGroup, CategoryNode, ClassificationRuleV2
 from ..forms import YamlRuleForm
 from ..ratelimit import ratelimit
 from ..services.yaml_classifier import reload_rules as _reload_yaml
-from ._helpers import _safe_next_url, get_category_groups
+from .transactions import _unclassified_node
 
 __all__ = [
     'delete_all_rules',
@@ -23,16 +23,16 @@ __all__ = [
 @login_required
 @require_POST
 def delete_all_rules(request):
-    """Delete all classification rules. Resets rule-classified transactions to unclassified."""
-    unclassified = Category.get_unclassified(request.user)
-    rules = ClassificationRule.objects.filter(user=request.user)
+    """Delete all V2 rules. Rule-classified transactions become unclassified (V2 fields only)."""
+    CategoryNode.ensure_protected(request.user)
+    unclassified = _unclassified_node(request.user)
+    rules = ClassificationRuleV2.objects.filter(user=request.user)
     rule_count = rules.count()
 
-    Transaction.objects.filter(user=request.user, classification_method='rule').update(
-        category=unclassified, matched_rule=None, classification_method='unclassified'
+    Transaction.objects.filter(user=request.user, classification_method_v2='rule').update(
+        category_v2=unclassified, matched_rule_v2=None, classification_method_v2='unclassified'
     )
     rules.delete()
-    _reload_yaml()
 
     messages.success(request, f'Deleted {rule_count} rules. Affected transactions moved to Unclassified.')
     return redirect('core:account_page')
@@ -114,24 +114,29 @@ def clear_classifications(request):
 @login_required
 @require_POST
 def yaml_category_delete_all(request):
-    """Delete all non-protected categories and their rules. Transactions become unclassified."""
-    unclassified = Category.get_unclassified(request.user)
+    """Delete all non-protected V2 categories and their rules. Transactions become unclassified."""
+    unclassified = _unclassified_node(request.user)
     group_slug = request.POST.get('group', '').strip()
 
-    deletable = Category.objects.filter(user=request.user).exclude(name__in=Category.PROTECTED_NAMES)
+    deletable = CategoryNode.objects.filter(user=request.user).exclude(
+        parent__isnull=True, name=CategoryNode.UNCLASSIFIED_NAME,
+    )
     if group_slug:
         deletable = deletable.filter(group__slug=group_slug)
+    ids = list(deletable.values_list('pk', flat=True))
 
-    cat_count = deletable.count()
-    rule_count = ClassificationRule.objects.filter(user=request.user, category__in=deletable).count()
+    cat_count = len(ids)
+    rule_count = ClassificationRuleV2.objects.filter(user=request.user, category_id__in=ids).count()
 
-    # Move all affected transactions to Unclassified
-    Transaction.objects.filter(user=request.user, category__in=deletable).update(
-        category=unclassified, matched_rule=None, classification_method='unclassified'
+    Transaction.objects.filter(user=request.user, category_v2_id__in=ids).update(
+        category_v2=unclassified, matched_rule_v2=None, classification_method_v2='unclassified'
     )
-    deletable.delete()  # Cascades to ClassificationRule
+    # Parent FK is PROTECT, so delete from the leaves up
+    remaining = CategoryNode.objects.filter(pk__in=ids)
+    while remaining.exists():
+        remaining.filter(children__isnull=True).delete()
 
-    scope= f'"{dict(CategoryGroup.SLUG_CHOICES).get(group_slug, group_slug)}" ' if group_slug else ''
+    scope = f'"{dict(CategoryGroup.SLUG_CHOICES).get(group_slug, group_slug)}" ' if group_slug else ''
     messages.success(
         request,
         f'Deleted {cat_count} {scope}categories and {rule_count} rules. Affected transactions moved to Unclassified.'

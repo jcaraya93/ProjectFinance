@@ -84,3 +84,36 @@ class TestPurge:
         resp = auth_client.post(reverse('core:purge_all_data'), {'confirm': 'DELETE ALL'})
         assert resp.status_code == 302
         assert Account.objects.filter(user=user).count() == 0
+
+    def test_purge_also_removes_v2_data(self, auth_client, sample_data, category_groups):
+        from core.models import CategoryNode, ClassificationRuleV2, CategoryGroup
+        user = sample_data['account'].user
+        parent = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'))
+        kid = CategoryNode.objects.create(name='Snacks', user=user, group=parent.group, parent=parent)
+        ClassificationRuleV2.objects.create(category=kid, user=user, description='X')
+        auth_client.post(reverse('core:purge_all_data'), {'confirm': 'DELETE ALL'})
+        assert not CategoryNode.objects.filter(user=user).exists()
+        assert not ClassificationRuleV2.objects.filter(user=user).exists()
+
+
+class TestDeleteAllTransactions:
+    def test_requires_confirmation(self, auth_client, sample_data):
+        from core.models import LogicalTransaction
+        user = sample_data['account'].user
+        auth_client.post(reverse('core:delete_all_transactions'), {'confirm': 'nope'})
+        assert LogicalTransaction.objects.filter(user=user).exists()
+
+    def test_deletes_transactions_keeps_accounts_categories_rules(self, auth_client, sample_data):
+        from core.models import (
+            LogicalTransaction, RawTransaction, StatementImport, CurrencyLedger,
+            Category, ClassificationRule,
+        )
+        user = sample_data['account'].user
+        cats, rules = Category.objects.filter(user=user).count(), ClassificationRule.objects.filter(user=user).count()
+        resp = auth_client.post(reverse('core:delete_all_transactions'), {'confirm': 'DELETE TRANSACTIONS'})
+        assert resp.status_code == 302
+        for model in (LogicalTransaction, RawTransaction, StatementImport, CurrencyLedger):
+            assert not model.objects.filter(user=user).exists()
+        assert Account.objects.filter(user=user).exists()
+        assert Category.objects.filter(user=user).count() == cats
+        assert ClassificationRule.objects.filter(user=user).count() == rules

@@ -97,3 +97,51 @@ class TestRulesV2Views:
 
     def test_requires_login(self, client, db):
         assert client.get(reverse('core:rules_v2_list')).status_code == 302
+
+import pytest as _pytest
+
+
+@_pytest.mark.django_db
+class TestAccountDeleteAllV2:
+    def _setup(self, user):
+        food = make_node(user, 'Food')
+        kid = CategoryNode.objects.create(name='Snacks', user=user, group=food.group, parent=food)
+        rule = ClassificationRuleV2.objects.create(category=kid, user=user, description='CANDY')
+        return food, kid, rule
+
+    def _txn(self, user, node, rule, method):
+        from core.models import LogicalTransaction
+        t = LogicalTransaction.objects.filter(user=user).first()
+        t.category_v2, t.matched_rule_v2, t.classification_method_v2 = node, rule, method
+        t.save()
+        return t
+
+    def test_delete_all_rules_only_touches_v2(self, auth_client, user, sample_data, category_groups):
+        food, kid, rule = self._setup(user)
+        t = self._txn(user, kid, rule, 'rule')
+        v1 = (t.category_id, t.classification_method)
+        auth_client.post(reverse('core:delete_all_rules'))
+        t.refresh_from_db()
+        assert not ClassificationRuleV2.objects.filter(user=user).exists()
+        assert ClassificationRule.objects.filter(user=user).exists()
+        assert t.classification_method_v2 == 'unclassified' and t.category_v2.name == 'Unclassified'
+        assert (t.category_id, t.classification_method) == v1
+
+    def test_delete_all_categories_removes_tree_keeps_protected(self, auth_client, user, sample_data, category_groups):
+        food, kid, rule = self._setup(user)
+        t = self._txn(user, kid, rule, 'manual')
+        v1_count = Category.objects.filter(user=user).count()
+        auth_client.post(reverse('core:yaml_category_delete_all'))
+        t.refresh_from_db()
+        names = set(CategoryNode.objects.filter(user=user).values_list('name', flat=True))
+        assert names == {'Unclassified'}
+        assert not ClassificationRuleV2.objects.filter(user=user).exists()
+        assert t.category_v2.name == 'Unclassified' and t.classification_method_v2 == 'unclassified'
+        assert Category.objects.filter(user=user).count() == v1_count
+
+    def test_delete_all_categories_single_group(self, auth_client, user, sample_data, category_groups):
+        food, kid, rule = self._setup(user)
+        income = make_node(user, 'Salary', 'income')
+        auth_client.post(reverse('core:yaml_category_delete_all'), {'group': 'expense'})
+        assert CategoryNode.objects.filter(pk=income.pk).exists()
+        assert not CategoryNode.objects.filter(pk__in=[food.pk, kid.pk]).exists()
