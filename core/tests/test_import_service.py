@@ -122,3 +122,27 @@ class TestImportEdgeCases:
         result = import_statement('', 'empty.csv', 'hash-empty', user)
         assert result.skipped
         assert result.skip_reason == 'no_transactions'
+
+
+@pytest.mark.django_db
+@patch('core.services.import_service.fetch_rates')
+class TestImportV2Classification:
+    def test_new_transactions_get_v2_category_and_rules(self, mock_fetch, user, exchange_rates, credit_csv, category_groups):
+        from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2, LogicalTransaction
+        first = import_statement(credit_csv, 'a.csv', 'hash-v2-a', user)
+        assert first.transaction_count > 0
+        sample = LogicalTransaction.objects.filter(user=user).first()
+        node = CategoryNode.objects.create(name='Test', user=user, group=CategoryGroup.get_group('expense'))
+        ClassificationRuleV2.objects.create(category=node, user=user, description=sample.description)
+        LogicalTransaction.objects.filter(user=user).delete()
+        from core.models import StatementImport
+        StatementImport.objects.filter(user=user).delete()
+
+        import_statement(credit_csv, 'b.csv', 'hash-v2-b', user)
+        txns = LogicalTransaction.objects.filter(user=user)
+        assert not txns.filter(category_v2__isnull=True).exists()
+        matched = txns.filter(description=sample.description)
+        assert matched.exists()
+        assert all(t.category_v2 == node and t.classification_method_v2 == 'rule' for t in matched)
+        others = txns.exclude(description=sample.description)
+        assert all(t.category_v2.name == 'Unclassified' and t.classification_method_v2 == 'unclassified' for t in others)

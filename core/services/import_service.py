@@ -15,10 +15,11 @@ from django.db import transaction
 
 from core.models import (
     StatementImport, CurrencyLedger, RawTransaction, LogicalTransaction,
-    Category, CreditAccount, DebitAccount, ExchangeRate,
+    Category, CategoryGroup, CategoryNode, CreditAccount, DebitAccount, ExchangeRate,
 )
 from core.parsers.credit_card import CreditCardParser
 from core.parsers.debit_card import DebitCardParser
+from core.services.rules_v2 import classify_transactions_v2
 from core.services.exchange_rates import fetch_rates, get_rate
 from core.instrumentation import (
     tracer, transactions_imported, upload_duration,
@@ -164,6 +165,10 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
             account_type = account.account_type
             converted = 0
             unclassified = Category.get_unclassified(user)
+            CategoryNode.ensure_protected(user)
+            unclassified_v2 = CategoryNode.objects.get(
+                user=user, group__slug=CategoryGroup.UNCLASSIFIED, name=CategoryNode.UNCLASSIFIED_NAME,
+            )
 
             for pl in parsed.ledgers:
                 ledger = CurrencyLedger.objects.create(
@@ -191,6 +196,7 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
                         raw_transaction=raw, user=user,
                         date=raw.date, description=raw.description,
                         amount=raw.normalized_amount, category=unclassified,
+                        category_v2=unclassified_v2,
                     )
 
                     if _convert_in_memory(txn, pl.currency, rates_cache):
@@ -200,6 +206,9 @@ def import_statement(content: str, filename: str, file_hash: str, user) -> Impor
 
                 LogicalTransaction.objects.bulk_create(logical_objects)
 
+            classify_transactions_v2(
+                user, queryset=LogicalTransaction.objects.filter(raw_transaction__ledger__statement_import=stmt),
+            )
             result.transaction_count = txn_count
             result.converted_count = converted
 

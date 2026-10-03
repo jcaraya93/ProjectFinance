@@ -145,3 +145,36 @@ class TestAccountDeleteAllV2:
         auth_client.post(reverse('core:yaml_category_delete_all'), {'group': 'expense'})
         assert CategoryNode.objects.filter(pk=income.pk).exists()
         assert not CategoryNode.objects.filter(pk__in=[food.pk, kid.pk]).exists()
+
+
+@_pytest.mark.django_db
+class TestTransactionsPageClassifyActions:
+    def _prep(self, user):
+        from core.models import LogicalTransaction
+        node = make_node(user, 'Food')
+        txns = list(LogicalTransaction.objects.filter(user=user).order_by('pk'))
+        ClassificationRuleV2.objects.create(category=node, user=user, description=txns[0].description)
+        return node, txns
+
+    def test_reclassify_all_keeps_manual_and_v1(self, auth_client, user, sample_data, category_groups):
+        node, txns = self._prep(user)
+        manual = txns[-1]
+        manual.category_v2, manual.classification_method_v2 = node, 'manual'
+        manual.save()
+        v1 = [(t.pk, t.category_id, t.classification_method) for t in txns]
+        auth_client.post(reverse('core:reclassify_all'))
+        first = type(txns[0]).objects.get(pk=txns[0].pk)
+        assert first.category_v2 == node and first.classification_method_v2 == 'rule'
+        manual.refresh_from_db()
+        assert manual.classification_method_v2 == 'manual'
+        now = [(t.pk, t.category_id, t.classification_method) for t in type(txns[0]).objects.filter(user=user).order_by('pk')]
+        assert now == v1
+
+    def test_classify_unclassified_and_clear(self, auth_client, user, sample_data, category_groups):
+        node, txns = self._prep(user)
+        auth_client.post(reverse('core:classify_unclassified'))
+        first = type(txns[0]).objects.get(pk=txns[0].pk)
+        assert first.category_v2 == node
+        auth_client.post(reverse('core:clear_classifications'), {'method': 'rule'})
+        first.refresh_from_db()
+        assert first.category_v2.name == 'Unclassified' and first.classification_method_v2 == 'unclassified'

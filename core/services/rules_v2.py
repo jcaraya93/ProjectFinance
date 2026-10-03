@@ -45,17 +45,24 @@ def find_matching_rule(user, transaction):
     return _best_rule(_load_flats(user), transaction)
 
 
-def classify_transactions_v2(user, dry_run=False):
+def classify_transactions_v2(user, dry_run=False, queryset=None, only_unclassified=False):
     """Assign V2 categories to a user's transactions using V2 rules.
 
     Writes only category_v2, matched_rule_v2 and classification_method_v2; V1 fields are never
     touched. Transactions whose V2 method is 'manual' are skipped, and transactions that match no
     rule are left as they are. Returns (total, changed, skipped_manual, unmatched).
+
+    queryset limits the transactions considered (still restricted to the user);
+    only_unclassified skips anything whose V2 method is not 'unclassified'.
     """
     flats = _load_flats(user)
-    queryset = LogicalTransaction.objects.filter(user=user).select_related(
+    if queryset is None:
+        queryset = LogicalTransaction.objects.all()
+    queryset = queryset.filter(user=user).select_related(
         'raw_transaction__ledger__statement_import__account'
     )
+    if only_unclassified:
+        queryset = queryset.filter(classification_method_v2='unclassified')
     total = changed = skipped_manual = unmatched = 0
     to_update = []
     for txn in queryset.iterator(chunk_size=500):
