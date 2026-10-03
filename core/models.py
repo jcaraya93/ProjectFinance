@@ -43,6 +43,7 @@ class User(AbstractBaseUser, PermissionsMixin):
                 user=self,
                 defaults={'color': '#adb5bd'},
             )
+        CategoryNode.ensure_protected(self)
 
 
 class CategoryGroup(models.Model):
@@ -109,6 +110,9 @@ class Category(models.Model):
 
 class CategoryNode(models.Model):
     """Hierarchical category kept separate from the active flat Category model."""
+    UNCLASSIFIED_NAME = 'Unclassified'
+    UNCLASSIFIED_COLOR = '#adb5bd'
+
     name = models.CharField(max_length=100)
     color = models.CharField(max_length=7, default='#6c757d', help_text='Hex color for charts')
     group = models.ForeignKey(CategoryGroup, on_delete=models.PROTECT, related_name='category_nodes')
@@ -131,16 +135,36 @@ class CategoryNode(models.Model):
         return self.name
 
     @property
+    def is_protected(self):
+        # Names are unique per user and group, so this identifies the one protected node per group.
+        return self.name == self.UNCLASSIFIED_NAME
+
+    @classmethod
+    def ensure_protected(cls, user):
+        """Create the protected top-level Unclassified node in every group for the user."""
+        for slug, _ in CategoryGroup.SLUG_CHOICES:
+            cls.objects.get_or_create(
+                name=cls.UNCLASSIFIED_NAME,
+                group=CategoryGroup.get_group(slug),
+                user=user,
+                defaults={'color': cls.UNCLASSIFIED_COLOR},
+            )
+
+    @property
     def is_leaf(self):
         return not self.children.exists() if self.pk else True
 
     def clean(self):
         super().clean()
+        if self.is_protected and self.parent_id:
+            raise ValidationError({'parent': 'The Unclassified category must stay at the top level.'})
         if not self.parent_id:
             return
 
         if self.parent_id == self.pk:
             raise ValidationError({'parent': 'A category cannot be its own parent.'})
+        if self.parent.is_protected:
+            raise ValidationError({'parent': 'Nothing can be placed under the Unclassified category.'})
         if self.parent.user_id != self.user_id or self.parent.group_id != self.group_id:
             raise ValidationError({'parent': 'Parent and child must belong to the same user and group.'})
 

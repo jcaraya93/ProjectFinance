@@ -26,7 +26,7 @@
     {% elif grp.slug == 'income' %}<span class="badge bg-success">{{ grp.name }}</span>
     {% else %}<span class="badge bg-info">{{ grp.name }}</span>{% endif %}
     <div class="d-flex align-items-center gap-2">
-      {% if grp.rows %}
+      {% if grp.has_editable %}
       <div class="cat-v2-bar d-none align-items-center gap-2">
         <span class="small text-muted"><span class="cat-v2-bar-count">0</span> selected<span class="cat-v2-bar-where"></span></span>
         <button type="button" class="btn btn-sm btn-primary cat-v2-move-btn">Move</button>
@@ -35,7 +35,7 @@
         <button type="button" class="btn btn-sm btn-link text-decoration-none cat-v2-clear-btn">Clear</button>
       </div>
       {% endif %}
-      <button type="button" class="btn btn-sm btn-outline-primary cat-v2-add" data-group="{{ grp.slug }}">+ Add Category</button>
+      {% if grp.can_add %}<button type="button" class="btn btn-sm btn-outline-primary cat-v2-add" data-group="{{ grp.slug }}">+ Add Category</button>{% endif %}
     </div>
   </div>
   <div class="table-responsive">
@@ -50,7 +50,7 @@
       <thead class="table-light">
         <tr>
           <th>
-            {% if grp.rows %}<input type="checkbox" class="form-check-input cat-v2-select-all" aria-label="Select all siblings" title="Select all at this level">{% endif %}
+            {% if grp.has_editable %}<input type="checkbox" class="form-check-input cat-v2-select-all" aria-label="Select all siblings" title="Select all at this level">{% endif %}
           </th>
           <th>Name</th>
           <th>Color</th>
@@ -60,6 +60,18 @@
       </thead>
       <tbody>
         {% for row in grp.rows %}
+        {% if row.is_protected %}
+        <tr class="cat-v2-protected" data-parent="">
+          <td></td>
+          <td style="padding-left: {{ row.padding }}px;">
+            <span class="text-muted">{{ row.node.name }}</span>
+            <span class="badge bg-light text-muted border ms-2" title="Protected: cannot be edited, moved or deleted">&#128274; Protected</span>
+          </td>
+          <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ row.node.color }};"></span></td>
+          <td></td>
+          <td></td>
+        </tr>
+        {% else %}
         <tr class="cat-v2-row"
             data-id="{{ row.node.pk }}" data-name="{{ row.node.name }}" data-color="{{ row.node.color }}"
             data-group="{{ grp.slug }}" data-parent="{{ row.node.parent_id|default_if_none:'' }}"
@@ -88,6 +100,7 @@
             </div>
           </td>
         </tr>
+        {% endif %}
         {% empty %}
         <tr>
           <td colspan="5" class="text-center text-muted py-3">No categories in this group.</td>

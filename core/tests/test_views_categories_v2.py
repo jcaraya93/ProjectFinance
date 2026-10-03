@@ -228,6 +228,40 @@ class TestCategoryV2Move:
         assert a.parent is None and target.parent is None
 
 
+class TestCategoryV2Protected:
+    def test_list_creates_protected_node_in_every_group(self, auth_client, user, category_groups):
+        resp = auth_client.get(reverse('core:category_v2_list'))
+        assert resp.status_code == 200
+        names = CategoryNode.objects.filter(user=user, name='Unclassified')
+        assert names.count() == 4
+        assert all(n.parent_id is None for n in names)
+        assert [g['slug'] for g in resp.context['groups']][-1] == 'unclassified'
+
+    def test_protected_node_cannot_be_edited_moved_grouped_or_deleted(self, auth_client, user, category_groups):
+        CategoryNode.ensure_protected(user)
+        prot = CategoryNode.objects.get(user=user, name='Unclassified', group__slug='expense')
+        other = make_node(user, 'Food')
+        auth_client.post(reverse('core:category_v2_save'), {'id': prot.pk, 'name': 'X', 'color': '#111111'})
+        auth_client.post(reverse('core:category_v2_move'), {'ids': [prot.pk], 'parent': other.pk})
+        auth_client.post(reverse('core:category_v2_group'), {'ids': [prot.pk, other.pk], 'name': 'G'})
+        auth_client.post(reverse('core:category_v2_delete'), {'ids': [prot.pk]})
+        prot.refresh_from_db()
+        assert prot.name == 'Unclassified' and prot.parent_id is None
+        assert not CategoryNode.objects.filter(name='G').exists()
+
+    def test_nothing_can_go_under_protected_or_use_reserved_name(self, auth_client, user, category_groups):
+        CategoryNode.ensure_protected(user)
+        prot = CategoryNode.objects.get(user=user, name='Unclassified', group__slug='expense')
+        mover = make_node(user, 'Food')
+        auth_client.post(reverse('core:category_v2_move'), {'ids': [mover.pk], 'parent': prot.pk})
+        auth_client.post(reverse('core:category_v2_save'), {'name': 'Child', 'parent': prot.pk, 'group': 'expense'})
+        auth_client.post(reverse('core:category_v2_save'), {'name': 'Unclassified', 'group': 'expense'})
+        mover.refresh_from_db()
+        assert mover.parent_id is None
+        assert not CategoryNode.objects.filter(name='Child').exists()
+        assert CategoryNode.objects.filter(user=user, name='Unclassified', group__slug='expense').count() == 1
+
+
 class TestCategoryV2ImportV1:
     def test_imports_v1_as_top_level_and_is_idempotent(self, auth_client, user, category_groups):
         from core.models import Category, CategoryGroup
@@ -246,7 +280,7 @@ class TestCategoryV2ImportV1:
         rent = CategoryNode.objects.get(user=user, name='Rent')
         assert rent.parent is None and rent.color == '#112233' and rent.group == expense
         assert CategoryNode.objects.filter(user=user, name='Existing').count() == 1
-        assert not CategoryNode.objects.filter(name='Unclassified').exists()
+        assert CategoryNode.objects.filter(user=user, name='Unclassified').count() == 4
         assert Category.objects.filter(user=user).count() == v1_count
 
 

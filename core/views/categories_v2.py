@@ -31,7 +31,7 @@ def _build_tree(nodes):
     rows = []
 
     def walk(parent_id, depth, ancestors):
-        for node in sorted(children.get(parent_id, []), key=lambda n: n.name.lower()):
+        for node in sorted(children.get(parent_id, []), key=lambda n: (n.is_protected, n.name.lower())):
             chain = ancestors + [node.pk]
             rows.append({
                 'node': node,
@@ -42,6 +42,7 @@ def _build_tree(nodes):
                 'is_leaf': node.pk not in children,
                 'child_count': len(children.get(node.pk, [])),
                 'ancestors': ','.join(str(pk) for pk in chain),
+                'is_protected': node.is_protected,
             })
             walk(node.pk, depth + 1, chain)
 
@@ -52,6 +53,7 @@ def _build_tree(nodes):
 @login_required
 def category_v2_list(request):
     """Tree view of the user's hierarchical categories, grouped by CategoryGroup."""
+    CategoryNode.ensure_protected(request.user)
     nodes = list(CategoryNode.objects.filter(user=request.user).select_related('group'))
     rows_by_group = {}
     for node in nodes:
@@ -62,16 +64,19 @@ def category_v2_list(request):
         rows_by_group[row['node'].group_id].append(row)
 
     groups = []
-    for grp in CategoryGroup.objects.exclude(slug=CategoryGroup.UNCLASSIFIED).order_by('name'):
+    for grp in CategoryGroup.objects.order_by('name'):
+        rows = rows_by_group.get(grp.pk, [])
         groups.append({
             'slug': grp.slug,
             'name': grp.name,
-            'rows': rows_by_group.get(grp.pk, []),
+            'rows': rows,
+            'has_editable': any(not r['is_protected'] for r in rows),
+            'can_add': grp.slug != CategoryGroup.UNCLASSIFIED,
         })
 
     return render(request, 'core/category_v2_list.html', {
         'groups': groups,
-        'parent_options': all_rows,
+        'parent_options': [r for r in all_rows if not r['is_protected']],
     })
 
 
@@ -87,6 +92,9 @@ def category_v2_save(request):
     if not name:
         messages.error(request, 'Category name is required.')
         return redirect('core:category_v2_list')
+    if name == CategoryNode.UNCLASSIFIED_NAME:
+        messages.error(request, '"Unclassified" is a reserved category name.')
+        return redirect('core:category_v2_list')
     if len(color) != HEX_COLOR_LENGTH or not color.startswith('#'):
         messages.error(request, 'Color must be a hex value like #6c757d.')
         return redirect('core:category_v2_list')
@@ -97,6 +105,9 @@ def category_v2_save(request):
 
     if node_id:
         node = get_object_or_404(CategoryNode, pk=node_id, user=request.user)
+        if node.is_protected:
+            messages.error(request, 'The Unclassified category is protected and cannot be edited.')
+            return redirect('core:category_v2_list')
         node.name, node.color, node.parent = name, color, parent
         # Children must stay in the same group as their parent.
         if parent:
@@ -133,6 +144,9 @@ def category_v2_group(request):
     if not name:
         messages.error(request, 'Parent name is required.')
         return redirect('core:category_v2_list')
+    if name == CategoryNode.UNCLASSIFIED_NAME:
+        messages.error(request, '"Unclassified" is a reserved category name.')
+        return redirect('core:category_v2_list')
     if len(color) != HEX_COLOR_LENGTH or not color.startswith('#'):
         messages.error(request, 'Color must be a hex value like #6c757d.')
         return redirect('core:category_v2_list')
@@ -140,6 +154,9 @@ def category_v2_group(request):
     selected = list(CategoryNode.objects.filter(user=request.user, pk__in=ids))
     if len(selected) < 2 or len(selected) != len(set(ids)):
         messages.error(request, 'Select at least two categories to group.')
+        return redirect('core:category_v2_list')
+    if any(n.is_protected for n in selected):
+        messages.error(request, 'The Unclassified category is protected and cannot be grouped.')
         return redirect('core:category_v2_list')
     if len({(n.group_id, n.parent_id) for n in selected}) != 1:
         messages.error(request, 'Selected categories must share the same group and parent.')
@@ -173,6 +190,9 @@ def category_v2_move(request):
     if not selected or len(selected) != len(set(ids)):
         messages.error(request, 'Select at least one category to move.')
         return redirect('core:category_v2_list')
+    if any(n.is_protected for n in selected):
+        messages.error(request, 'The Unclassified category is protected and cannot be moved.')
+        return redirect('core:category_v2_list')
 
     parent = None
     if parent_id:
@@ -204,6 +224,7 @@ def category_v2_move(request):
 @require_POST
 def category_v2_import_v1(request):
     """Copy the user's V1 categories into V2 as top-level nodes. Idempotent; V1 data is untouched."""
+    CategoryNode.ensure_protected(request.user)
     existing = set(
         CategoryNode.objects.filter(user=request.user).values_list('group_id', 'name')
     )
@@ -233,6 +254,11 @@ def category_v2_delete(request):
     nodes = list(CategoryNode.objects.filter(pk__in=[i for i in ids if i and i.isdigit()], user=request.user))
     if not nodes or len(nodes) != len(set(ids)):
         raise Http404('Category not found')
+
+    protected = [n.name for n in nodes if n.is_protected]
+    if protected:
+        messages.error(request, 'The Unclassified category is protected and cannot be deleted.')
+        return redirect('core:category_v2_list')
 
     with_children = [n.name for n in nodes if n.children.exists()]
     if with_children:
