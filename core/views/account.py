@@ -25,19 +25,16 @@ MAX_IMPORT_SIZE = 50 * 1024 * 1024  # 50 MB
 def account_page(request):
     """Render the account management page with export/import controls."""
     from ..models import (
-        Account, ClassificationRule, Category, StatementImport,
-        LogicalTransaction, CategoryNode, ClassificationRuleV2,
+        Account, StatementImport, LogicalTransaction, CategoryNode, ClassificationRuleV2,
     )
 
     acct_count = Account.objects.filter(user=request.user).count()
     stmt_count = StatementImport.objects.filter(user=request.user).count()
     txn_count = LogicalTransaction.objects.filter(user=request.user).count()
-    cat_count = Category.objects.filter(user=request.user).exclude(name=Category.UNCLASSIFIED_NAME).count()
-    rule_count = ClassificationRule.objects.filter(user=request.user).count()
-    cat_v2_count = CategoryNode.objects.filter(user=request.user).exclude(
+    cat_count = CategoryNode.objects.filter(user=request.user).exclude(
         parent__isnull=True, name=CategoryNode.UNCLASSIFIED_NAME,
     ).count()
-    rule_v2_count = ClassificationRuleV2.objects.filter(user=request.user).count()
+    rule_count = ClassificationRuleV2.objects.filter(user=request.user).count()
 
     has_data = (acct_count + stmt_count + cat_count + rule_count) > 0
 
@@ -49,8 +46,6 @@ def account_page(request):
         'txn_count': txn_count,
         'cat_count': cat_count,
         'rule_count': rule_count,
-        'cat_v2_count': cat_v2_count,
-        'rule_v2_count': rule_v2_count,
     })
 
 

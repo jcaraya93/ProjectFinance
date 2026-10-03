@@ -8,17 +8,18 @@ import logging
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from core.models import (
-    User, UserPreference, CategoryGroup, Category, ClassificationRule,
+    User, UserPreference, CategoryGroup, Category, CategoryNode, ClassificationRuleV2,
     Account, CreditAccount, DebitAccount, StatementImport, CurrencyLedger,
     RawTransaction, LogicalTransaction, ExchangeRate,
 )
 
 logger = logging.getLogger(__name__)
 
-EXPORT_VERSION = 1
+EXPORT_VERSION = 2
 
 
 # ── helpers ───────────────────────────────────────────────────────────
@@ -59,18 +60,26 @@ def export_user_data(user):
     except UserPreference.DoesNotExist:
         pass
 
-    # Categories (skip the auto-created Default ones)
+    # Categories (hierarchical). Parents are always listed before their children.
+    nodes = list(CategoryNode.objects.filter(user=user).select_related('group', 'parent').order_by('group__slug', 'name'))
+    children = {}
+    for node in nodes:
+        children.setdefault(node.parent_id, []).append(node)
     categories = []
-    for cat in Category.objects.filter(user=user).select_related('group').order_by('group__slug', 'name'):
+    pending = list(reversed(children.get(None, [])))
+    while pending:
+        node = pending.pop()
         categories.append({
-            'name': cat.name,
-            'group_slug': cat.group.slug,
-            'color': cat.color,
+            'name': node.name,
+            'group_slug': node.group.slug,
+            'color': node.color,
+            'parent_name': node.parent.name if node.parent else None,
         })
+        pending.extend(reversed(children.get(node.pk, [])))
 
     # Classification rules
     rules = []
-    for rule in ClassificationRule.objects.filter(user=user).select_related('category__group'):
+    for rule in ClassificationRuleV2.objects.filter(user=user).select_related('category__group').order_by('pk'):
         r = {
             'category_name': rule.category.name,
             'category_group_slug': rule.category.group.slug,
@@ -148,10 +157,10 @@ def export_user_data(user):
                             'amount_crc': _dec(ltxn.amount_crc),
                             'amount_usd': _dec(ltxn.amount_usd),
                             'date': str(ltxn.date),
-                            'category_name': ltxn.category.name if ltxn.category else None,
-                            'category_group_slug': ltxn.category.group.slug if ltxn.category else None,
-                            'classification_method': ltxn.classification_method,
-                            'matched_rule_description': ltxn.matched_rule.description if ltxn.matched_rule else None,
+                            'category_name': ltxn.category_v2.name if ltxn.category_v2 else None,
+                            'category_group_slug': ltxn.category_v2.group.slug if ltxn.category_v2 else None,
+                            'classification_method': ltxn.classification_method_v2,
+                            'matched_rule_description': ltxn.matched_rule_v2.description if ltxn.matched_rule_v2 else None,
                         }
                         raw_data['logical_transactions'].append(ltxn_data)
 
@@ -202,10 +211,12 @@ class ImportError(Exception):
 
 def _check_user_is_fresh(user):
     """Raise ImportError if the user already has data beyond defaults."""
-    non_default_cats = Category.objects.filter(user=user).exclude(name=Category.UNCLASSIFIED_NAME).count()
-    if non_default_cats > 0:
+    custom_nodes = CategoryNode.objects.filter(user=user).exclude(
+        parent__isnull=True, name=CategoryNode.UNCLASSIFIED_NAME,
+    )
+    if custom_nodes.exists():
         raise ImportError('Cannot import: user already has custom categories.')
-    if ClassificationRule.objects.filter(user=user).exists():
+    if ClassificationRuleV2.objects.filter(user=user).exists():
         raise ImportError('Cannot import: user already has classification rules.')
     if Account.objects.filter(user=user).exists():
         raise ImportError('Cannot import: user already has accounts.')
@@ -249,32 +260,43 @@ def import_user_data(user, data):
             )
 
         # 2. Categories (ensure groups exist first)
-        cat_lookup = {}  # (group_slug, name) → Category
-        # Pre-populate with existing defaults
-        for cat in Category.objects.filter(user=user).select_related('group'):
-            cat_lookup[(cat.group.slug, cat.name)] = cat
+        CategoryNode.ensure_protected(user)
+        cat_lookup = {}  # (group_slug, name) → CategoryNode
+        for node in CategoryNode.objects.filter(user=user).select_related('group'):
+            cat_lookup[(node.group.slug, node.name)] = node
 
         for cat_data in data.get('categories', []):
             group = CategoryGroup.get_group(cat_data['group_slug'])
             key = (cat_data['group_slug'], cat_data['name'])
             if key in cat_lookup:
-                # Update color of existing default categories
+                # Update color of the protected Unclassified nodes
                 existing = cat_lookup[key]
                 if existing.color != cat_data.get('color', existing.color):
                     existing.color = cat_data['color']
                     existing.save(update_fields=['color'])
                 continue
-            cat = Category.objects.create(
-                name=cat_data['name'],
-                group=group,
-                user=user,
-                color=cat_data.get('color', '#6c757d'),
-            )
-            cat_lookup[key] = cat
+            parent = None
+            if cat_data.get('parent_name'):
+                parent = cat_lookup.get((cat_data['group_slug'], cat_data['parent_name']))
+                if parent is None:
+                    raise ImportError(
+                        f"Category {cat_data['name']} references unknown parent: {cat_data['parent_name']}"
+                    )
+            try:
+                node = CategoryNode.objects.create(
+                    name=cat_data['name'],
+                    group=group,
+                    user=user,
+                    parent=parent,
+                    color=cat_data.get('color', '#6c757d'),
+                )
+            except ValidationError as e:
+                raise ImportError(f"Invalid category {cat_data['name']}: {e}")
+            cat_lookup[key] = node
             counts['categories'] += 1
 
         # 3. Classification rules
-        rule_lookup = {}  # (group_slug, cat_name, description) → ClassificationRule
+        rule_lookup = {}  # (group_slug, cat_name, description) → ClassificationRuleV2
         for rule_data in data.get('classification_rules', []):
             cat_key = (rule_data['category_group_slug'], rule_data['category_name'])
             cat = cat_lookup.get(cat_key)
@@ -283,7 +305,7 @@ def import_user_data(user, data):
                     f"Rule references unknown category: {rule_data['category_name']} "
                     f"in group {rule_data['category_group_slug']}"
                 )
-            rule = ClassificationRule.objects.create(
+            rule = ClassificationRuleV2.objects.create(
                 category=cat,
                 user=user,
                 description=rule_data.get('description', ''),
@@ -366,8 +388,6 @@ def import_user_data(user, data):
                                 ltxn_cat = cat_lookup.get(
                                     (ltxn_data['category_group_slug'], ltxn_data['category_name'])
                                 )
-                            if ltxn_cat is None:
-                                ltxn_cat = Category.get_unclassified(user)
 
                             # Resolve matched rule
                             matched_rule = None
@@ -387,9 +407,11 @@ def import_user_data(user, data):
                                 amount=_to_decimal(ltxn_data['amount']),
                                 amount_crc=_to_decimal(ltxn_data.get('amount_crc')),
                                 amount_usd=_to_decimal(ltxn_data.get('amount_usd')),
-                                category=ltxn_cat,
-                                classification_method=ltxn_data.get('classification_method', 'unclassified'),
-                                matched_rule=matched_rule,
+                                # V1 category is not part of the backup; keep it at Unclassified
+                                category=Category.get_unclassified(user),
+                                category_v2=ltxn_cat,
+                                classification_method_v2=ltxn_data.get('classification_method', 'unclassified'),
+                                matched_rule_v2=matched_rule,
                             )
                             counts['logical_transactions'] += 1
 

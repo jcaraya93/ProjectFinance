@@ -7,7 +7,7 @@ import pytest
 from django.test import Client
 
 from core.models import (
-    User, UserPreference, CategoryGroup, Category, ClassificationRule,
+    User, UserPreference, CategoryGroup, Category, CategoryNode, ClassificationRuleV2,
     CreditAccount, DebitAccount, Account, StatementImport, CurrencyLedger,
     RawTransaction, LogicalTransaction, ExchangeRate,
 )
@@ -17,7 +17,6 @@ from core.services.user_data_io import (
 from core.tests.factories import (
     CreditAccountFactory, DebitAccountFactory, StatementImportFactory,
     CurrencyLedgerFactory, RawTransactionFactory, LogicalTransactionFactory,
-    ClassificationRuleFactory,
 )
 
 
@@ -29,10 +28,14 @@ def full_data(user, category_groups, expense_category, income_category, exchange
         user=user, defaults={'transaction_columns': {'1': True, '2': False}},
     )
 
-    # Rule
-    rule = ClassificationRuleFactory(
-        category=expense_category, user=user,
-        description='WALMART', detail='Grocery purchases',
+    # V2 categories: Food > Groceries, plus an income node
+    food = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'), color='#111111')
+    groceries = CategoryNode.objects.create(
+        name='Groceries', user=user, group=food.group, parent=food, color='#222222',
+    )
+    salary = CategoryNode.objects.create(name='Salary Main', user=user, group=CategoryGroup.get_group('income'))
+    rule = ClassificationRuleV2.objects.create(
+        category=groceries, user=user, description='WALMART', detail='Grocery purchases',
     )
 
     # Credit account + statement + ledger + transactions
@@ -48,7 +51,7 @@ def full_data(user, category_groups, expense_category, income_category, exchange
         raw_transaction=raw1, user=user,
         date=raw1.date, description=raw1.description, amount=raw1.amount,
         amount_crc=Decimal('-25000'), amount_usd=Decimal('-48.97'),
-        category=expense_category, classification_method='rule', matched_rule=rule,
+        category_v2=groceries, classification_method_v2='rule', matched_rule_v2=rule,
     )
 
     raw2 = RawTransactionFactory(
@@ -59,7 +62,7 @@ def full_data(user, category_groups, expense_category, income_category, exchange
         raw_transaction=raw2, user=user,
         date=raw2.date, description=raw2.description, amount=raw2.amount,
         amount_crc=Decimal('500000'), amount_usd=Decimal('979.43'),
-        category=income_category, classification_method='manual',
+        category_v2=salary, classification_method_v2='manual',
     )
 
     # Debit account
@@ -75,7 +78,7 @@ def full_data(user, category_groups, expense_category, income_category, exchange
         raw_transaction=raw3, user=user,
         date=raw3.date, description=raw3.description, amount=raw3.amount,
         amount_crc=Decimal('-7652'), amount_usd=Decimal('-14.99'),
-        category=expense_category, classification_method='unclassified',
+        category_v2=groceries, classification_method_v2='unclassified',
     )
 
     return {
@@ -90,7 +93,7 @@ class TestExport:
     def test_export_produces_valid_structure(self, user, full_data):
         data = export_user_data(user)
 
-        assert data['version'] == 1
+        assert data['version'] == 2
         assert 'exported_at' in data
         assert data['user']['email'] == 'test@example.com'
         assert data['preferences']['transaction_columns'] == {'1': True, '2': False}
@@ -100,8 +103,16 @@ class TestExport:
         cat_names = {c['name'] for c in data['categories']}
         assert 'Groceries' in cat_names
         assert 'Salary Main' in cat_names
-        # Default categories are also included
+        # Protected nodes are also included
         assert 'Unclassified' in cat_names
+
+    def test_export_category_hierarchy_parents_first(self, user, full_data):
+        cats = export_user_data(user)['categories']
+        names = [c['name'] for c in cats]
+        groceries = next(c for c in cats if c['name'] == 'Groceries')
+        assert groceries['parent_name'] == 'Food'
+        assert names.index('Food') < names.index('Groceries')
+        assert next(c for c in cats if c['name'] == 'Food')['parent_name'] is None
 
     def test_export_rules(self, user, full_data):
         data = export_user_data(user)
@@ -158,8 +169,9 @@ class TestImport:
         CurrencyLedger.objects.filter(user=user).delete()
         StatementImport.objects.filter(user=user).delete()
         Account.objects.filter(user=user).delete()
-        ClassificationRule.objects.filter(user=user).delete()
-        Category.objects.filter(user=user).exclude(name=Category.UNCLASSIFIED_NAME).delete()
+        ClassificationRuleV2.objects.filter(user=user).delete()
+        CategoryNode.objects.filter(user=user, parent__isnull=False).delete()
+        CategoryNode.objects.filter(user=user).exclude(name=CategoryNode.UNCLASSIFIED_NAME).delete()
         UserPreference.objects.filter(user=user).delete()
 
         return data
@@ -178,15 +190,18 @@ class TestImport:
         data = self._export_and_clear(user)
         import_user_data(user, data)
 
-        cat_names = set(Category.objects.filter(user=user).values_list('name', flat=True))
+        cat_names = set(CategoryNode.objects.filter(user=user).values_list('name', flat=True))
         assert 'Groceries' in cat_names
         assert 'Salary Main' in cat_names
+        groceries = CategoryNode.objects.get(user=user, name='Groceries')
+        assert groceries.parent.name == 'Food'
+        assert groceries.color == '#222222'
 
     def test_round_trip_preserves_rules(self, user, full_data):
         data = self._export_and_clear(user)
         import_user_data(user, data)
 
-        rules = ClassificationRule.objects.filter(user=user)
+        rules = ClassificationRuleV2.objects.filter(user=user)
         assert rules.count() == 1
         assert rules.first().description == 'WALMART'
         assert rules.first().category.name == 'Groceries'
@@ -208,9 +223,11 @@ class TestImport:
         assert ltxns.count() == 3
 
         walmart = ltxns.filter(description__contains='WALMART').first()
-        assert walmart.classification_method == 'rule'
-        assert walmart.matched_rule is not None
-        assert walmart.matched_rule.description == 'WALMART'
+        assert walmart.classification_method_v2 == 'rule'
+        assert walmart.matched_rule_v2 is not None
+        assert walmart.matched_rule_v2.description == 'WALMART'
+        assert walmart.category_v2.name == 'Groceries'
+        assert walmart.category.name == 'Unclassified'
         assert walmart.amount_crc == Decimal('-25000')
 
     def test_round_trip_preserves_metadata(self, user, full_data):
@@ -224,6 +241,17 @@ class TestImport:
     def test_import_rejects_wrong_version(self, user):
         data = {'version': 999}
         with pytest.raises(DataImportError, match='Unsupported export version'):
+            import_user_data(user, data)
+
+    def test_import_rejects_v1_backup(self, user):
+        with pytest.raises(DataImportError, match='Unsupported export version'):
+            import_user_data(user, {'version': 1})
+
+    def test_import_rejects_unknown_parent(self, user, category_groups):
+        data = {'version': 2, 'categories': [
+            {'name': 'Kid', 'group_slug': 'expense', 'color': '#000000', 'parent_name': 'Missing'},
+        ]}
+        with pytest.raises(DataImportError, match='unknown parent'):
             import_user_data(user, data)
 
     def test_import_rejects_non_fresh_user(self, user, full_data):
@@ -259,7 +287,7 @@ class TestAccountViews:
         assert 'attachment' in resp['Content-Disposition']
 
         data = json.loads(resp.content)
-        assert data['version'] == 1
+        assert data['version'] == 2
         assert data['user']['email'] == user.email
 
     def test_import_requires_post(self, auth_client):
