@@ -76,6 +76,9 @@ def transaction_list(request):
     search_in = request.GET.get('search_in', 'both')
     if search_in not in ('both', 'description', 'note'):
         search_in = 'both'
+    note_filter = request.GET.get('note', '')
+    if note_filter not in ('has', 'none'):
+        note_filter = ''
     meta_filters = request.GET.getlist('meta')
     cls_methods = request.GET.getlist('cls_method')
     split_filter = request.GET.get('split', '').strip()
@@ -200,6 +203,7 @@ def transaction_list(request):
         'metadata_filters': metadata_filters,
         'search': search,
         'search_in': search_in,
+        'note_filter': note_filter,
         'pagination_qs': pagination_qs,
         'filter_qs': filter_qs,
         'sort_col': sort_col,

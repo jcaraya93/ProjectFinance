@@ -107,6 +107,13 @@ class TestTransactionListFilters:
         resp = auth_client.get(reverse('core:transaction_list'), {'search': 'party', 'search_in': 'bogus'})
         assert self._shown(resp) == {t[1].pk, t[2].pk}
 
+    def test_note_filter(self, auth_client, sample_data):
+        t = self._search_setup(sample_data)
+        url = reverse('core:transaction_list')
+        assert self._shown(auth_client.get(url, {'note': 'has'})) == {t[1].pk, t[2].pk}
+        assert self._shown(auth_client.get(url, {'note': 'none'})) == {t[0].pk, t[3].pk, t[4].pk}
+        assert self._shown(auth_client.get(url, {'note': ''})) == {x.pk for x in t}
+
     def test_sort(self, auth_client, sample_data):
         resp = auth_client.get(reverse('core:transaction_list'), {
             'sort': 'date',

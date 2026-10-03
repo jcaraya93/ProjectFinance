@@ -133,6 +133,25 @@
         </div>
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+            Note {% if note_filter %}<span class="badge bg-primary">1</span>{% endif %}
+          </button>
+          <div class="dropdown-menu p-2" style="min-width: 140px;">
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="radio" name="note" value="" class="form-check-input auto-submit" {% if not note_filter %}checked{% endif %}>
+              Any
+            </label>
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="radio" name="note" value="has" class="form-check-input auto-submit" {% if note_filter == 'has' %}checked{% endif %}>
+              Has note
+            </label>
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="radio" name="note" value="none" class="form-check-input auto-submit" {% if note_filter == 'none' %}checked{% endif %}>
+              No note
+            </label>
+          </div>
+        </div>
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
             Search in {% if search_in != 'both' %}<span class="badge bg-primary">1</span>{% endif %}
           </button>
           <div class="dropdown-menu p-2" style="min-width: 160px;">

@@ -10,6 +10,7 @@ class TransactionFilter(django_filters.FilterSet):
     # Text search; search_in picks the field(s): 'both' (default), 'description' or 'note'.
     search = django_filters.CharFilter(method='filter_search')
     search_in = django_filters.CharFilter(method='filter_noop')
+    note = django_filters.CharFilter(method='filter_note')  # 'has' or 'none'
     # Categories V2: a selected category also matches transactions in its subcategories.
     category = django_filters.ModelMultipleChoiceFilter(
         queryset=CategoryNode.objects.none(),
@@ -51,6 +52,13 @@ class TransactionFilter(django_filters.FilterSet):
         self.filters['group'].extra['choices'] = list(CategoryGroup.SLUG_CHOICES)
 
     def filter_noop(self, queryset, name, value):
+        return queryset
+
+    def filter_note(self, queryset, name, value):
+        if value == 'has':
+            return queryset.exclude(note='')
+        if value == 'none':
+            return queryset.filter(note='')
         return queryset
 
     def filter_search(self, queryset, name, value):
