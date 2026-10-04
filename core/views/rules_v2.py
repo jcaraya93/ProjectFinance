@@ -52,20 +52,12 @@ def _back(request, fallback_node=None):
 
 @login_required
 def rules_v2_list(request):
-    """Left pane: categories by group with rule counts. Right pane: rules of the selected node and its subtree."""
+    """Show categories by group and rules assigned directly to the selected category."""
     CategoryNode.ensure_protected(request.user)
     rules = list(
         ClassificationRuleV2.objects.filter(user=request.user).select_related('category__group')
     )
-    direct_counts = {}
-    for rule in rules:
-        direct_counts[rule.category_id] = direct_counts.get(rule.category_id, 0) + 1
-
     tree = _build_tree(list(CategoryNode.objects.filter(user=request.user).select_related('group')))
-    chains = {row['node'].pk: row['ancestors'].split(',') for row in tree}
-    for row in tree:
-        key = str(row['node'].pk)
-        row['rule_count'] = sum(direct_counts.get(pk, 0) for pk, chain in chains.items() if key in chain)
 
     selected = None
     selected_id = request.GET.get('node', '')
@@ -73,8 +65,7 @@ def rules_v2_list(request):
         selected = next((r for r in tree if r['node'].pk == int(selected_id)), None)
 
     if selected:
-        key = str(selected['node'].pk)
-        shown = [r for r in rules if key in chains.get(r.category_id, [])]
+        shown = [r for r in rules if r.category_id == selected['node'].pk]
     else:
         shown = list(rules)
     order = {row['node'].pk: i for i, row in enumerate(tree)}
@@ -89,7 +80,6 @@ def rules_v2_list(request):
         'sections': sections,
         'rules': shown,
         'selected': selected,
-        'rule_count': len(rules),
         'category_options': tree,
         'account_types': Account.ACCOUNT_TYPES,
     })

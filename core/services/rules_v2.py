@@ -94,8 +94,8 @@ def find_matching_rule(user, transaction):
 def classify_transactions_v2(user, dry_run=False, queryset=None, only_unclassified=False):
     """Assign V2 categories to a user's transactions using V2 rules.
 
-    Writes only category_v2, matched_rule_v2 and classification_method_v2; V1 fields are never
-    touched. Transactions whose V2 method is 'manual' are skipped, and transactions that match no
+    Writes category_v2, matched_rule_v2 and classification_method_v2, and copies the rule's
+    detail into empty transaction notes. Transactions whose V2 method is 'manual' are skipped, and transactions that match no
     rule are left as they are. Returns (total, changed, skipped_manual, unmatched).
 
     queryset limits the transactions considered (still restricted to the user);
@@ -120,16 +120,19 @@ def classify_transactions_v2(user, dry_run=False, queryset=None, only_unclassifi
         if rule is None:
             unmatched += 1
             continue
+        copy_note = not txn.note and bool(rule.detail)
         if txn.category_v2_id == rule.category_id and txn.matched_rule_v2_id == rule.pk \
-                and txn.classification_method_v2 == 'rule':
+                and txn.classification_method_v2 == 'rule' and not copy_note:
             continue
         txn.category_v2_id = rule.category_id
         txn.matched_rule_v2_id = rule.pk
         txn.classification_method_v2 = 'rule'
+        if copy_note:
+            txn.note = rule.detail
         to_update.append(txn)
         changed += 1
     if to_update and not dry_run:
         LogicalTransaction.objects.bulk_update(
-            to_update, ['category_v2', 'matched_rule_v2', 'classification_method_v2'], batch_size=500
+            to_update, ['category_v2', 'matched_rule_v2', 'classification_method_v2', 'note'], batch_size=500
         )
     return total, changed, skipped_manual, unmatched

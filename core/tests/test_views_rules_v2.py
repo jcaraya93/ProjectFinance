@@ -19,8 +19,9 @@ class TestRulesV2Views:
         html = resp.content.decode()
         assert resp.status_code == 200
         assert 'SUPERMARKET' in html and 'Food' in html
+        assert '<th style="width: 22%;">Category</th>' in html
 
-    def test_node_filter_includes_subtree_only(self, auth_client, user, category_groups):
+    def test_node_filter_includes_direct_rules_only(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')
         kid = CategoryNode.objects.create(name='Snacks', user=user, group=food.group, parent=food)
         other = make_node(user, 'Rent')
@@ -29,16 +30,57 @@ class TestRulesV2Views:
         ClassificationRuleV2.objects.create(category=other, user=user, description='LANDLORD')
         url = reverse('core:rules_v2_list')
         html = auth_client.get(url, {'node': food.pk}).content.decode()
-        assert 'GROCER' in html and 'CANDY' in html and 'LANDLORD' not in html
+        assert 'GROCER' in html and 'CANDY' not in html and 'LANDLORD' not in html
+        assert '<th style="width: 22%;">Category</th>' not in html
         html = auth_client.get(url, {'node': kid.pk}).content.decode()
         assert 'CANDY' in html and 'GROCER' not in html
-        assert 'LANDLORD' in auth_client.get(url).content.decode()
+        html = auth_client.get(url).content.decode()
+        assert all(description in html for description in ('GROCER', 'CANDY', 'LANDLORD'))
+        ClassificationRuleV2.objects.filter(category=food).delete()
+        response = auth_client.get(url, {'node': food.pk})
+        assert not response.context['rules']
+        assert 'No rules' in response.content.decode()
 
     def test_save_keeps_selected_node(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')
         resp = auth_client.post(reverse('core:rules_v2_save'), {
             'category': food.pk, 'description': 'X', 'selected_node': food.pk})
         assert resp.url.endswith(f'?node={food.pk}')
+
+    def test_apply_unclassified_button_preserves_selection(self, auth_client, user, category_groups):
+        from html import escape
+        from core.tests.factories import LogicalTransactionFactory, UserFactory
+
+        food = make_node(user, 'Food')
+        other = make_node(user, 'Other')
+        rule = ClassificationRuleV2.objects.create(category=food, user=user, description='MATCH')
+        pending = LogicalTransactionFactory(user=user, description='MATCH', classification_method_v2='unclassified')
+        manual = LogicalTransactionFactory(user=user, description='MATCH', category_v2=other,
+                                           classification_method_v2='manual')
+        existing = LogicalTransactionFactory(user=user, description='MATCH', category_v2=other,
+                                             classification_method_v2='rule')
+        unmatched = LogicalTransactionFactory(user=user, description='NO HIT',
+                                              classification_method_v2='unclassified')
+        other_user = UserFactory()
+        theirs = LogicalTransactionFactory(user=other_user, description='MATCH',
+                                           classification_method_v2='unclassified')
+        next_url = reverse('core:rules_v2_list') + f'?node={other.pk}'
+        page = auth_client.get(next_url)
+        html = page.content.decode()
+        assert f'action="{reverse("core:classify_unclassified")}"' in html
+        assert f'name="next" value="{escape(next_url, quote=True)}"' in html
+        assert 'Apply Rules to Unclassified' in html
+        response = auth_client.post(reverse('core:classify_unclassified'), {'next': next_url}, follow=True)
+        assert response.redirect_chain == [(next_url, 302)]
+        assert 'Rules applied: 1 transactions classified. 1 remain unclassified.' in response.content.decode()
+        pending.refresh_from_db()
+        assert pending.category_v2 == food and pending.matched_rule_v2 == rule
+        assert pending.classification_method_v2 == 'rule'
+        for txn, method in ((manual, 'manual'), (existing, 'rule'), (unmatched, 'unclassified'),
+                            (theirs, 'unclassified')):
+            txn.refresh_from_db()
+            assert txn.classification_method_v2 == method
+        assert manual.category_v2 == other and existing.category_v2 == other
 
     def test_create_rule(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')

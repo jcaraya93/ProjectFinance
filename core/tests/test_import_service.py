@@ -129,7 +129,7 @@ class TestImportV2Classification:
         assert first.transaction_count > 0
         sample = LogicalTransaction.objects.filter(user=user).first()
         node = CategoryNode.objects.create(name='Test', user=user, group=CategoryGroup.get_group('expense'))
-        ClassificationRuleV2.objects.create(category=node, user=user, description=sample.description)
+        ClassificationRuleV2.objects.create(category=node, user=user, description=sample.description, detail='Imported rule note')
         LogicalTransaction.objects.filter(user=user).delete()
         from core.models import StatementImport
         StatementImport.objects.filter(user=user).delete()
@@ -140,5 +140,7 @@ class TestImportV2Classification:
         matched = txns.filter(description=sample.description)
         assert matched.exists()
         assert all(t.category_v2 == node and t.classification_method_v2 == 'rule' for t in matched)
+        assert all(t.note == 'Imported rule note' for t in matched)
         others = txns.exclude(description=sample.description)
         assert all(t.category_v2.name == 'Unclassified' and t.classification_method_v2 == 'unclassified' for t in others)
+        assert all(t.note == '' for t in others)

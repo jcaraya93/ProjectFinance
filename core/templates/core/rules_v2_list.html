@@ -4,8 +4,12 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-2">
   <h2 class="mb-0">Rules <span class="badge bg-warning text-dark align-middle fs-6">V2</span></h2>
+  <form method="post" action="{% url 'core:classify_unclassified' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button type="submit" class="btn btn-sm btn-outline-secondary">Apply Rules to Unclassified</button>
+  </form>
 </div>
-<p class="text-muted">Rules that assign transactions to categories.</p>
 
 <div class="row">
   <div class="col-md-3">
@@ -13,7 +17,7 @@
       <div class="card-header fw-bold">Groups &amp; Categories</div>
       <div class="list-group list-group-flush">
         <a href="{% url 'core:rules_v2_list' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if not selected %}active{% endif %}">
-          <span>All rules</span><span class="badge bg-secondary rounded-pill">{{ rule_count }}</span>
+          <span>All rules</span>
         </a>
         {% for sec in sections %}
         <div class="list-group-item fw-semibold bg-light">
@@ -27,7 +31,6 @@
            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1 {% if selected and selected.node.pk == row.node.pk %}active{% endif %}"
            style="padding-left: {{ row.padding }}px;">
           <span class="small {% if row.is_protected %}fst-italic{% endif %}">{{ row.node.name }}</span>
-          {% if row.rule_count %}<span class="badge bg-secondary rounded-pill">{{ row.rule_count }}</span>{% endif %}
         </a>
         {% empty %}
         <div class="list-group-item small text-muted ps-4">No categories.</div>
@@ -53,7 +56,7 @@
     <div class="table-responsive">
       <table class="table table-hover align-middle table-sm">
         <thead class="table-light">
-          <tr><th style="width: 22%;">Category</th><th>Conditions</th><th>Note</th><th style="width: 130px;"></th></tr>
+          <tr>{% if not selected %}<th style="width: 22%;">Category</th>{% endif %}<th>Conditions</th><th>Note</th><th style="width: 130px;"></th></tr>
         </thead>
         <tbody>
           {% for rule in rules %}
@@ -62,9 +65,9 @@
               data-amount-min="{{ rule.amount_min|default_if_none:'' }}" data-amount-max="{{ rule.amount_max|default_if_none:'' }}"
               data-detail="{{ rule.detail }}"
               data-metadata="{% for k, v in rule.metadata.items %}{{ k }}={{ v }}&#10;{% endfor %}">
-            <td>
+            {% if not selected %}<td>
               <span class="small text-muted">{{ rule.category.group.name }}</span><br>{{ rule.category.name }}
-            </td>
+            </td>{% endif %}
             <td>
               {% if rule.description %}<span class="badge bg-light text-dark border">contains &ldquo;{{ rule.description }}&rdquo;</span>{% endif %}
               {% if rule.account_type %}<span class="badge bg-light text-dark border">{{ rule.get_account_type_display }}</span>{% endif %}
@@ -137,6 +140,7 @@
         <div class="mb-0">
           <label class="form-label" for="ruleV2Detail">Note</label>
           <input type="text" class="form-control" name="detail" id="ruleV2Detail" maxlength="500">
+          <div class="form-text">Copied to matching transactions only when their note is empty.</div>
         </div>
       </div>
       <div class="modal-footer">
