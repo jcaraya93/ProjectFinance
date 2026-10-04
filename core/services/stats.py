@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import Sum
@@ -107,6 +108,83 @@ def category_drilldown(qs, group_slug, amount_field, nodes, depths, max_level=No
     return drill
 
 
+def expense_composition_timeline(user, display_currency, start_date, end_date, period_type, level, selected_categories=None):
+    """Expense amounts by period and category, including empty intervals."""
+    return category_composition_timeline(
+        user, display_currency, start_date, end_date, period_type, level,
+        group_slug='expense', selected_categories=selected_categories,
+    )
+
+
+def category_composition_timeline(user, display_currency, start_date, end_date, period_type, level,
+                                  group_slug, selected_categories=None):
+    """Amounts for one category group, including empty intervals and exact date bounds."""
+    from django.db.models import Min, Max
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    qs = Transaction.objects.filter(user=user, category_v2__group__slug=group_slug)
+    if start_date:
+        qs = qs.filter(date__gte=start_date)
+    if end_date:
+        qs = qs.filter(date__lte=end_date)
+    weekly = period_type == 'month'
+    data = {'labels': [], 'series': [], 'colors': [], 'category_ids': [], 'intervals': [],
+            'grouping': 'Weekly' if weekly else 'Monthly'}
+    bounds = qs.aggregate(first=Min('date'), last=Max('date'))
+    start = start_date or bounds['first']
+    end = end_date or bounds['last']
+    if start is None or end is None:
+        return data
+
+    buckets = []
+    cursor = start if weekly else start.replace(day=1)
+    while cursor <= end:
+        buckets.append(cursor)
+        interval_start = max(cursor, start)
+        if weekly:
+            finish = min(cursor + timedelta(days=6), end)
+            data['labels'].append(f'{cursor:%b} {cursor.day}-{finish.day}')
+            cursor += timedelta(days=7)
+        else:
+            data['labels'].append(cursor.strftime('%b %Y'))
+            cursor = date(cursor.year + cursor.month // 12, cursor.month % 12 + 1, 1)
+            finish = min(cursor - timedelta(days=1), end)
+        data['intervals'].append({'start': interval_start.isoformat(), 'end': finish.isoformat()})
+
+    nodes, depths = category_depths(user)
+    values = {}
+    trunc = TruncDay if weekly else TruncMonth
+    rows = (qs.annotate(interval=trunc('date')).values('interval', 'category_v2_id')
+            .annotate(total=Sum(Abs(amount_field))).order_by())
+    for row in rows:
+        node = category_at_level(nodes[row['category_v2_id']], nodes, depths, level)
+        if selected_categories is not None and node.id not in selected_categories:
+            continue
+        if not row['total']:
+            continue
+        interval = row['interval']
+        if weekly:
+            bucket = (interval - start).days // 7
+        else:
+            bucket = (interval.year - start.year) * 12 + interval.month - start.month
+        amounts = values.setdefault(node.id, [Decimal(0) for _ in buckets])
+        amounts[bucket] += row['total']
+
+    ordered = sorted(values, key=lambda key: (-sum(values[key]), key))
+    capped = group_slug == 'expense' and level == 2 and selected_categories is None
+    visible = ordered[:10] if capped else ordered
+    for key in visible:
+        data['category_ids'].append(key)
+        data['series'].append({'name': nodes[key].name, 'data': values[key]})
+        data['colors'].append(nodes[key].color or '#6c757d')
+    if capped and len(ordered) > 10:
+        data['category_ids'].append(None)
+        remaining = [sum((values[key][i] for key in ordered[10:]), Decimal(0)) for i in range(len(buckets))]
+        data['series'].append({'name': 'Remaining categories', 'data': remaining})
+        data['colors'].append('#adb5bd')
+    return data
+
+
 def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='CRC', wallet_filter=None, groups=None, categories=None, time_group='monthly', category_level=None):
     """Return all dashboard statistics."""
     with tracer.start_as_current_span("stats.get_dashboard_stats") as span:
@@ -138,9 +216,12 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
 
     # Monthly average
     from django.db.models.functions import TruncMonth as _TM
-    EXCLUDED_INCOME = ['Work Association', 'Work Bonuses', 'Work Government', 'Unclassified']
+    from .income_categories import income_category_roles
+    income_roles = income_category_roles(user)
+    excluded_income_ids = income_roles['association'] | income_roles['bonus'] | income_roles['government']
+    excluded_income_ids.update(CategoryNode.objects.filter(user=user, group__slug='income', name='Unclassified').values_list('pk', flat=True))
     income_filter = dict(category_v2__group__slug='income')
-    income_exclude = dict(category_v2__name__in=EXCLUDED_INCOME)
+    income_exclude = dict(category_v2_id__in=excluded_income_ids)
 
     income_by_month = (
         qs.filter(**income_filter).exclude(**income_exclude)
@@ -391,6 +472,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
     income_category_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level)
     top_categories_data = category_breakdown(qs, 'expense', amount_field, nodes, depths, category_level, limit=10)
     expense_drill_data = category_drilldown(qs, 'expense', amount_field, nodes, depths, max_level=category_level and 2)
+    income_drill_data = category_drilldown(qs, 'income', amount_field, nodes, depths, max_level=category_level and 2)
     top_income_data = category_breakdown(qs, 'income', amount_field, nodes, depths, category_level, limit=10)
 
     # ── Monthly trend (dual line) ─────────────────────────────
@@ -410,6 +492,7 @@ def get_dashboard_stats(user, start_date=None, end_date=None, display_currency='
         'expense_category_data': json.dumps(expense_category_data, cls=DecimalEncoder),
         'expense_drill_data': json.dumps(expense_drill_data, cls=DecimalEncoder),
         'income_category_data': json.dumps(income_category_data, cls=DecimalEncoder),
+        'income_drill_data': json.dumps(income_drill_data, cls=DecimalEncoder),
         'top_categories_data': json.dumps(top_categories_data, cls=DecimalEncoder),
         'top_income_data': json.dumps(top_income_data, cls=DecimalEncoder),
         'trend_data': json.dumps(trend_data, cls=DecimalEncoder),

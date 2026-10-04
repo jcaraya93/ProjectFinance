@@ -16,10 +16,6 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Overview</h4>
       <div class="d-flex align-items-center gap-2">
-        <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
-          <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
-          <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
-        </button>
         {% include "core/_currency_toggle.html" with extra_params="time_group="|add:time_group %}
       </div>
     </div>
@@ -32,9 +28,9 @@
     <div class="card summary-card border-start-success">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Recurring Income</h6>
-        <h3 class="card-title mb-1 text-success" data-sensitive>{{ summary.currency_symbol }}{{ summary.last_month_income|format_number }}</h3>
+        <h3 class="card-title mb-1 text-success">{{ summary.currency_symbol }}{{ summary.last_month_income|format_number }}</h3>
         <div class="small text-muted">
-          Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_income|format_number }}</span>
+          Median: <span>{{ summary.currency_symbol }}{{ summary.median_income|format_number }}</span>
           {% if summary.income_pct > 0 %}<span class="text-success ms-1">▲ {{ summary.income_pct|floatformat:0 }}%</span>
           {% elif summary.income_pct < 0 %}<span class="text-danger ms-1">▼ {{ summary.income_pct|floatformat:0 }}%</span>
           {% endif %}
@@ -46,9 +42,9 @@
     <div class="card summary-card border-start-danger">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Expenses</h6>
-        <h3 class="card-title mb-1 text-danger" data-sensitive>{{ summary.currency_symbol }}{{ summary.last_month_expenses|format_number }}</h3>
+        <h3 class="card-title mb-1 text-danger">{{ summary.currency_symbol }}{{ summary.last_month_expenses|format_number }}</h3>
         <div class="small text-muted">
-          Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</span>
+          Median: <span>{{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</span>
           {% if summary.expenses_pct > 0 %}<span class="text-danger ms-1">▲ {{ summary.expenses_pct|floatformat:0 }}%</span>
           {% elif summary.expenses_pct < 0 %}<span class="text-success ms-1">▼ {{ summary.expenses_pct|floatformat:0 }}%</span>
           {% endif %}
@@ -60,9 +56,9 @@
     <div class="card summary-card border-start-primary">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Cash Flow</h6>
-        <h3 class="card-title mb-1 {% if summary.last_month_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}" data-sensitive>{{ summary.currency_symbol }}{{ summary.last_month_cashflow|format_number }}</h3>
+        <h3 class="card-title mb-1 {% if summary.last_month_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}">{{ summary.currency_symbol }}{{ summary.last_month_cashflow|format_number }}</h3>
         <div class="small text-muted">
-          Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</span>
+          Median: <span>{{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</span>
           {% if summary.cashflow_pct > 0 %}<span class="text-success ms-1">▲ {{ summary.cashflow_pct|floatformat:0 }}%</span>
           {% elif summary.cashflow_pct < 0 %}<span class="text-danger ms-1">▼ {{ summary.cashflow_pct|floatformat:0 }}%</span>
           {% endif %}
@@ -80,8 +76,8 @@
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Avg. Recurring Income</h6>
-        <h3 class="card-title mb-1 text-success" data-sensitive>{{ summary.currency_symbol }}{{ summary.avg_income|format_number }}</h3>
-        <div class="small text-muted">Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_income|format_number }}</span></div>
+        <h3 class="card-title mb-1 text-success">{{ summary.currency_symbol }}{{ summary.avg_income|format_number }}</h3>
+        <div class="small text-muted">Median: <span>{{ summary.currency_symbol }}{{ summary.median_income|format_number }}</span></div>
       </div>
     </div>
   </div>
@@ -89,8 +85,8 @@
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Avg. Expenses</h6>
-        <h3 class="card-title mb-1 text-danger" data-sensitive>{{ summary.currency_symbol }}{{ summary.avg_expenses|format_number }}</h3>
-        <div class="small text-muted">Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</span></div>
+        <h3 class="card-title mb-1 text-danger">{{ summary.currency_symbol }}{{ summary.avg_expenses|format_number }}</h3>
+        <div class="small text-muted">Median: <span>{{ summary.currency_symbol }}{{ summary.median_expenses|format_number }}</span></div>
       </div>
     </div>
   </div>
@@ -98,8 +94,8 @@
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-muted">Avg. Cash Flow</h6>
-        <h3 class="card-title mb-1 {% if summary.avg_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}" data-sensitive>{{ summary.currency_symbol }}{{ summary.avg_cashflow|format_number }}</h3>
-        <div class="small text-muted">Median: <span data-sensitive>{{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</span></div>
+        <h3 class="card-title mb-1 {% if summary.avg_cashflow >= 0 %}text-success{% else %}text-danger{% endif %}">{{ summary.currency_symbol }}{{ summary.avg_cashflow|format_number }}</h3>
+        <div class="small text-muted">Median: <span>{{ summary.currency_symbol }}{{ summary.median_cashflow|format_number }}</span></div>
       </div>
     </div>
   </div>
@@ -148,8 +144,6 @@
 <script>
 (function () {
   var trendRaw = DashboardCharts.parseJSON('trendData');
-  var isPrivacy = dashboardPrivacy.isOn();
-  window._dashCharts = [];
 
   // Recurring Income vs Expenses (line chart — matching original style)
   if (trendRaw) {
@@ -172,18 +166,17 @@
       yaxis: {
         min: 0,
         labels: {
-          show: !isPrivacy,
+          show: true,
           formatter: function (v) { return Math.round(v).toLocaleString(); },
         },
       },
       legend: { position: 'bottom' },
-      tooltip: { enabled: !isPrivacy, shared: true, intersect: false,
+      tooltip: { enabled: true, shared: true, intersect: false,
         y: { formatter: function (v) { return Math.round(v).toLocaleString(); } },
       },
       grid: { borderColor: '#e9ecef' },
     });
     trendChart.render();
-    window._dashCharts.push(trendChart);
   }
 
   // Net Cash Flow (bar) + Cumulative Savings (line)
@@ -230,7 +223,7 @@
         {
           title: { text: 'Monthly' },
           labels: {
-            show: !isPrivacy,
+            show: true,
             formatter: function (v) { return Math.round(v).toLocaleString(); },
           },
         },
@@ -238,24 +231,20 @@
           opposite: true,
           title: { text: 'Cumulative' },
           labels: {
-            show: !isPrivacy,
+            show: true,
             formatter: function (v) { return Math.round(v).toLocaleString(); },
           },
         },
       ],
       legend: { position: 'bottom' },
-      tooltip: { enabled: !isPrivacy, shared: true, intersect: false,
+      tooltip: { enabled: true, shared: true, intersect: false,
         y: { formatter: function (v) { return Math.round(v).toLocaleString(); } },
       },
       grid: { borderColor: '#e9ecef' },
     });
     cashflowChart.render();
-    window._dashCharts.push(cashflowChart);
   }
 
-  // Apply privacy on load
-  dashboardPrivacy.apply(window._dashCharts);
 })();
 </script>
 {% endblock %}
-

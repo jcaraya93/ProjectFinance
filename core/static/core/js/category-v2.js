@@ -2,6 +2,42 @@
   function $(id) { return document.getElementById(id); }
   function all(root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
 
+  var tabs = $('categoryGroupTabs');
+  var tabButtons = all(tabs, '[data-bs-toggle="tab"]');
+  var storageKey = 'category-group-tab-' + tabs.dataset.user;
+
+  function rememberTab(id) {
+    try {
+      sessionStorage.setItem(storageKey, id);
+    } catch (error) {
+      console.warn('Could not remember the selected category group.', error);
+    }
+    history.replaceState(null, '', location.pathname + location.search + '#' + id);
+  }
+
+  tabButtons.forEach(function (button) {
+    button.addEventListener('shown.bs.tab', function () { rememberTab(button.id); });
+  });
+  var savedTab = location.hash.slice(1);
+  if (!savedTab) {
+    try {
+      savedTab = sessionStorage.getItem(storageKey);
+    } catch (error) {
+      console.warn('Could not restore the selected category group.', error);
+    }
+  }
+  var selectedTab = tabButtons.find(function (button) { return button.id === savedTab; });
+  if (selectedTab) bootstrap.Tab.getOrCreateInstance(selectedTab).show();
+
+  all(document, '.cat-v2-transaction-count').forEach(function (link) {
+    link.addEventListener('click', function () {
+      var destination = new URL(link.href);
+      var activeTab = tabs.querySelector('[aria-selected="true"]');
+      destination.searchParams.set('return_to', location.pathname + location.search + '#' + activeTab.id);
+      link.href = destination.toString();
+    });
+  });
+
   // ---- Add / edit dialog ------------------------------------------------
   var modal = new bootstrap.Modal($('catV2Modal'));
   var parentSelect = $('catV2Parent');
@@ -23,6 +59,8 @@
     $('catV2Group').value = opts.group;
     $('catV2Name').value = opts.name || '';
     $('catV2Color').value = opts.color || '#6c757d';
+    $('catV2IncomeRoleWrap').classList.toggle('d-none', opts.group !== 'income');
+    $('catV2IncomeRole').value = opts.incomeRole || '';
     filterParents(opts.group, opts.id);
     parentSelect.value = opts.parent || '';
     // When adding under a known parent, show it as text instead of asking again.
@@ -45,6 +83,7 @@
     openForm({
       title: 'Edit Category', id: row.dataset.id, group: row.dataset.group,
       name: row.dataset.name, color: row.dataset.color, parent: row.dataset.parent,
+      incomeRole: row.dataset.incomeRole,
     });
   }
 

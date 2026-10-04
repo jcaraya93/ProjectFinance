@@ -73,9 +73,20 @@ class CategoryNode(models.Model):
     """Hierarchical category: a node in a per-user tree under a CategoryGroup."""
     UNCLASSIFIED_NAME = 'Unclassified'
     UNCLASSIFIED_COLOR = '#adb5bd'
+    INCOME_DASHBOARD_ROLES = [
+        ('salary', 'Salary'), ('bonus', 'Bonuses'), ('association', 'Association'),
+        ('government', 'Government'), ('reimbursement', 'Reimbursement'), ('bank', 'Bank Income'),
+    ]
+    DEFAULT_INCOME_ROLES = {
+        'Work Salary': 'salary', 'Work Bonuses': 'bonus', 'Work Association': 'association',
+        'Work Government': 'government', 'Reimbursement': 'reimbursement', 'Bank': 'bank',
+        **{f'Reimbursement {name}': 'reimbursement' for name in ('General', 'Housing', 'Insurance', 'Partner')},
+        **{f'Bank Interest {name}': 'bank' for name in ('CDP', 'Cashback', 'Reversals', 'Credit')},
+    }
 
     name = models.CharField(max_length=100)
     color = models.CharField(max_length=7, default='#6c757d', help_text='Hex color for charts')
+    income_dashboard_role = models.CharField(max_length=20, blank=True, default='', choices=INCOME_DASHBOARD_ROLES)
     group = models.ForeignKey(CategoryGroup, on_delete=models.PROTECT, related_name='category_nodes')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='category_nodes')
     parent = models.ForeignKey(
@@ -123,7 +134,8 @@ class CategoryNode(models.Model):
             parent = created.get((row['group'], row['parent'])) if row['parent'] else None
             node, _ = cls.objects.get_or_create(
                 name=row['name'], group=group, user=user,
-                defaults={'color': row['color'], 'parent': parent},
+                defaults={'color': row['color'], 'parent': parent,
+                          'income_dashboard_role': cls.DEFAULT_INCOME_ROLES.get(row['name'], '') if row['group'] == 'income' else ''},
             )
             created[(row['group'], row['name'])] = node
 
@@ -133,6 +145,8 @@ class CategoryNode(models.Model):
 
     def clean(self):
         super().clean()
+        if self.income_dashboard_role and (self.group.slug != 'income' or self.is_protected):
+            raise ValidationError({'income_dashboard_role': 'Dashboard roles are only available for editable income categories.'})
         if self.is_protected and self.parent_id:
             raise ValidationError({'parent': 'The Unclassified category must stay at the top level.'})
         if not self.parent_id:

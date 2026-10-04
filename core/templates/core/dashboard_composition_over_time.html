@@ -1,0 +1,92 @@
+{% extends "core/base.html" %}
+{% load finance_filters %}
+{% block title %}{{ composition_title }} &mdash; Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard=composition_active %}
+  </div>
+  <div class="col-md-10">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h4 class="mb-0">{{ composition_title }}</h4>
+      {% include "core/_currency_toggle.html" with extra_params=timeline_currency_params %}
+    </div>
+    {% include "core/_expense_composition_filters.html" with hide_period_label=True hide_level_label=True %}
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+          <p class="small text-muted mb-0">{{ period_label }} &middot; {{ expense_timeline_grouping }} {% if composition_group == 'income' %}income{% else %}spending{% endif %} by {% if category_level == 1 %}top-level{% else %}Level {{ category_level }}{% endif %} category</p>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Chart category visibility">
+            <button type="button" class="btn btn-outline-secondary" data-timeline-visibility="all" aria-controls="{{ composition_group }}TimelineChart" disabled>All</button>
+            <button type="button" class="btn btn-outline-secondary" data-timeline-visibility="none" aria-controls="{{ composition_group }}TimelineChart" disabled>None</button>
+          </div>
+        </div>
+        <div id="{{ composition_group }}TimelineChart"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script id="{{ composition_group }}TimelineData" type="application/json">{{ composition_timeline_data|escapejson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var data = DashboardCharts.parseJSON('{{ composition_group|escapejs }}TimelineData');
+  var element = document.getElementById('{{ composition_group|escapejs }}TimelineChart');
+  var width = element.clientWidth;
+  var currency = '{{ display_currency|escapejs }}';
+  var amountFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: currency, maximumFractionDigits: 0,
+  });
+  var chart = new ApexCharts(element, {
+    chart: {
+      type: 'bar', width: width, height: 340, stacked: true, toolbar: { show: false },
+      events: {
+        dataPointSelection: function(event, chartContext, config) {
+          if (config.seriesIndex < 0 || config.dataPointIndex < 0) return;
+          window.location.href = data.transaction_urls[config.seriesIndex][config.dataPointIndex];
+        },
+      },
+    },
+    series: data.series,
+    colors: data.colors,
+    plotOptions: { bar: { columnWidth: '55%', borderRadius: 2 } },
+    dataLabels: { enabled: false },
+    stroke: { width: 1, colors: ['#fff'] },
+    xaxis: { categories: data.labels },
+    yaxis: {
+      min: 0,
+      labels: { formatter: function(value) { return amountFormatter.format(value); } },
+      title: { text: 'Amount {% if composition_group == "income" %}received{% else %}spent{% endif %} (' + currency + ')' },
+    },
+    legend: { position: 'bottom' },
+    tooltip: { y: { formatter: function(value) { return amountFormatter.format(value); } } },
+    grid: { borderColor: '#e9ecef' },
+    noData: { text: 'No {{ composition_group|escapejs }} data for this period' },
+  });
+  chart.render().then(function() {
+    document.querySelectorAll('[data-timeline-visibility]').forEach(function(button) {
+      button.disabled = false;
+      button.addEventListener('click', function() {
+        data.series.forEach(function(series) {
+          if (button.dataset.timelineVisibility === 'all') {
+            chart.showSeries(series.name);
+          } else {
+            chart.hideSeries(series.name);
+          }
+        });
+      });
+    });
+    new ResizeObserver(function() {
+      var nextWidth = element.clientWidth;
+      if (nextWidth > 0 && nextWidth !== width) {
+        width = nextWidth;
+        chart.updateOptions({ chart: { width: width } });
+      }
+    }).observe(element);
+  });
+})();
+</script>
+{% endblock %}

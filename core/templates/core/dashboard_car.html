@@ -15,8 +15,10 @@
     <!-- Currency toggle -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Car Dashboard</h4>
-      {% include "core/_currency_toggle.html" %}
+      {% include "core/_currency_toggle.html" with extra_params=category_currency_params %}
     </div>
+
+    {% include "core/_category_dashboard_filters.html" %}
 
     <!-- ═══════════════════════════════════════════ -->
     <!-- SECTION 1: OVERVIEW                        -->
@@ -27,7 +29,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ last_month_total|format_number }}</h3>
             <div class="small">
               {% if median_pct > 0 %}<span class="text-danger">▲ {{ median_pct|floatformat:0 }}% above median</span>
@@ -49,7 +51,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ currency_symbol }}{{ car_last_year|format_number }}</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -85,7 +87,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ running_last_month|format_number }}</h3>
             <div class="small">
               {% if running_median_pct > 0 %}<span class="text-danger">▲ {{ running_median_pct|floatformat:0 }}% above median</span>
@@ -107,7 +109,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ currency_symbol }}{{ running_last_year|format_number }}</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -135,7 +137,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ ownership_last_month|format_number }}</h3>
             <div class="small">
               {% if ownership_median_pct > 0 %}<span class="text-danger">▲ {{ ownership_median_pct|floatformat:0 }}% above median</span>
@@ -157,7 +159,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ currency_symbol }}{{ ownership_last_year|format_number }}</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -225,6 +227,7 @@
     <div class="alert alert-light border text-center mb-4">No periodic payments recorded.</div>
     {% endif %}
 
+    {% include "core/_category_dashboard_transactions.html" %}
   </div><!-- col-md-10 -->
 </div><!-- row -->
 

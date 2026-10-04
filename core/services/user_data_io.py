@@ -73,6 +73,7 @@ def export_user_data(user):
             'name': node.name,
             'group_slug': node.group.slug,
             'color': node.color,
+            'income_dashboard_role': node.income_dashboard_role,
             'parent_name': node.parent.name if node.parent else None,
         })
         pending.extend(reversed(children.get(node.pk, [])))
@@ -296,6 +297,10 @@ def import_user_data(user, data):
                     user=user,
                     parent=parent,
                     color=cat_data.get('color', '#6c757d'),
+                    income_dashboard_role=cat_data.get(
+                        'income_dashboard_role',
+                        CategoryNode.DEFAULT_INCOME_ROLES.get(cat_data['name'], '') if group.slug == 'income' else '',
+                    ),
                 )
             except ValidationError as e:
                 raise ImportError(f"Invalid category {cat_data['name']}: {e}")

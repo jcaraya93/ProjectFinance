@@ -41,7 +41,9 @@ class TestTransactionReturnLink:
         ('category_v2_list', 'Categories'),
         ('statement_list', 'Statements'),
         ('spending_income_dashboard', 'Expense Composition'),
-        ('income_overview_dashboard', 'Income'),
+        ('expense_composition_over_time_dashboard', 'Expense Time Composition'),
+        ('income_overview_dashboard', 'Income Composition'),
+        ('income_composition_over_time_dashboard', 'Income Time Composition'),
         ('income_salary_dashboard', 'Salary'),
         ('income_bonus_dashboard', 'Bonuses'),
         ('bank_income_overview_dashboard', 'Bank Income'),
@@ -90,10 +92,18 @@ class TestTransactionReturnLink:
         if source == 'transaction_health_dashboard':
             LogicalTransactionFactory.create_batch(21, user=user,
                                                    category_v2=None, classification_method_v2='unclassified')
+        roles = {
+            'income_salary_dashboard': 'salary', 'income_bonus_dashboard': 'bonus',
+            'bank_income_overview_dashboard': 'bank', 'reimbursement_overview_dashboard': 'reimbursement',
+        }
+        if source in roles:
+            from core.models import CategoryGroup, CategoryNode
+            CategoryNode.objects.create(user=user, group=CategoryGroup.get_group('income'),
+                                        name='Assigned Income', income_dashboard_role=roles[source])
         source_url = reverse(f'core:{source}') + '?period_type=all'
         response = auth_client.get(source_url)
-        if source == 'spending_income_dashboard':
-            params = parse_qs(urlsplit(response.context['expense_transactions_url']).query)
+        if source in ('spending_income_dashboard', 'income_overview_dashboard'):
+            params = parse_qs(urlsplit(response.context['composition_transactions_url']).query)
             assert params['return_to'] == [source_url]
             assert 'params.set(\'return_to\', location.pathname + location.search' in response.content.decode()
             return

@@ -14,7 +14,19 @@
 </div>
 <p class="text-muted">Hierarchical categories used by transactions and rules. Transaction counts include direct assignments only, not subcategories.</p>
 
+<ul class="nav nav-tabs mb-3" id="categoryGroupTabs" role="tablist" aria-label="Category groups" data-user="{{ request.user.pk }}">
+  {% for grp in groups %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link{% if forloop.first %} active{% endif %}" id="category-tab-{{ grp.slug }}"
+            data-bs-toggle="tab" data-bs-target="#category-panel-{{ grp.slug }}" type="button"
+            role="tab" aria-controls="category-panel-{{ grp.slug }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">{{ grp.name }}</button>
+  </li>
+  {% endfor %}
+</ul>
+<div class="tab-content" id="categoryGroupPanels">
 {% for grp in groups %}
+<div class="tab-pane{% if forloop.first %} active{% endif %}" id="category-panel-{{ grp.slug }}"
+     role="tabpanel" aria-labelledby="category-tab-{{ grp.slug }}" tabindex="0">
 <div class="card mb-4 cat-v2-card" data-group="{{ grp.slug }}">
   <div class="card-header d-flex justify-content-between align-items-center">
     {% if grp.slug == 'expense' %}<span class="badge bg-danger">{{ grp.name }}</span>
@@ -69,7 +81,7 @@
         {% else %}
         <tr class="cat-v2-row"
             data-id="{{ row.node.pk }}" data-name="{{ row.node.name }}" data-color="{{ row.node.color }}"
-            data-group="{{ grp.slug }}" data-parent="{{ row.node.parent_id|default_if_none:'' }}"
+            data-group="{{ grp.slug }}" data-income-role="{{ row.node.income_dashboard_role }}" data-parent="{{ row.node.parent_id|default_if_none:'' }}"
             data-parent-name="{{ row.parent_name }}" data-children="{{ row.child_count }}">
           <td>
             <input type="checkbox" class="form-check-input cat-v2-select" value="{{ row.node.pk }}"
@@ -106,7 +118,9 @@
     </table>
   </div>
 </div>
+</div>
 {% endfor %}
+</div>
 
 <div class="modal fade" id="catV2Modal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
@@ -126,6 +140,16 @@
         <div class="mb-3">
           <label class="form-label" for="catV2Color">Color</label>
           <input type="color" class="form-control form-control-color" name="color" id="catV2Color" value="#6c757d">
+        </div>
+        <div class="mb-3 d-none" id="catV2IncomeRoleWrap">
+          <label class="form-label" for="catV2IncomeRole">Income dashboard role</label>
+          <select class="form-select" name="income_dashboard_role" id="catV2IncomeRole">
+            <option value="">None (inherit from parent)</option>
+            {% for value, label in income_dashboard_roles %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Connects this category and its descendants to an income dashboard. Renaming does not change the assignment.</div>
         </div>
         <p class="mb-0 d-none" id="catV2ParentNote">Under <strong id="catV2ParentNoteName"></strong></p>
         <div class="mb-3" id="catV2ParentWrap">
@@ -228,5 +252,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'core/js/category-v2.js' %}"></script>
+<script src="{% static 'core/js/category-v2.js' %}?v=20261004-income-roles"></script>
 {% endblock %}

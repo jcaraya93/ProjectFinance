@@ -13,12 +13,12 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Reimbursement</h4>
       <div class="d-flex align-items-center gap-2">
-        <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
-          <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
-          <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
-        </button>
-        {% include "core/_currency_toggle.html" %}
+        {% include "core/_currency_toggle.html" with extra_params=income_currency_params %}
       </div>
+    </div>
+
+    <div id="incomeFilters" class="dashboard-filter-toolbar d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3" aria-label="Reimbursement period">
+      {% include "core/_period_filter.html" with show_month=True inline=True %}
     </div>
 
     <!-- Summary cards -->
@@ -27,7 +27,7 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
-            <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ last_month_total|format_number }}</h3>
+            <h3 class="card-title mb-1 text-success">{{ currency_symbol }}{{ last_month_total|format_number }}</h3>
             <div class="small">
               {% if median_pct > 0 %}<span class="text-success">▲ {{ median_pct|floatformat:0 }}% above median</span>
               {% elif median_pct < 0 %}<span class="text-danger">▼ {{ median_pct|floatformat:0 }}% below median</span>
@@ -40,16 +40,16 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">Monthly Average</h6>
-            <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ avg_monthly|format_number }}</h3>
-            <div class="small text-muted">Median: <span data-sensitive>{{ currency_symbol }}{{ median_monthly|format_number }}</span></div>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ avg_monthly|format_number }}</h3>
+            <div class="small text-muted">Median: <span>{{ currency_symbol }}{{ median_monthly|format_number }}</span></div>
           </div>
         </div>
       </div>
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">All Time Total</h6>
-            <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ all_time_total|format_number }}</h3>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ all_time_total|format_number }}</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
         </div>
@@ -98,9 +98,11 @@
 
     <!-- View Transactions Link -->
     <div class="text-end mb-4">
-      <a href="{% url 'core:transaction_list' %}?group=income&category={{ reimbursement_category_ids }}&amp;return_to={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary">
-        View All Reimbursement Transactions →
+      {% if reimbursement_category_ids %}
+      <a href="{{ income_transactions_url }}" class="btn btn-outline-primary">
+        View Reimbursement Transactions →
       </a>
+      {% endif %}
     </div>
 
   </div>
@@ -115,8 +117,6 @@
 {% block extra_js %}
 <script>
 (function() {
-  var isPrivacy = dashboardPrivacy.isOn();
-  window._dashCharts = [];
   var fmtNum = function(v) { return Math.round(v).toLocaleString(); };
 
   // Breakdown donut
@@ -127,10 +127,10 @@
       series: (bk.values || []).map(Math.round),
       labels: bk.labels || [],
       colors: bk.colors || [],
-      dataLabels: { enabled: !isPrivacy, formatter: function(val) { return val.toFixed(0) + '%'; } },
+      dataLabels: { enabled: true, formatter: function(val) { return val.toFixed(0) + '%'; } },
       legend: { position: 'bottom' },
       tooltip: {
-        enabled: !isPrivacy,
+        enabled: true,
         y: {
           formatter: function(val, opts) {
             var total = opts.globals.seriesTotals.reduce(function(a,b){return a+b},0);
@@ -141,7 +141,6 @@
       plotOptions: { pie: { donut: { size: '55%' } } },
     });
     donutChart.render();
-    window._dashCharts.push(donutChart);
   }
 
   // Stacked bar by category
@@ -152,14 +151,13 @@
     colors: stacked.colors || [],
     plotOptions: { bar: { borderRadius: 2 } },
     xaxis: { categories: stacked.labels || [] },
-    yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
+    yaxis: { labels: { show: true, formatter: fmtNum } },
     dataLabels: { enabled: false },
     legend: { position: 'bottom' },
-    tooltip: { enabled: !isPrivacy, shared: true, intersect: false, y: { formatter: fmtNum } },
+    tooltip: { enabled: true, shared: true, intersect: false, y: { formatter: fmtNum } },
     grid: { borderColor: '#e9ecef' },
   });
   stackedChart.render();
-  window._dashCharts.push(stackedChart);
 
   // Individual transactions scatter (multi-series by category)
   var scatterRaw = JSON.parse(document.getElementById('scatterData').textContent);
@@ -174,12 +172,12 @@
     series: scatterSeries,
     colors: scatterRaw.colors || [],
     xaxis: { type: 'datetime' },
-    yaxis: { labels: { show: !isPrivacy, formatter: fmtNum } },
+    yaxis: { labels: { show: true, formatter: fmtNum } },
     markers: { size: 6, strokeWidth: 0, opacity: 0.7 },
     dataLabels: { enabled: false },
     legend: { position: 'bottom' },
     tooltip: {
-      enabled: !isPrivacy,
+      enabled: true,
       custom: function(opts) {
         var s = scatterRaw.series[opts.seriesIndex];
         var t = s.data[opts.dataPointIndex];
@@ -192,7 +190,6 @@
     grid: { borderColor: '#e9ecef' },
   });
   scatterChart.render();
-  window._dashCharts.push(scatterChart);
 
   // Transaction count per month (stacked by category)
   var countRaw = JSON.parse(document.getElementById('countData').textContent);
@@ -209,9 +206,7 @@
     grid: { borderColor: '#e9ecef' },
   });
   countChart.render();
-  window._dashCharts.push(countChart);
 
-  dashboardPrivacy.apply(window._dashCharts);
 })();
 </script>
 {% endblock %}

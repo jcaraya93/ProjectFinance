@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 {% load finance_filters %}
-{% block title %}Work Extras — Project Finance{% endblock %}
+{% block title %}Bonuses — Project Finance{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -14,14 +14,14 @@
 
     <!-- Currency toggle -->
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Work Extras</h4>
+      <h4 class="mb-0">Bonuses</h4>
       <div class="d-flex align-items-center gap-2">
-        <button id="privacyToggle" type="button" class="btn btn-sm btn-outline-secondary" title="Hide values" onclick="dashboardPrivacy.toggle(window._dashCharts)">
-          <svg class="privacy-eye-open" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/></svg>
-          <svg class="privacy-eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709z"/><path d="m14.854 14.146-13-13 .708-.708 13 13z"/></svg>
-        </button>
-        {% include "core/_currency_toggle.html" %}
+        {% include "core/_currency_toggle.html" with extra_params=bonus_currency_params %}
       </div>
+    </div>
+
+    <div id="bonusFilters" class="dashboard-filter-toolbar d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3" aria-label="Bonuses period">
+      {% include "core/_period_filter.html" with show_month=True inline=True %}
     </div>
 
     <!-- Summary cards -->
@@ -30,8 +30,8 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">Work Bonuses</h6>
-            <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ bonus_total|format_number }}</h3>
-            <div class="small text-muted">All time</div>
+            <h3 class="card-title mb-1 text-success">{{ currency_symbol }}{{ bonus_total|format_number }}</h3>
+            <div class="small text-muted">{{ period_label }}</div>
           </div>
         </div>
       </div>
@@ -39,8 +39,8 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">Work Association</h6>
-            <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ association_total|format_number }}</h3>
-            <div class="small text-muted">All time</div>
+            <h3 class="card-title mb-1 text-success">{{ currency_symbol }}{{ association_total|format_number }}</h3>
+            <div class="small text-muted">{{ period_label }}</div>
           </div>
         </div>
       </div>
@@ -48,8 +48,8 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">Work Government</h6>
-            <h3 class="card-title mb-1 text-success" data-sensitive>{{ currency_symbol }}{{ goverment_total|format_number }}</h3>
-            <div class="small text-muted">All time</div>
+            <h3 class="card-title mb-1 text-success">{{ currency_symbol }}{{ goverment_total|format_number }}</h3>
+            <div class="small text-muted">{{ period_label }}</div>
           </div>
         </div>
       </div>
@@ -57,8 +57,8 @@
         <div class="card h-100">
           <div class="card-body">
             <h6 class="card-subtitle text-muted">Combined Total</h6>
-            <h3 class="card-title mb-1" data-sensitive>{{ currency_symbol }}{{ extra_combined|format_number }}</h3>
-            <div class="small text-muted">&nbsp;</div>
+            <h3 class="card-title mb-1">{{ currency_symbol }}{{ extra_combined|format_number }}</h3>
+            <div class="small text-muted">{{ period_label }}</div>
           </div>
         </div>
       </div>
@@ -98,7 +98,7 @@
               <td class="text-nowrap">{{ e.date }}</td>
               <td><span class="badge" style="background-color: {{ e.color }};">{{ e.category }}</span></td>
               <td>{{ e.description }}</td>
-              <td class="text-end text-success" data-sensitive>{{ currency_symbol }}{{ e.amount|format_number }}</td>
+              <td class="text-end text-success">{{ currency_symbol }}{{ e.amount|format_number }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -106,14 +106,16 @@
       </div>
     </div>
     {% else %}
-    <div class="alert alert-light border text-center mb-4">No bonus or non-recurring income recorded.</div>
+    <div class="alert alert-light border text-center mb-4">No bonus or non-recurring income recorded for this period.</div>
     {% endif %}
 
     <!-- View Transactions Link -->
     <div class="text-end mb-4">
-      <a href="{% url 'core:transaction_list' %}?group=income&category={{ extras_category_ids }}&amp;return_to={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary">
-        View All Work Extras Transactions →
+      {% if extras_category_ids %}
+      <a href="{{ bonus_transactions_url }}" class="btn btn-outline-primary">
+        View Bonuses Transactions →
       </a>
+      {% endif %}
     </div>
 
   </div><!-- col-md-10 -->
@@ -125,8 +127,6 @@
 {% block extra_js %}
 <script>
 (function() {
-  var isPrivacy = dashboardPrivacy.isOn();
-  window._dashCharts = [];
 
   var bonusEl = document.getElementById('bonusTimelineChart');
   if (bonusEl) {
@@ -149,11 +149,11 @@
       series: bonusSeries,
       colors: bonusColors,
       xaxis: { type: 'datetime' },
-      yaxis: { labels: { show: !isPrivacy, formatter: fmtAmt } },
+      yaxis: { labels: { show: true, formatter: fmtAmt } },
       markers: { size: 10, strokeWidth: 0 },
-      dataLabels: { enabled: !isPrivacy, formatter: function(v) { return fmtAmt(v); }, offsetY: -10, style: { fontSize: '11px', fontWeight: 600 } },
+      dataLabels: { enabled: true, formatter: function(v) { return fmtAmt(v); }, offsetY: -10, style: { fontSize: '11px', fontWeight: 600 } },
       tooltip: {
-        enabled: !isPrivacy,
+        enabled: true,
         custom: function(opts) {
           var pt = bonusSeries[opts.seriesIndex].data[opts.dataPointIndex];
           return '<div style="padding:8px 12px"><b>' + pt.x + '</b><br>' +
@@ -166,10 +166,8 @@
       grid: { borderColor: '#e9ecef' },
     });
     scatterChart.render();
-    window._dashCharts.push(scatterChart);
   }
 
-  dashboardPrivacy.apply(window._dashCharts);
 })();
 </script>
 {% endblock %}

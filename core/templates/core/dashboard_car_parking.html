@@ -11,8 +11,10 @@
   <div class="col-md-10">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Car Parking & Tolls</h4>
-      {% include "core/_currency_toggle.html" %}
+      {% include "core/_currency_toggle.html" with extra_params=category_currency_params %}
     </div>
+
+    {% include "core/_category_dashboard_filters.html" %}
 
     <!-- Cost -->
     <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Cost</h5>
@@ -21,7 +23,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ park_last_month|format_number }}</h3>
             <div class="small">
               {% if park_median_pct > 0 %}<span class="text-danger">▲ {{ park_median_pct|floatformat:0 }}% above median</span>
@@ -43,7 +45,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ currency_symbol }}{{ park_last_year|format_number }}</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -69,7 +71,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1">{{ park_last_month_count }} events</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -87,7 +89,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ park_count_last_year }} events</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -110,7 +112,7 @@
     <div class="row g-3 mb-4">
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-bold">Top Locations by Visits (Last 12 Months)</div>
+          <div class="card-header fw-bold">Top Locations by Visits · {{ period_label }}</div>
           <div class="table-responsive">
             <table class="table table-hover table-sm align-middle mb-0">
               <thead class="table-light">
@@ -118,7 +120,7 @@
                   <th>Location</th>
                   <th class="text-center">Visits</th>
                   <th class="text-end">Avg per Visit</th>
-                  <th class="text-end">Yearly Total</th>
+                  <th class="text-end">Period Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,6 +134,7 @@
                 {% endfor %}
               </tbody>
             </table>
+            {% include "core/_category_dashboard_transactions.html" %}
           </div>
         </div>
       </div>

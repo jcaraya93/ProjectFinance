@@ -4,19 +4,24 @@
         {% elif dashboard_category == 'income' %}Income
         {% elif dashboard_category == 'transfers' %}Transfers
         {% elif dashboard_category == 'expense' %}Expense
+        {% elif dashboard_category == 'category' %}Category
         {% elif dashboard_category == 'data_quality' %}Data Quality
         {% endif %}
       </div>
       <div class="list-group list-group-flush">
         {% if dashboard_category == 'overview' %}
         <a href="{% url 'core:dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'overview' %} active{% endif %}">Overview</a>
-        <a href="{% url 'core:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Expense Composition</a>
-        <a href="{% url 'core:expense_range_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'expense_range' %} active{% endif %}">Expense Range</a>
+
+        {% elif dashboard_category == 'expense' %}
+        <a href="{% url 'core:spending_income_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'spending_income' %} active{% endif %}">Composition</a>
+        <a href="{% url 'core:expense_composition_over_time_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'expense_composition_over_time' %} active{% endif %}">Time Composition</a>
+        <a href="{% url 'core:expense_range_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'expense_range' %} active{% endif %}">Range</a>
 
         {% elif dashboard_category == 'income' %}
-        <a href="{% url 'core:income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_overview' %} active{% endif %}">Overview</a>
-        <a href="{% url 'core:income_salary_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_salary' %} active{% endif %}">Work Salary</a>
-        <a href="{% url 'core:income_bonus_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_bonus' %} active{% endif %}">Work Extras</a>
+        <a href="{% url 'core:income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_overview' %} active{% endif %}">Composition</a>
+        <a href="{% url 'core:income_composition_over_time_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_composition_over_time' %} active{% endif %}">Time Composition</a>
+        <a href="{% url 'core:income_salary_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_salary' %} active{% endif %}">Salary</a>
+        <a href="{% url 'core:income_bonus_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_bonus' %} active{% endif %}">Bonuses</a>
         <a href="{% url 'core:reimbursement_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'reimbursement_overview' %} active{% endif %}">Reimbursement</a>
         <a href="{% url 'core:bank_income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_overview' %} active{% endif %}">Bank Income</a>
 
@@ -27,7 +32,7 @@
         <a href="{% url 'core:external_transfers_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'external_transfers' %} active{% endif %}">External Transfers</a>
         <a href="{% url 'core:transaction_pairing_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'transaction_pairing' %} active{% endif %}">Transaction Pairing</a>
 
-        {% elif dashboard_category == 'expense' %}
+        {% elif dashboard_category == 'category' %}
         <a href="{% url 'core:car_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car' %} active{% endif %}">Car</a>
         <a href="{% url 'core:car_gas_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car_gas' %} active{% endif %}">Car Gas</a>
         <a href="{% url 'core:car_parking_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'car_parking' %} active{% endif %}">Car Parking</a>

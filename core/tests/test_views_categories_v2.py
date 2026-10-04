@@ -11,6 +11,26 @@ def make_node(user, name, parent=None, group_slug='expense'):
 
 
 class TestCategoryV2List:
+    def test_group_tabs_have_matching_panels_and_preserve_actions(self, auth_client, user, category_groups):
+        make_node(user, 'Food')
+        make_node(user, 'Salary', group_slug='income')
+        response = auth_client.get(reverse('core:category_v2_list'))
+        content = response.content.decode()
+        assert 'id="categoryGroupTabs" role="tablist"' in content
+        for index, group in enumerate(response.context['groups']):
+            slug = group['slug']
+            assert f'id="category-tab-{slug}"' in content
+            assert f'data-bs-target="#category-panel-{slug}"' in content
+            assert f'aria-controls="category-panel-{slug}"' in content
+            assert f'aria-labelledby="category-tab-{slug}"' in content
+            panel = f'<div class="tab-pane{" active" if index == 0 else ""}" id="category-panel-{slug}"'
+            assert panel in content
+        assert 'cat-v2-act-edit' in content
+        assert 'cat-v2-act-move' in content
+        assert 'cat-v2-act-delete' in content
+        assert 'cat-v2-transaction-count' in content
+        assert '?v=20261004-income-roles' in content
+
     def test_empty_list_renders(self, auth_client, category_groups):
         resp = auth_client.get(reverse('core:category_v2_list'))
         assert resp.status_code == 200

@@ -15,8 +15,10 @@
     <!-- Currency toggle -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">Car Gas</h4>
-      {% include "core/_currency_toggle.html" %}
+      {% include "core/_currency_toggle.html" with extra_params=category_currency_params %}
     </div>
+
+    {% include "core/_category_dashboard_filters.html" %}
 
     <!-- Cost -->
     <!-- Events -->
@@ -26,7 +28,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1">{{ gas_last_month_count }} fill-ups</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -44,7 +46,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ gas_count_last_year }} fill-ups</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -70,7 +72,7 @@
       <div class="col-sm-6">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1">{{ currency_symbol }}{{ lm_fillup_avg|format_number }}</h3>
             <div class="small text-muted">Median: {{ currency_symbol }}{{ lm_fillup_median|format_number }}</div>
           </div>
@@ -79,7 +81,7 @@
       <div class="col-sm-6">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">All Time</h6>
+            <h6 class="card-subtitle text-muted">{{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ currency_symbol }}{{ all_fillup_avg|format_number }}</h3>
             <div class="small text-muted">Median: {{ currency_symbol }}{{ all_fillup_median|format_number }}</div>
           </div>
@@ -105,7 +107,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last Month ({{ last_month }})</h6>
+            <h6 class="card-subtitle text-muted">{{ last_month_label }}</h6>
             <h3 class="card-title mb-1 text-danger">{{ currency_symbol }}{{ gas_last_month|format_number }}</h3>
             <div class="small">
               {% if gas_median_pct > 0 %}<span class="text-danger">▲ {{ gas_median_pct|floatformat:0 }}% above median</span>
@@ -127,7 +129,7 @@
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100">
           <div class="card-body">
-            <h6 class="card-subtitle text-muted">Last 12 Months</h6>
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
             <h3 class="card-title mb-1">{{ currency_symbol }}{{ gas_last_year|format_number }}</h3>
             <div class="small text-muted">&nbsp;</div>
           </div>
@@ -146,6 +148,7 @@
       </div>
     </div>
 
+    {% include "core/_category_dashboard_transactions.html" %}
   </div><!-- col-md-10 -->
 </div><!-- row -->
 

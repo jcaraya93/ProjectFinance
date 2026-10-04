@@ -86,7 +86,7 @@
               <td>{{ u.out_currency }}</td>
               <td>{{ u.out_category }}</td>
               <td>{{ u.out_description }}</td>
-              <td class="text-end text-danger" data-sensitive>{{ currency_symbol }}{{ u.out_amount|format_number }}</td>
+              <td class="text-end text-danger">{{ currency_symbol }}{{ u.out_amount|format_number }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -119,7 +119,7 @@
               <td>{{ u.in_currency }}</td>
               <td>{{ u.in_category }}</td>
               <td>{{ u.in_description }}</td>
-              <td class="text-end text-success" data-sensitive>{{ currency_symbol }}{{ u.in_amount|format_number }}</td>
+              <td class="text-end text-success">{{ currency_symbol }}{{ u.in_amount|format_number }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -152,7 +152,7 @@
               <td class="text-center text-muted">→</td>
               <td><span class="badge bg-primary">{{ p.in_account }}</span> <small class="text-muted">{{ p.in_currency }}</small></td>
               <td>{{ p.out_category }}</td>
-              <td class="text-end text-success" data-sensitive>{{ currency_symbol }}{{ p.out_amount|format_number }}</td>
+              <td class="text-end text-success">{{ currency_symbol }}{{ p.out_amount|format_number }}</td>
             </tr>
             {% endfor %}
           </tbody>

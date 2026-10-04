@@ -1,0 +1,21 @@
+<div id="expenseFilters" class="dashboard-filter-toolbar d-flex flex-wrap align-items-center gap-3 p-3 bg-light border rounded mb-3">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    {% if not hide_period_label %}<span class="small text-muted">Period</span>{% endif %}
+    {% include "core/_period_filter.html" with show_month=True inline=True %}
+  </div>
+  {% if not hide_category_level %}
+  <div class="d-flex align-items-center gap-2">
+    {% if not hide_level_label %}<span class="small text-muted">Level</span>{% endif %}
+    <div class="btn-group btn-group-sm">
+      <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+        Level {{ category_level }}
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        {% for n in category_levels %}
+        <li><a class="dropdown-item{% if category_level == n %} active{% endif %}" href="?display_currency={{ display_currency }}&period_type={{ period_type }}&period={{ period_key }}&level={{ n }}">Level {{ n }}{% if n == 1 %} (top){% endif %}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+</div>

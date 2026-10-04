@@ -84,6 +84,7 @@ def category_v2_list(request):
     return render(request, 'core/category_v2_list.html', {
         'groups': groups,
         'parent_options': [r for r in all_rows if not r['is_protected']],
+        'income_dashboard_roles': CategoryNode.INCOME_DASHBOARD_ROLES,
     })
 
 
@@ -130,6 +131,8 @@ def category_v2_save(request):
             return redirect('core:category_v2_list')
         node = CategoryNode(name=name, color=color, group=group, parent=parent, user=request.user)
 
+    if 'income_dashboard_role' in request.POST:
+        node.income_dashboard_role = request.POST['income_dashboard_role']
     try:
         node.save()
     except ValidationError as exc:

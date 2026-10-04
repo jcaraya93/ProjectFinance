@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 
 from ..models import Transaction, LogicalTransaction, CategoryNode, ClassificationRuleV2
 from ..services.stats import get_dashboard_stats
+from ..services.income_categories import income_category_roles, dashboard_income_ids
 from ..instrumentation import tracer, dashboard_duration
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     'default_buckets_dashboard',
     'manual_classification_dashboard',
     'spending_income_dashboard',
+    'expense_composition_over_time_dashboard',
     'expense_range_dashboard',
     'chart_comparison',
     'car_dashboard',
@@ -28,6 +30,7 @@ __all__ = [
     'income_salary_dashboard',
     'income_bonus_dashboard',
     'income_overview_dashboard',
+    'income_composition_over_time_dashboard',
     'reimbursement_overview_dashboard',
     'bank_income_overview_dashboard',
     'internal_transfers_dashboard',
@@ -59,24 +62,22 @@ CHART_COLORS = {
 CAR_CATEGORIES = ['Car Gas', 'Car Insurance', 'Car Maintenance', 'Car Parking & Toll', 'Car Tax', 'Car Wash']
 RUNNING_CATEGORIES = ['Car Gas', 'Car Parking & Toll', 'Car Wash']
 OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
-SALARY_CATEGORIES = ['Work Salary', 'Work Bonuses']
-EXTRA_INCOME_CATEGORIES = ['Work Bonuses', 'Work Association', 'Work Government']
-TXN_INCOME_CATEGORIES = ['Reimbursement General']
-BANK_INCOME_CATEGORIES = ['Bank Interest CDP', 'Bank Interest Cashback', 'Bank Interest Reversals', 'Bank Interest Credit']
 CREDIT_PAYMENT_CATEGORY = 'Credit'
 PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
 
 DASHBOARD_CATEGORIES = {
-    'overview': 'overview', 'spending_income': 'overview',
-    'expense_range': 'overview',
-    'income_overview': 'income', 'income_salary': 'income', 'income_bonus': 'income',
+    'overview': 'overview', 'spending_income': 'expense',
+    'expense_range': 'expense',
+    'expense_composition_over_time': 'expense',
+    'income_overview': 'income', 'income_composition_over_time': 'income',
+    'income_salary': 'income', 'income_bonus': 'income',
     'reimbursement_overview': 'income',
     'bank_income_overview': 'income',
     'transfer_flow': 'transfers', 'internal_transfers': 'transfers',
     'credit_transfers': 'transfers', 'external_transfers': 'transfers',
     'transaction_pairing': 'transfers',
-    'car': 'expense', 'car_gas': 'expense', 'car_parking': 'expense',
+    'car': 'category', 'car_gas': 'category', 'car_parking': 'category',
     'transaction_health': 'data_quality', 'rule_matching': 'data_quality',
     'default_buckets': 'data_quality', 'manual_classification': 'data_quality',
 }
@@ -589,15 +590,15 @@ def _months_before(value, months):
 EXPENSE_LEVELS = [1, 2]
 
 
-def _expense_summary(user, display_currency, start_date, end_date, period_type):
-    """Selected expense total versus the median calendar period, plus the Unclassified share."""
+def _composition_summary(user, display_currency, start_date, end_date, period_type, group_slug):
+    """Selected group total versus the median calendar period, plus the Unclassified share."""
     from collections import defaultdict
     from statistics import median
     from django.db.models import Sum
     from django.db.models.functions import Abs, TruncMonth
 
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
-    base = Transaction.objects.filter(user=user, category_v2__group__slug='expense')
+    base = Transaction.objects.filter(user=user, category_v2__group__slug=group_slug)
 
     def total(qs):
         return float(qs.aggregate(t=Sum(Abs(amount_field)))['t'] or 0)
@@ -645,15 +646,14 @@ def _expense_summary(user, display_currency, start_date, end_date, period_type):
     }
 
 
-@dashboard_view("spending_income", "core/dashboard_spending_income.html")
-def spending_income_dashboard(request, display_currency, time_group):
-    """Expense breakdown with calendar and rolling periods, compared to calendar medians.
-
-    Defaults to the latest month with data.
-    """
+def _expense_period_context(request, default_period=None, group_slug=None, default_category_level=1):
+    """Shared period and category-level controls for expense composition dashboards."""
     from django.db.models import Min, Max
 
-    date_range = Transaction.objects.filter(user=request.user).aggregate(earliest=Min('date'), latest=Max('date'))
+    qs = Transaction.objects.filter(user=request.user)
+    if group_slug:
+        qs = qs.filter(category_v2__group__slug=group_slug)
+    date_range = qs.aggregate(earliest=Min('date'), latest=Max('date'))
     months, quarters, semesters, years = _build_calendar_periods(date_range['earliest'], date_range['latest'])
     today = date.today()
     rolling_year = {
@@ -687,6 +687,8 @@ def spending_income_dashboard(request, display_currency, time_group):
     if 'period_type' in request.GET:
         period_type = request.GET['period_type']
         period_key = request.GET.get('period', '')
+    elif default_period is not None:
+        period_type, period_key = default_period
     elif months:
         # Default to the most recent month with data
         period_type, period_key = 'month', months[0]['key']
@@ -703,36 +705,120 @@ def spending_income_dashboard(request, display_currency, time_group):
 
     # Granularity: level 1 (default) or 2; deeper categories roll up into their level-2 ancestor.
     try:
-        category_level = int(request.GET.get('level', 1))
+        category_level = int(request.GET.get('level', default_category_level))
     except ValueError:
         category_level = 1
     if category_level not in EXPENSE_LEVELS:
         category_level = 1
 
+    return {
+        'start_date': start_date,
+        'end_date': end_date,
+        'category_level': category_level,
+        'category_levels': EXPENSE_LEVELS,
+        'period_type': period_type,
+        'period_key': period_key,
+        'period_label': period_label,
+        'period_months': months,
+        'period_quarters': quarters,
+        'period_semesters': semesters,
+        'period_years': years,
+    }
+
+
+@dashboard_view("spending_income", "core/dashboard_spending_income.html")
+def spending_income_dashboard(request, display_currency, time_group):
+    """Expense breakdown and calendar median comparisons; defaults to the latest month."""
+    return _composition_context(request, display_currency, 'expense')
+
+
+def _composition_context(request, display_currency, group_slug):
+    period = _expense_period_context(
+        request, group_slug='income' if group_slug == 'income' else None,
+        default_category_level=2 if group_slug == 'income' else 1,
+    )
+    if group_slug == 'expense':
+        period['category_level'] = 1
+        period['category_levels'] = [1]
+    period['hide_category_level'] = group_slug == 'expense'
+    start_date, end_date = period['start_date'], period['end_date']
     context = get_dashboard_stats(request.user,
         start_date=start_date.isoformat() if start_date else None,
         end_date=end_date.isoformat() if end_date else None,
         display_currency=display_currency,
-        category_level=category_level,
+        category_level=period['category_level'],
+        groups=[group_slug],
     )
-    context['expense_summary'] = _expense_summary(
-        request.user, display_currency, start_date, end_date, period_type,
+    summary = _composition_summary(
+        request.user, display_currency, start_date, end_date, period['period_type'],
+        group_slug=group_slug,
     )
-    context['category_level'] = category_level
-    context['category_levels'] = EXPENSE_LEVELS
-    tx_params = {'group': 'expense', 'return_to': request.get_full_path()}
+    context['composition_summary'] = summary
+    if group_slug == 'expense':
+        context['expense_summary'] = summary
+    tx_params = {'group': group_slug, 'return_to': request.get_full_path()}
     if start_date:
         tx_params['start_date'] = start_date.isoformat()
     if end_date:
         tx_params['end_date'] = end_date.isoformat()
-    context['expense_transactions_url'] = reverse('core:transaction_list') + '?' + urlencode(tx_params)
-    context['period_type'] = period_type
-    context['period_key'] = period_key
-    context['period_label'] = period_label
-    context['period_months'] = months
-    context['period_quarters'] = quarters
-    context['period_semesters'] = semesters
-    context['period_years'] = years
+    transactions_url = reverse('core:transaction_list') + '?' + urlencode(tx_params)
+    context['composition_transactions_url'] = transactions_url
+    if group_slug == 'expense':
+        context['expense_transactions_url'] = transactions_url
+    context['composition_category_data'] = context[f'{group_slug}_category_data']
+    context['composition_drill_data'] = context[f'{group_slug}_drill_data']
+    context['composition_group'] = group_slug
+    context['composition_label'] = group_slug.title()
+    context['composition_title'] = f'{group_slug.title()} Composition'
+    context['composition_active'] = 'spending_income' if group_slug == 'expense' else 'income_overview'
+    context.update(period)
+    return context
+
+
+@dashboard_view("expense_composition_over_time", "core/dashboard_expense_composition_over_time.html")
+def expense_composition_over_time_dashboard(request, display_currency, time_group):
+    return _composition_timeline_context(request, display_currency, 'expense')
+
+
+def _composition_timeline_context(request, display_currency, group_slug):
+    from ..services.stats import category_composition_timeline, DecimalEncoder
+
+    context = _expense_period_context(
+        request, default_period=('year', 'last-12-months'),
+        group_slug='income' if group_slug == 'income' else None,
+        default_category_level=2 if group_slug == 'income' else 1,
+    )
+    if group_slug == 'expense':
+        context['category_level'] = 1
+        context['category_levels'] = [1]
+    context['hide_category_level'] = group_slug == 'expense'
+    context['timeline_currency_params'] = urlencode({
+        'period_type': context['period_type'], 'period': context['period_key'],
+        'level': context['category_level'],
+    })
+    timeline = category_composition_timeline(
+        request.user, display_currency, context['start_date'], context['end_date'],
+        context['period_type'], context['category_level'],
+        group_slug=group_slug,
+    )
+    timeline['transaction_urls'] = [
+        [
+            reverse('core:transaction_list') + '?' + urlencode({
+                'group': group_slug, 'category': category_id,
+                'start_date': interval['start'], 'end_date': interval['end'],
+                'return_to': request.get_full_path(),
+            })
+            for interval in timeline['intervals']
+        ]
+        for category_id in timeline['category_ids']
+    ]
+    context['composition_timeline_data'] = json.dumps(timeline, cls=DecimalEncoder)
+    if group_slug == 'expense':
+        context['expense_timeline_data'] = context['composition_timeline_data']
+    context['expense_timeline_grouping'] = timeline['grouping']
+    context['composition_group'] = group_slug
+    context['composition_title'] = f'{group_slug.title()} Time Composition'
+    context['composition_active'] = f'{group_slug}_composition_over_time'
     return context
 
 
@@ -752,7 +838,6 @@ def chart_comparison(request, display_currency, time_group):
 @dashboard_view("car", "core/dashboard_car.html")
 def car_dashboard(request, display_currency, time_group):
     """Dashboard focused on car-related expenses with multiple sections."""
-    from datetime import timedelta
     from django.db.models import Sum, Count, Min, Max
     from django.db.models.functions import TruncMonth, Abs
 
@@ -764,8 +849,13 @@ def car_dashboard(request, display_currency, time_group):
     # ── Base querysets ──
     car_qs = Transaction.objects.filter(user=request.user).filter(
         category_v2__name__in=CAR_CATEGORIES, **{f'{amount_field}__isnull': False})
+    period, car_qs = _category_period_filter(request, car_qs, CAR_CATEGORIES)
+    income_roles = income_category_roles(request.user)
     salary_qs = Transaction.objects.filter(user=request.user).filter(
-        category_v2__name__in=SALARY_CATEGORIES, **{f'{amount_field}__isnull': False})
+        category_v2_id__in=income_roles['salary'] | income_roles['bonus'], **{f'{amount_field}__isnull': False})
+    for key, lookup in (('start_date', 'date__gte'), ('end_date', 'date__lte')):
+        if period[key]:
+            salary_qs = salary_qs.filter(**{lookup: period[key]})
 
     # ── Monthly aggregations ──
     monthly_car = (car_qs.annotate(month=TruncMonth('date'))
@@ -795,7 +885,7 @@ def car_dashboard(request, display_currency, time_group):
     salary_pct = (last_month_total / last_month_salary * 100) if last_month_salary else 0
     median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
     tco_total = float(car_qs.aggregate(t=Sum(abs_field))['t'] or 0)
-    car_last_year = sum(monthly_totals[-12:]) if monthly_totals else 0
+    car_last_year = sum(monthly_totals)
 
     category_totals = list(car_qs.values('category_v2__name', 'category_v2__color')
         .annotate(total=Sum(abs_field)).order_by('-total'))
@@ -808,7 +898,7 @@ def car_dashboard(request, display_currency, time_group):
     pct_trend = [(months_data.get(m, {}).get('_total', 0) / salary_by_month[m] * 100) if salary_by_month.get(m, 0) > 0 else 0 for m in sorted_months]
 
     # ── GAS section ──
-    gas_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Gas', **{f'{amount_field}__isnull': False})
+    gas_qs = car_qs.filter(category_v2__name='Car Gas')
     monthly_gas = (gas_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(count=Count('id'), total=Sum(abs_field), avg=Sum(abs_field) / Count('id'))
         .order_by('month'))
@@ -862,8 +952,7 @@ def car_dashboard(request, display_currency, time_group):
     gas_count_below = [below_count_by_month.get(m, 0) for m in sorted_months]
 
     # ── RUNNING COSTS (Gas + Parking + Wash) ──
-    running_qs = Transaction.objects.filter(user=request.user).filter(
-        category_v2__name__in=RUNNING_CATEGORIES, **{f'{amount_field}__isnull': False})
+    running_qs = car_qs.filter(category_v2__name__in=RUNNING_CATEGORIES)
     running_monthly = (running_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field)).order_by('month'))
     running_by_month = {r['month'].strftime('%Y-%m'): float(r['total'] or 0) for r in running_monthly}
@@ -873,7 +962,7 @@ def car_dashboard(request, display_currency, time_group):
     running_vals = sorted([v for v in running_totals if v > 0])
     running_median = running_vals[len(running_vals) // 2] if running_vals else 0
     running_median_pct = ((running_last_month - running_median) / running_median * 100) if running_median else 0
-    running_last_year = sum(running_totals[-12:]) if running_totals else 0
+    running_last_year = sum(running_totals)
     # Per-category monthly for stacked chart
     running_by_cat_month = (running_qs.annotate(month=TruncMonth('date'))
         .values('month', 'category_v2__name').annotate(total=Sum(abs_field)).order_by('month'))
@@ -885,8 +974,7 @@ def car_dashboard(request, display_currency, time_group):
     running_colors = {'Car Gas': '#2980b9', 'Car Parking & Toll': '#607d8b', 'Car Wash': '#1abc9c'}
 
     # ── OWNERSHIP COSTS (Maintenance + Insurance + Tax) ──
-    ownership_qs = Transaction.objects.filter(user=request.user).filter(
-        category_v2__name__in=OWNERSHIP_CATEGORIES, **{f'{amount_field}__isnull': False})
+    ownership_qs = car_qs.filter(category_v2__name__in=OWNERSHIP_CATEGORIES)
     ownership_monthly = (ownership_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field)).order_by('month'))
     ownership_by_month = {r['month'].strftime('%Y-%m'): float(r['total'] or 0) for r in ownership_monthly}
@@ -896,27 +984,21 @@ def car_dashboard(request, display_currency, time_group):
     ownership_vals = sorted([v for v in ownership_totals if v > 0])
     ownership_median = ownership_vals[len(ownership_vals) // 2] if ownership_vals else 0
     ownership_median_pct = ((ownership_last_month - ownership_median) / ownership_median * 100) if ownership_median else 0
-    ownership_last_year = sum(ownership_totals[-12:]) if ownership_totals else 0
+    ownership_last_year = sum(ownership_totals)
 
-    from datetime import date, timedelta
-    twelve_months_ago = date.today() - timedelta(days=365)
+    maint_qs = car_qs.filter(category_v2__name='Car Maintenance')
+    maint_12m_total = float(maint_qs.aggregate(t=Sum(abs_field))['t'] or 0)
+    maint_12m_count = maint_qs.count()
 
-    maint_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Maintenance', **{f'{amount_field}__isnull': False})
-    maint_qs_12m = maint_qs.filter(date__gte=twelve_months_ago)
-    maint_12m_total = float(maint_qs_12m.aggregate(t=Sum(abs_field))['t'] or 0)
-    maint_12m_count = maint_qs_12m.count()
+    ins_qs = car_qs.filter(category_v2__name='Car Insurance')
+    ins_12m_total = float(ins_qs.aggregate(t=Sum(abs_field))['t'] or 0)
+    ins_12m_count = ins_qs.count()
 
-    ins_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Insurance', **{f'{amount_field}__isnull': False})
-    ins_qs_12m = ins_qs.filter(date__gte=twelve_months_ago)
-    ins_12m_total = float(ins_qs_12m.aggregate(t=Sum(abs_field))['t'] or 0)
-    ins_12m_count = ins_qs_12m.count()
+    tax_qs = car_qs.filter(category_v2__name='Car Tax')
+    tax_12m_total = float(tax_qs.aggregate(t=Sum(abs_field))['t'] or 0)
+    tax_12m_count = tax_qs.count()
 
-    tax_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Tax', **{f'{amount_field}__isnull': False})
-    tax_qs_12m = tax_qs.filter(date__gte=twelve_months_ago)
-    tax_12m_total = float(tax_qs_12m.aggregate(t=Sum(abs_field))['t'] or 0)
-    tax_12m_count = tax_qs_12m.count()
-
-    wash_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Wash', **{f'{amount_field}__isnull': False})
+    wash_qs = car_qs.filter(category_v2__name='Car Wash')
     wash_total = float(wash_qs.aggregate(t=Sum(abs_field))['t'] or 0)
     wash_count = wash_qs.count()
 
@@ -931,7 +1013,7 @@ def car_dashboard(request, display_currency, time_group):
     periodic_timeline.sort(key=lambda x: x['date'], reverse=True)
 
     # ── PARKING section ──
-    park_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Parking & Toll', **{f'{amount_field}__isnull': False})
+    park_qs = car_qs.filter(category_v2__name='Car Parking & Toll')
     park_monthly = (park_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field), count=Count('id')).order_by('month'))
     park_by_month = {r['month'].strftime('%Y-%m'): {'total': float(r['total'] or 0), 'count': r['count']} for r in park_monthly}
@@ -945,12 +1027,12 @@ def car_dashboard(request, display_currency, time_group):
     park_monthly_counts_nonzero = [c for c in park_monthly_counts if c > 0]
     park_avg_count_monthly = sum(park_monthly_counts) / len(park_monthly_counts) if park_monthly_counts else 0
     park_median_count_monthly = sorted(park_monthly_counts_nonzero)[len(park_monthly_counts_nonzero) // 2] if park_monthly_counts_nonzero else 0
-    park_count_last_year = sum(park_monthly_counts[-12:])
+    park_count_last_year = sum(park_monthly_counts)
     park_monthly_vals = [v for v in park_totals if v > 0]
     park_avg_monthly = sum(park_totals) / len(park_totals) if park_totals else 0
     park_median_monthly = sorted(park_monthly_vals)[len(park_monthly_vals) // 2] if park_monthly_vals else 0
     park_median_pct = ((park_last_month - park_median_monthly) / park_median_monthly * 100) if park_median_monthly else 0
-    park_last_year = sum(park_totals[-12:]) if park_totals else 0
+    park_last_year = sum(park_totals)
 
     # Monthly parking data by location
     park_monthly_by_loc = (park_qs.annotate(month=TruncMonth('date'))
@@ -1003,16 +1085,14 @@ def car_dashboard(request, display_currency, time_group):
             'backgroundColor': _loc_color(i),
         })
 
-    # Top parking locations by visits (last 12 months)
-    from datetime import date, timedelta
-    twelve_months_ago = date.today() - timedelta(days=365)
-    park_locations = list(park_qs.filter(date__gte=twelve_months_ago).values('description')
+    # Top parking locations by visits
+    park_locations = list(park_qs.values('description')
         .annotate(count=Count('id'), total=Sum(abs_field))
         .order_by('-count')[:10])
     for loc in park_locations:
         loc['avg'] = float(loc['total']) / loc['count'] if loc['count'] else 0
         loc['total'] = float(loc['total'])
-        loc['avg_per_month'] = float(loc['total']) / 12
+        loc['avg_per_month'] = float(loc['total']) / len(sorted_months) if sorted_months else 0
     # Top parking locations by cost
     park_locations_by_cost = list(park_qs.values('description')
         .annotate(count=Count('id'), total=Sum(abs_field))
@@ -1021,7 +1101,7 @@ def car_dashboard(request, display_currency, time_group):
         loc['avg'] = float(loc['total']) / loc['count'] if loc['count'] else 0
         loc['total'] = float(loc['total'])
     # Top parking locations by max single charge
-    park_locations_by_max = list(park_qs.filter(date__gte=twelve_months_ago).values('description')
+    park_locations_by_max = list(park_qs.values('description')
         .annotate(max_charge=Max(abs_field), count=Count('id'))
         .order_by('-max_charge')[:10])
     for loc in park_locations_by_max:
@@ -1038,12 +1118,14 @@ def car_dashboard(request, display_currency, time_group):
         table_rows.append(row)
 
     context = {
+        **period,
         'currency_symbol': currency_symbol,
         'car_categories': CAR_CATEGORIES,
         'cat_colors': cat_colors,
         'sorted_months': sorted_months,
         # Overview
         'last_month': last_month, 'last_month_total': last_month_total,
+        'last_month_label': f'Latest Month ({last_month})' if last_month else 'No expenses in this period',
         'avg_monthly': avg_monthly, 'median_monthly': median_monthly,
         'salary_pct': salary_pct, 'last_month_salary': last_month_salary,
         'median_pct': median_pct,
@@ -1063,8 +1145,8 @@ def car_dashboard(request, display_currency, time_group):
         'gas_avg_monthly': sum(gas_monthly_spend) / len(gas_monthly_spend) if gas_monthly_spend else 0,
         'gas_median_monthly': sorted([v for v in gas_monthly_spend if v > 0])[len([v for v in gas_monthly_spend if v > 0]) // 2] if any(v > 0 for v in gas_monthly_spend) else 0,
         'gas_median_pct': ((gas_by_month.get(last_month, {}).get('total', 0) - (sorted([v for v in gas_monthly_spend if v > 0])[len([v for v in gas_monthly_spend if v > 0]) // 2] if any(v > 0 for v in gas_monthly_spend) else 0)) / (sorted([v for v in gas_monthly_spend if v > 0])[len([v for v in gas_monthly_spend if v > 0]) // 2] if any(v > 0 for v in gas_monthly_spend) else 1) * 100),
-        'gas_last_year': sum(gas_monthly_spend[-12:]) if gas_monthly_spend else 0,
-        # Ownership sub-categories (last 12 months)
+        'gas_last_year': sum(gas_monthly_spend),
+        # Ownership sub-categories
         'maint_12m_total': maint_12m_total, 'maint_12m_count': maint_12m_count,
         'ins_12m_total': ins_12m_total, 'ins_12m_count': ins_12m_count,
         'tax_12m_total': tax_12m_total, 'tax_12m_count': tax_12m_count,
@@ -1130,6 +1212,7 @@ def car_gas_dashboard(request, display_currency, time_group):
     abs_field = Abs(amount_field)
 
     gas_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Gas', **{f'{amount_field}__isnull': False})
+    period, gas_qs = _category_period_filter(request, gas_qs, ['Car Gas'])
     monthly_gas = (gas_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(count=Count('id'), total=Sum(abs_field), avg=Sum(abs_field) / Count('id'))
         .order_by('month'))
@@ -1190,7 +1273,7 @@ def car_gas_dashboard(request, display_currency, time_group):
     gas_counts_nonzero = [c for c in gas_counts if c > 0]
     gas_avg_count_monthly = sum(gas_counts) / len(gas_counts) if gas_counts else 0
     gas_median_count_monthly = sorted(gas_counts_nonzero)[len(gas_counts_nonzero) // 2] if gas_counts_nonzero else 0
-    gas_count_last_year = sum(gas_counts[-12:])
+    gas_count_last_year = sum(gas_counts)
 
     # Per fill-up cost stats
     all_fillup_amounts = [abs(float(a)) for a in gas_qs.values_list(amount_field, flat=True) if a]
@@ -1206,13 +1289,15 @@ def car_gas_dashboard(request, display_currency, time_group):
     lm_fillup_median = sorted(lm_amounts)[len(lm_amounts) // 2] if lm_amounts else 0
 
     context = {
+        **period,
         'currency_symbol': currency_symbol,
         'last_month': last_month,
         'gas_last_month': gas_last,
+        'last_month_label': f'Latest Month ({last_month})' if last_month else 'No expenses in this period',
         'gas_avg_monthly': sum(gas_monthly_spend) / len(gas_monthly_spend) if gas_monthly_spend else 0,
         'gas_median_monthly': gas_median,
         'gas_median_pct': gas_median_pct,
-        'gas_last_year': sum(gas_monthly_spend[-12:]) if gas_monthly_spend else 0,
+        'gas_last_year': sum(gas_monthly_spend),
         'gas_last_month_count': gas_last_month_count,
         'gas_avg_count_monthly': gas_avg_count_monthly,
         'gas_median_count_monthly': gas_median_count_monthly,
@@ -1240,8 +1325,7 @@ def car_gas_dashboard(request, display_currency, time_group):
 @dashboard_view("car_parking", "core/dashboard_car_parking.html")
 def car_parking_dashboard(request, display_currency, time_group):
     """Dashboard focused on car parking & tolls."""
-    from datetime import date, timedelta
-    from django.db.models import Sum, Count, Max
+    from django.db.models import Sum, Count
     from django.db.models.functions import TruncMonth, Abs
 
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
@@ -1249,6 +1333,7 @@ def car_parking_dashboard(request, display_currency, time_group):
     abs_field = Abs(amount_field)
 
     park_qs = Transaction.objects.filter(user=request.user).filter(category_v2__name='Car Parking & Toll', **{f'{amount_field}__isnull': False})
+    period, park_qs = _category_period_filter(request, park_qs, ['Car Parking & Toll'])
     park_monthly = (park_qs.annotate(month=TruncMonth('date')).values('month')
         .annotate(total=Sum(abs_field), count=Count('id')).order_by('month'))
     park_by_month = {r['month'].strftime('%Y-%m'): {'total': float(r['total'] or 0), 'count': r['count']} for r in park_monthly}
@@ -1264,14 +1349,14 @@ def car_parking_dashboard(request, display_currency, time_group):
     park_monthly_vals = [v for v in park_totals if v > 0]
     park_median_monthly = sorted(park_monthly_vals)[len(park_monthly_vals) // 2] if park_monthly_vals else 0
     park_median_pct = ((park_last_month - park_median_monthly) / park_median_monthly * 100) if park_median_monthly else 0
-    park_last_year = sum(park_totals[-12:]) if park_totals else 0
+    park_last_year = sum(park_totals)
 
     # Event stats
     park_last_month_count = park_by_month.get(last_month, {}).get('count', 0)
     park_monthly_counts_nonzero = [c for c in park_counts if c > 0]
     park_avg_count_monthly = sum(park_counts) / len(park_counts) if park_counts else 0
     park_median_count_monthly = sorted(park_monthly_counts_nonzero)[len(park_monthly_counts_nonzero) // 2] if park_monthly_counts_nonzero else 0
-    park_count_last_year = sum(park_counts[-12:])
+    park_count_last_year = sum(park_counts)
 
     # Location charts (top 5 by cost / by visits)
     park_monthly_by_loc = list(park_qs.annotate(month=TruncMonth('date'))
@@ -1308,8 +1393,7 @@ def car_parking_dashboard(request, display_currency, time_group):
     park_count_datasets = [{'label': loc[:15], 'data': [count_by_loc[loc].get(m, 0) for m in sorted_months], 'backgroundColor': _loc_color(i)} for i, loc in enumerate(top_by_visits + ['Others'])]
 
     # Top locations table
-    twelve_months_ago = date.today() - timedelta(days=365)
-    park_locations = list(park_qs.filter(date__gte=twelve_months_ago).values('description')
+    park_locations = list(park_qs.values('description')
         .annotate(count=Count('id'), total=Sum(abs_field))
         .order_by('-count')[:10])
     for loc in park_locations:
@@ -1317,9 +1401,11 @@ def car_parking_dashboard(request, display_currency, time_group):
         loc['total'] = float(loc['total'])
 
     context = {
+        **period,
         'currency_symbol': currency_symbol,
         'last_month': last_month,
         'park_last_month': park_last_month, 'park_avg_monthly': park_avg_monthly,
+        'last_month_label': f'Latest Month ({last_month})' if last_month else 'No expenses in this period',
         'park_median_monthly': park_median_monthly, 'park_median_pct': park_median_pct,
         'park_last_year': park_last_year,
         'park_last_month_count': park_last_month_count,
@@ -1338,48 +1424,36 @@ def car_parking_dashboard(request, display_currency, time_group):
 
 @dashboard_view("income_salary", "core/dashboard_income_salary.html", default_time_group="biweekly")
 def income_salary_dashboard(request, display_currency, time_group):
-    """Dashboard focused on Salary Main income."""
+    """Salary statistics and charts within the selected period."""
     from collections import defaultdict
-    from datetime import timedelta
-    from django.db.models import Sum, Count, Avg
+    from django.contrib import messages
+    from django.db.models import Sum
     from django.db.models.functions import TruncMonth
 
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
+    salary_cat_ids = dashboard_income_ids(request, 'salary')
     salary_qs = Transaction.objects.filter(user=request.user).filter(
-        category_v2__name='Work Salary',
+        category_v2_id__in=salary_cat_ids,
         **{f'{amount_field}__isnull': False},
     )
-
-    # --- Determine last period from latest statement ---
-    from core.models import StatementImport
-    today = date.today()
-    latest_stmt = (
-        StatementImport.objects.filter(user=request.user)
-        .order_by('-statement_date').first()
-    )
-    if latest_stmt and latest_stmt.statement_date:
-        stmt_date = latest_stmt.statement_date
-        last_period_start = stmt_date.replace(day=1)
-        if stmt_date.month == 12:
-            last_period_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            last_period_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
-        last_month_label = f"{last_period_start.strftime('%b %Y')} (latest)"
-        last_period_key = last_period_start.strftime('%Y-%m')
-    else:
-        last_period_end = today.replace(day=1) - timedelta(days=1)
-        last_period_start = last_period_end.replace(day=1)
-        last_month_label = last_period_start.strftime('%b %Y')
-        last_period_key = last_period_start.strftime('%Y-%m')
+    period = _expense_period_context(request, default_period=('year', 'last-12-months'), group_slug='income')
+    period['category_level'] = None
+    if time_group not in ('biweekly', 'monthly'):
+        messages.warning(request, 'Invalid salary chart grouping; using Bi-weekly.')
+        time_group = 'biweekly'
+    if period['start_date']:
+        salary_qs = salary_qs.filter(date__gte=period['start_date'])
+    if period['end_date']:
+        salary_qs = salary_qs.filter(date__lte=period['end_date'])
 
     # --- Always compute monthly summary cards ---
     monthly_agg = (
         salary_qs
         .annotate(month=TruncMonth('date'))
         .values('month')
-        .annotate(total=Sum(amount_field), cnt=Count('id'))
+        .annotate(total=Sum(amount_field))
         .order_by('month')
     )
     monthly_map = {}
@@ -1396,11 +1470,12 @@ def income_salary_dashboard(request, display_currency, time_group):
     median_monthly = (sorted_totals[n // 2] if n % 2 else
                       (sorted_totals[n // 2 - 1] + sorted_totals[n // 2]) / 2) if n else 0
 
+    last_period_key = sorted_month_keys[-1] if sorted_month_keys else None
+    last_month_label = date.fromisoformat(last_period_key + '-01').strftime('%b %Y') if last_period_key else 'No salary in this period'
     last_month_total = monthly_map.get(last_period_key, 0)
     median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
 
-    last_12 = monthly_totals_list[-12:] if len(monthly_totals_list) >= 12 else monthly_totals_list
-    salary_last_year = sum(last_12)
+    salary_total = sum(monthly_totals_list)
 
     # --- Chart data grouped by time_group ---
     if time_group == 'biweekly':
@@ -1434,13 +1509,15 @@ def income_salary_dashboard(request, display_currency, time_group):
     }, cls=DecimalEncoder)
 
     # --- Link to transactions ---
-    from core.models import CategoryNode
-    salary_cat_ids = list(
-        CategoryNode.objects.filter(
-            user=request.user, name='Work Salary', group__slug='income',
-        ).values_list('id', flat=True)
-    )
-    salary_category_ids = '&category='.join(str(cid) for cid in salary_cat_ids)
+    salary_category_ids = '&category='.join(str(cid) for cid in sorted(salary_cat_ids))
+    filter_params = {
+        'period_type': period['period_type'], 'period': period['period_key'], 'time_group': time_group,
+    }
+    tx_params = [('group', 'income'), ('category_scope', 'direct'), ('return_to', request.get_full_path())]
+    tx_params.extend(('category', cid) for cid in sorted(salary_cat_ids))
+    for key in ('start_date', 'end_date'):
+        if period[key]:
+            tx_params.append((key, period[key].isoformat()))
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1449,11 +1526,17 @@ def income_salary_dashboard(request, display_currency, time_group):
         'avg_monthly': avg_monthly,
         'median_monthly': median_monthly,
         'median_pct': median_pct,
-        'salary_last_year': salary_last_year,
+        'salary_total': salary_total,
         'sorted_months': sorted_month_keys,
         'trend_data': trend_data,
         'salary_category_ids': salary_category_ids,
+        'salary_transactions_url': reverse('core:transaction_list') + '?' + urlencode(tx_params) if salary_cat_ids else '',
+        'salary_currency_params': urlencode(filter_params),
+        'salary_grouping_params': urlencode({key: value for key, value in filter_params.items() if key != 'time_group'}),
+        'period_extra_params': urlencode({'time_group': time_group}),
+        'time_group': time_group,
     }
+    context.update(period)
     return context
 
 
@@ -1465,21 +1548,28 @@ def income_bonus_dashboard(request, display_currency, time_group):
     amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
 
+    income_roles = income_category_roles(request.user)
+    extras_cat_ids = dashboard_income_ids(request, 'bonus', 'association', 'government')
     extra_qs = Transaction.objects.filter(user=request.user).filter(
-        category_v2__name__in=EXTRA_INCOME_CATEGORIES,
+        category_v2_id__in=extras_cat_ids,
         **{f'{amount_field}__isnull': False},
     )
+    period = _expense_period_context(request, default_period=('all', ''), group_slug='income')
+    period['category_level'] = None
+    for key, lookup in (('start_date', 'date__gte'), ('end_date', 'date__lte')):
+        if period[key]:
+            extra_qs = extra_qs.filter(**{lookup: period[key]})
 
     bonus_total = float(
-        extra_qs.filter(category_v2__name='Work Bonuses')
+        extra_qs.filter(category_v2_id__in=income_roles['bonus'])
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     association_total = float(
-        extra_qs.filter(category_v2__name='Work Association')
+        extra_qs.filter(category_v2_id__in=income_roles['association'])
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     goverment_total = float(
-        extra_qs.filter(category_v2__name='Work Government')
+        extra_qs.filter(category_v2_id__in=income_roles['government'])
         .aggregate(t=Sum(amount_field))['t'] or 0
     )
     extra_combined = bonus_total + association_total + goverment_total
@@ -1503,13 +1593,12 @@ def income_bonus_dashboard(request, display_currency, time_group):
     ], cls=DecimalEncoder)
 
     # --- Link to transactions ---
-    from core.models import CategoryNode
-    extras_cat_ids = list(
-        CategoryNode.objects.filter(
-            user=request.user, name__in=EXTRA_INCOME_CATEGORIES, group__slug='income',
-        ).values_list('id', flat=True)
-    )
-    extras_category_ids = '&category='.join(str(cid) for cid in extras_cat_ids)
+    extras_category_ids = '&category='.join(str(cid) for cid in sorted(extras_cat_ids))
+    tx_params = [('group', 'income'), ('category_scope', 'direct'), ('return_to', request.get_full_path())]
+    tx_params.extend(('category', cid) for cid in sorted(extras_cat_ids))
+    for key in ('start_date', 'end_date'):
+        if period[key]:
+            tx_params.append((key, period[key].isoformat()))
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1520,172 +1609,28 @@ def income_bonus_dashboard(request, display_currency, time_group):
         'extra_events': extra_events,
         'extra_events_json': extra_events_json,
         'extras_category_ids': extras_category_ids,
+        'bonus_transactions_url': reverse('core:transaction_list') + '?' + urlencode(tx_params) if extras_cat_ids else '',
+        'bonus_currency_params': urlencode({'period_type': period['period_type'], 'period': period['period_key']}),
     }
+    context.update(period)
     return context
 
 
 @dashboard_view("income_overview", "core/dashboard_income_overview.html")
 def income_overview_dashboard(request, display_currency, time_group):
-    """Overview dashboard for all income categories."""
-    from collections import defaultdict
-    from datetime import timedelta
-    from django.db.models import Sum, Count
-    from django.db.models.functions import Abs, TruncMonth
-
-    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
-    currency_symbol = '₡' if display_currency == 'CRC' else '$'
-    abs_field = Abs(amount_field)
-
-    income_qs = Transaction.objects.filter(
-        user=request.user,
-        category_v2__group__slug='income',
-        **{f'{amount_field}__isnull': False},
-    )
-
-    # --- Summary cards ---
-    from core.models import StatementImport
-    today = date.today()
-    latest_stmt = (
-        StatementImport.objects.filter(user=request.user)
-        .order_by('-statement_date').first()
-    )
-    if latest_stmt and latest_stmt.statement_date:
-        stmt_date = latest_stmt.statement_date
-        last_period_start = stmt_date.replace(day=1)
-        if stmt_date.month == 12:
-            last_period_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            last_period_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
-        last_period_label = f"{last_period_start.strftime('%b %Y')} (latest)"
-    else:
-        last_period_end = today.replace(day=1) - timedelta(days=1)
-        last_period_start = last_period_end.replace(day=1)
-        last_period_label = last_period_start.strftime('%b %Y')
-
-    last_period_total = float(
-        income_qs.filter(date__gte=last_period_start, date__lte=last_period_end)
-        .aggregate(t=Sum(abs_field))['t'] or 0
-    )
-
-    monthly_agg = (
-        income_qs.annotate(month=TruncMonth('date'))
-        .values('month')
-        .annotate(total=Sum(abs_field))
-        .order_by('month')
-    )
-    monthly_map = {}
-    for r in monthly_agg:
-        m = r['month'].strftime('%Y-%m')
-        monthly_map[m] = float(r['total'] or 0)
-    sorted_months = sorted(monthly_map.keys())
-    monthly_totals = [monthly_map[m] for m in sorted_months]
-
-    avg_monthly = sum(monthly_totals) / len(monthly_totals) if monthly_totals else 0
-    sorted_vals = sorted(monthly_totals)
-    n = len(sorted_vals)
-    median_monthly = (sorted_vals[n // 2] if n % 2 else
-                      (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2) if n else 0
-    all_time_total = sum(monthly_totals)
-    median_pct = ((last_period_total - median_monthly) / median_monthly * 100) if median_monthly else 0
-
-    # --- Monthly trend (total) ---
-    trend_data = json.dumps({
-        'labels': sorted_months,
-        'values': [round(v) for v in monthly_totals],
-        'median': round(median_monthly),
-    }, cls=DecimalEncoder)
-
-    # --- Stacked bar by category over time ---
-    cat_monthly = (
-        income_qs.annotate(month=TruncMonth('date'))
-        .values('month', 'category_v2__name', 'category_v2__color')
-        .annotate(total=Sum(abs_field))
-        .order_by('month')
-    )
-    cat_series_map = defaultdict(lambda: defaultdict(float))
-    cat_color_map = {}
-    for r in cat_monthly:
-        name = r['category_v2__name']
-        m = r['month'].strftime('%Y-%m')
-        cat_series_map[name][m] = float(r['total'] or 0)
-        cat_color_map[name] = r['category_v2__color'] or '#6c757d'
-
-    stacked_series = []
-    stacked_colors = []
-    for name in sorted(cat_series_map.keys(), key=lambda k: -sum(cat_series_map[k].values())):
-        stacked_series.append({
-            'name': name,
-            'data': [round(cat_series_map[name].get(m, 0)) for m in sorted_months],
-        })
-        stacked_colors.append(cat_color_map[name])
-
-    stacked_data = json.dumps({
-        'labels': sorted_months,
-        'series': stacked_series,
-        'colors': stacked_colors,
-    }, cls=DecimalEncoder)
-
-    # --- All-time breakdown by category (donut + bar) ---
-    cat_breakdown = list(
-        income_qs.values('category_v2__name', 'category_v2__color')
-        .annotate(abs_total=Sum(abs_field))
-        .order_by('-abs_total')
-    )
-    income_category_data = {'labels': [], 'values': [], 'colors': []}
-    top_income_data = {'labels': [], 'values': [], 'colors': []}
-    for r in cat_breakdown:
-        name = r['category_v2__name'] or 'Uncategorized'
-        val = float(r['abs_total'] or 0)
-        color = r['category_v2__color'] or '#6c757d'
-        income_category_data['labels'].append(name)
-        income_category_data['values'].append(val)
-        income_category_data['colors'].append(color)
-        top_income_data['labels'].append(name)
-        top_income_data['values'].append(val)
-        top_income_data['colors'].append(color)
-
-    # --- Income composition (% stacked) ---
-    composition_series = []
-    composition_colors = []
-    for name in sorted(cat_series_map.keys(), key=lambda k: -sum(cat_series_map[k].values())):
-        composition_series.append({
-            'name': name,
-            'data': [round(cat_series_map[name].get(m, 0)) for m in sorted_months],
-        })
-        composition_colors.append(cat_color_map[name])
-
-    composition_data = json.dumps({
-        'labels': sorted_months,
-        'series': composition_series,
-        'colors': composition_colors,
-    }, cls=DecimalEncoder)
-
-    context = {
-        'currency_symbol': currency_symbol,
-        'last_period_label': last_period_label,
-        'last_period_total': last_period_total,
-        'avg_monthly': avg_monthly,
-        'median_monthly': median_monthly,
-        'median_pct': median_pct,
-        'all_time_total': all_time_total,
-        'trend_data': trend_data,
-        'stacked_data': stacked_data,
-        'composition_data': composition_data,
-        'income_category_data': json.dumps(income_category_data, cls=DecimalEncoder),
-        'top_income_data': json.dumps(top_income_data, cls=DecimalEncoder),
-        'filter_group': 'income',
-    }
-    return context
+    """Income composition, retaining the existing Income landing URL."""
+    return _composition_context(request, display_currency, 'income')
 
 
-REIMBURSEMENT_CATEGORIES = ['Reimbursement General', 'Reimbursement Housing', 'Reimbursement Insurance', 'Reimbursement Partner']
+@dashboard_view("income_composition_over_time", "core/dashboard_composition_over_time.html")
+def income_composition_over_time_dashboard(request, display_currency, time_group):
+    return _composition_timeline_context(request, display_currency, 'income')
 
 
 @dashboard_view("reimbursement_overview", "core/dashboard_reimbursement_overview.html")
 def reimbursement_overview_dashboard(request, display_currency, time_group):
     """Overview dashboard for all reimbursement income categories."""
     from collections import defaultdict
-    from datetime import timedelta
     from django.db.models import Sum
     from django.db.models.functions import TruncMonth, Abs
 
@@ -1693,31 +1638,22 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
 
-    from core.models import StatementImport
-    today = date.today()
-    latest_stmt = (
-        StatementImport.objects.filter(user=request.user)
-        .order_by('-statement_date').first()
-    )
-    if latest_stmt and latest_stmt.statement_date:
-        stmt_date = latest_stmt.statement_date
-        last_month_start = stmt_date.replace(day=1)
-        if stmt_date.month == 12:
-            last_month_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            last_month_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
-        last_month_label = f"{last_month_start.strftime('%b %Y')} (latest)"
-    else:
-        last_month_end = today.replace(day=1) - timedelta(days=1)
-        last_month_start = last_month_end.replace(day=1)
-        last_month_label = last_month_start.strftime('%Y-%m')
-
+    reimb_cat_ids = dashboard_income_ids(request, 'reimbursement')
     reimb_qs = Transaction.objects.filter(
         user=request.user,
-        category_v2__name__in=REIMBURSEMENT_CATEGORIES,
+        category_v2_id__in=reimb_cat_ids,
         category_v2__group__slug='income',
         **{f'{amount_field}__isnull': False},
     )
+    period, reimb_qs = _income_period_filter(request, reimb_qs, reimb_cat_ids)
+    latest_date = reimb_qs.order_by('-date').values_list('date', flat=True).first()
+    if latest_date:
+        last_month_start = latest_date.replace(day=1)
+        last_month_label = latest_date.strftime('%b %Y')
+        last_month_end = latest_date
+    else:
+        last_month_label = 'No income in this period'
+        last_month_start = last_month_end = date.today()
 
     # --- Summary cards ---
     last_month_total = float(
@@ -1873,15 +1809,7 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     }, cls=DecimalEncoder)
 
     # --- Link to transactions page with reimbursement filter ---
-    from core.models import CategoryNode
-    reimb_cat_ids = list(
-        CategoryNode.objects.filter(
-            user=request.user,
-            name__in=REIMBURSEMENT_CATEGORIES,
-            group__slug='income',
-        ).values_list('id', flat=True)
-    )
-    reimbursement_category_ids = '&category='.join(str(cid) for cid in reimb_cat_ids)
+    reimbursement_category_ids = '&category='.join(str(cid) for cid in sorted(reimb_cat_ids))
 
     context = {
         'currency_symbol': currency_symbol,
@@ -1899,14 +1827,41 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         'count_data': count_data,
         'reimbursement_category_ids': reimbursement_category_ids,
     }
+    context.update(period)
     return context
+
+
+def _dashboard_period_filter(request, qs, category_ids, group_slug, prefix):
+    period = _expense_period_context(request, default_period=('year', 'last-12-months'), group_slug=group_slug)
+    period['category_level'] = None
+    tx_params = [('group', group_slug), ('category_scope', 'direct'), ('return_to', request.get_full_path())]
+    tx_params.extend(('category', cid) for cid in sorted(category_ids))
+    for key, lookup in (('start_date', 'date__gte'), ('end_date', 'date__lte')):
+        if period[key]:
+            qs = qs.filter(**{lookup: period[key]})
+            tx_params.append((key, period[key].isoformat()))
+    period[f'{prefix}_transactions_url'] = reverse('core:transaction_list') + '?' + urlencode(tx_params) if category_ids else ''
+    period[f'{prefix}_currency_params'] = urlencode({'period_type': period['period_type'], 'period': period['period_key']})
+    return period, qs
+
+
+def _income_period_filter(request, qs, category_ids):
+    return _dashboard_period_filter(request, qs, category_ids, 'income', 'income')
+
+
+def _category_period_filter(request, qs, category_names):
+    category_ids = set(CategoryNode.objects.filter(
+        user=request.user, group__slug='expense', name__in=category_names,
+    ).values_list('id', flat=True))
+    return _dashboard_period_filter(
+        request, qs.filter(category_v2_id__in=category_ids), category_ids, 'expense', 'category',
+    )
 
 
 @dashboard_view("bank_income_overview", "core/dashboard_bank_income_overview.html")
 def bank_income_overview_dashboard(request, display_currency, time_group):
     """Overview dashboard for all bank interest income categories."""
     from collections import defaultdict
-    from datetime import timedelta
     from django.db.models import Sum
     from django.db.models.functions import TruncMonth, Abs
 
@@ -1914,31 +1869,22 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     currency_symbol = '₡' if display_currency == 'CRC' else '$'
     abs_field = Abs(amount_field)
 
-    from core.models import StatementImport
-    today = date.today()
-    latest_stmt = (
-        StatementImport.objects.filter(user=request.user)
-        .order_by('-statement_date').first()
-    )
-    if latest_stmt and latest_stmt.statement_date:
-        stmt_date = latest_stmt.statement_date
-        last_month_start = stmt_date.replace(day=1)
-        if stmt_date.month == 12:
-            last_month_end = stmt_date.replace(year=stmt_date.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            last_month_end = stmt_date.replace(month=stmt_date.month + 1, day=1) - timedelta(days=1)
-        last_month_label = f"{last_month_start.strftime('%b %Y')} (latest)"
-    else:
-        last_month_end = today.replace(day=1) - timedelta(days=1)
-        last_month_start = last_month_end.replace(day=1)
-        last_month_label = last_month_start.strftime('%Y-%m')
-
+    bank_cat_ids = dashboard_income_ids(request, 'bank')
     bank_qs = Transaction.objects.filter(
         user=request.user,
-        category_v2__name__in=BANK_INCOME_CATEGORIES,
+        category_v2_id__in=bank_cat_ids,
         category_v2__group__slug='income',
         **{f'{amount_field}__isnull': False},
     )
+    period, bank_qs = _income_period_filter(request, bank_qs, bank_cat_ids)
+    latest_date = bank_qs.order_by('-date').values_list('date', flat=True).first()
+    if latest_date:
+        last_month_start = latest_date.replace(day=1)
+        last_month_label = latest_date.strftime('%b %Y')
+        last_month_end = latest_date
+    else:
+        last_month_label = 'No income in this period'
+        last_month_start = last_month_end = date.today()
 
     # Summary cards
     last_month_total = float(
@@ -2054,15 +2000,7 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
     }, cls=DecimalEncoder)
 
     # --- Link to transactions page ---
-    from core.models import CategoryNode
-    bank_cat_ids = list(
-        CategoryNode.objects.filter(
-            user=request.user,
-            name__in=BANK_INCOME_CATEGORIES,
-            group__slug='income',
-        ).values_list('id', flat=True)
-    )
-    bank_category_ids = '&category='.join(str(cid) for cid in bank_cat_ids)
+    bank_category_ids = '&category='.join(str(cid) for cid in sorted(bank_cat_ids))
 
     context = {
         'currency_symbol': currency_symbol,
@@ -2078,6 +2016,7 @@ def bank_income_overview_dashboard(request, display_currency, time_group):
         'count_data': count_data,
         'bank_category_ids': bank_category_ids,
     }
+    context.update(period)
     return context
 
 
@@ -2745,14 +2684,7 @@ def transfer_flow_dashboard(request, display_currency, time_group):
         'category_v2',
     )
 
-    # Map income categories to unified labels
-    income_label_map = {}
-    for cat_name in ['Work Salary', 'Work Bonuses', 'Work Association', 'Work Government']:
-        income_label_map[cat_name] = 'Work Income'
-    for cat_name in REIMBURSEMENT_CATEGORIES:
-        income_label_map[cat_name] = 'Reimbursement Income'
-    for cat_name in BANK_INCOME_CATEGORIES:
-        income_label_map[cat_name] = 'Bank Income'
+    income_roles = income_category_roles(request.user)
 
     for t in income_qs:
         raw = t.raw_transaction
@@ -2763,9 +2695,9 @@ def transfer_flow_dashboard(request, display_currency, time_group):
         cat = t.category_v2.name
         amt = float(getattr(t, amount_field) or 0)
         if amt > 0:
-            if cat in REIMBURSEMENT_CATEGORIES:
+            if t.category_v2_id in income_roles['reimbursement']:
                 label = 'Reimbursement Income'
-            elif cat in BANK_INCOME_CATEGORIES:
+            elif t.category_v2_id in income_roles['bank']:
                 label = 'Bank Income'
             else:
                 label = cat
