@@ -1,5 +1,6 @@
 """Integration tests for transaction views."""
 import json
+from urllib.parse import parse_qs, urlsplit
 from decimal import Decimal
 
 import pytest
@@ -29,6 +30,83 @@ class TestTransactionListSmoke:
         assert 'TRANSACTION' in content
 
 
+class TestTransactionReturnLink:
+    def test_direct_visit_has_no_return_link_even_with_referrer(self, auth_client):
+        response = auth_client.get(reverse('core:transaction_list'),
+                                   HTTP_REFERER='http://testserver/categories-v2/')
+        assert response.context['return_to'] == ''
+        assert 'transaction-return-link' not in response.content.decode()
+
+    @pytest.mark.parametrize('source,label', [
+        ('category_v2_list', 'Categories'),
+        ('statement_list', 'Statements'),
+        ('spending_income_dashboard', 'Expense Composition'),
+        ('income_overview_dashboard', 'Income'),
+        ('income_salary_dashboard', 'Salary'),
+        ('income_bonus_dashboard', 'Bonuses'),
+        ('bank_income_overview_dashboard', 'Bank Income'),
+        ('reimbursement_overview_dashboard', 'Reimbursements'),
+        ('manual_classification_dashboard', 'Manual Classification'),
+        ('transaction_health_dashboard', 'Data Quality'),
+    ])
+    def test_return_link_preserves_source_filters(self, auth_client, source, label):
+        return_to = reverse(f'core:{source}') + '?period_type=year&period_key=2025'
+        if source == 'spending_income_dashboard':
+            return_to += '#drill=12,34'
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'return_to': return_to, 'sort': 'amount', 'dir': 'asc', 'page': '2',
+        })
+        assert response.context['return_to'] == return_to
+        assert response.context['return_label'] == label
+        content = response.content.decode()
+        assert f'Back to {label}' in content
+        assert 'name="return_to"' in content
+        for key in ('filter_qs', 'pagination_qs'):
+            assert parse_qs(response.context[key])['return_to'] == [return_to]
+        assert '?return_to=' in content
+
+    @pytest.mark.parametrize('return_to', [
+        'https://example.com/categories-v2/', '//example.com/categories-v2/',
+        '/transactions/', '/account/', '/categories-v2/delete/', '/unknown/',
+        'javascript:alert(1)', '/\\example.com/categories-v2/',
+    ])
+    def test_invalid_return_link_is_removed_with_warning(self, auth_client, return_to):
+        response = auth_client.get(reverse('core:transaction_list'), {'return_to': return_to})
+        assert response.context['return_to'] == ''
+        assert 'return_to' not in parse_qs(response.context['pagination_qs'])
+        assert 'transaction-return-link' not in response.content.decode()
+        assert 'The transaction return link is invalid' in response.content.decode()
+
+    @pytest.mark.parametrize('source', [
+        'category_v2_list', 'statement_list', 'spending_income_dashboard',
+        'income_overview_dashboard', 'income_salary_dashboard', 'income_bonus_dashboard',
+        'bank_income_overview_dashboard', 'reimbursement_overview_dashboard',
+        'manual_classification_dashboard', 'transaction_health_dashboard',
+    ])
+    def test_source_links_carry_return_destination(self, auth_client, user, sample_data, source):
+        import re
+        from html import unescape
+
+        if source == 'transaction_health_dashboard':
+            LogicalTransactionFactory.create_batch(21, user=user,
+                                                   category_v2=None, classification_method_v2='unclassified')
+        source_url = reverse(f'core:{source}') + '?period_type=all'
+        response = auth_client.get(source_url)
+        if source == 'spending_income_dashboard':
+            params = parse_qs(urlsplit(response.context['expense_transactions_url']).query)
+            assert params['return_to'] == [source_url]
+            assert 'params.set(\'return_to\', location.pathname + location.search' in response.content.decode()
+            return
+        links = re.findall(r'href="([^"]+)"', response.content.decode())
+        transaction_links = [
+            unescape(link) for link in links
+            if link.startswith(reverse('core:transaction_list') + '?')
+        ]
+        assert transaction_links
+        for link in transaction_links:
+            assert parse_qs(urlsplit(link).query)['return_to'] == [source_url]
+
+
 class TestTransactionListFilters:
     """Query params filter results correctly."""
 
@@ -38,6 +116,18 @@ class TestTransactionListFilters:
             'end_date': '2025-02-03',
         })
         assert resp.status_code == 200
+
+    def test_direct_category_toggle_is_inside_categories_dropdown(self, auth_client):
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+        categories_dropdown = content.split('            Categories ')[1].split('            Split ')[0]
+        assert 'id="directCategoryScope"' in categories_dropdown
+        assert 'Selected only' in categories_dropdown
+        assert 'transaction-category-controls' in categories_dropdown
+        assert 'aria-describedby="directCategoryScopeHelp"' in categories_dropdown
+        assert 'Exclude subcategories' in categories_dropdown
+        assert 'padding-left: calc(12px + ' in categories_dropdown
+        assert content.count('id="directCategoryScope"') == 1
+        assert 'id="directCategoryScope" aria-describedby="directCategoryScopeHelp" checked' not in content
 
     def _v2_setup(self, user, sample_data):
         group = CategoryGroup.get_group('expense')
@@ -69,7 +159,7 @@ class TestTransactionListFilters:
         assert self._shown(response) == {t[0].pk}
         assert 'category_scope=direct' in response.context['pagination_qs']
         assert 'category_scope=direct' in response.context['filter_qs']
-        assert 'id="directCategoryScope" checked' in response.content.decode()
+        assert 'id="directCategoryScope" aria-describedby="directCategoryScopeHelp" checked' in response.content.decode()
 
     def test_method_and_group_filters_use_v2_fields(self, auth_client, user, sample_data):
         food, snacks, rent, t = self._v2_setup(user, sample_data)

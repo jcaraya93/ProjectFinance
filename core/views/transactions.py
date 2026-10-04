@@ -1,5 +1,6 @@
 import json
 import logging
+from urllib.parse import urlsplit
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
@@ -8,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
-from django.utils.http import urlencode
+from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 
 from ..models import (
     Transaction, LogicalTransaction, RawTransaction,
@@ -50,6 +51,31 @@ def _apply_transaction_filters(qs, params, user):
     """Apply transaction list filters from query params using TransactionFilter."""
     f = TransactionFilter(params, queryset=qs, user=user)
     return f.qs
+
+
+def _transaction_return_link(request):
+    return_to = request.GET.get('return_to', '')
+    if not return_to:
+        return '', ''
+    sources = {
+        'category_v2_list': 'Categories',
+        'statement_list': 'Statements',
+        'spending_income_dashboard': 'Expense Composition',
+        'income_overview_dashboard': 'Income',
+        'income_salary_dashboard': 'Salary',
+        'income_bonus_dashboard': 'Bonuses',
+        'bank_income_overview_dashboard': 'Bank Income',
+        'reimbursement_overview_dashboard': 'Reimbursements',
+        'manual_classification_dashboard': 'Manual Classification',
+        'transaction_health_dashboard': 'Data Quality',
+    }
+    if return_to.startswith('/') and url_has_allowed_host_and_scheme(return_to, allowed_hosts=set()):
+        paths = {reverse(f'core:{name}'): label for name, label in sources.items()}
+        label = paths.get(urlsplit(return_to).path)
+        if label:
+            return return_to, label
+    messages.warning(request, 'The transaction return link is invalid and was removed.')
+    return '', ''
 
 
 @login_required
@@ -152,7 +178,11 @@ def transaction_list(request):
         wallet_list.append({'key': key, 'label': f"{nickname} — {currency}"})
 
     # Build query strings for links
+    return_to, return_label = _transaction_return_link(request)
     query_params = request.GET.copy()
+    query_params.pop('return_to', None)
+    if return_to:
+        query_params['return_to'] = return_to
     query_params.pop('page', None)
     # pagination_qs: includes sort/dir for pagination links
     pagination_qs = query_params.urlencode()
@@ -176,6 +206,8 @@ def transaction_list(request):
     meta_keys = sorted(meta_key_values.keys())
 
     context = {
+        'return_to': return_to,
+        'return_label': return_label,
         'page_obj': page_obj,
         'category_groups': category_groups,
         'wallets': wallet_list,

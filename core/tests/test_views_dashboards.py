@@ -100,7 +100,11 @@ class TestSpendingIncomeLevel:
     def test_transactions_link_carries_period_and_group(self, auth_client, sample_data):
         url = reverse('core:spending_income_dashboard')
         resp = auth_client.get(url, {'period_type': 'all'})
-        assert resp.context['expense_transactions_url'] == reverse('core:transaction_list') + '?group=expense'
+        assert '<title>Expense Composition — Project Finance</title>' in resp.content.decode()
+        assert '<h4 class="mb-0">Expense Composition</h4>' in resp.content.decode()
+        from urllib.parse import parse_qs, urlsplit
+        params = parse_qs(urlsplit(resp.context['expense_transactions_url']).query)
+        assert params == {'group': ['expense'], 'return_to': [url + '?period_type=all']}
         resp = auth_client.get(url)
         link = resp.context['expense_transactions_url']
         assert 'group=expense' in link and 'start_date=' in link and 'end_date=' in link

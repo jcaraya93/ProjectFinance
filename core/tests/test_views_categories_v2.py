@@ -21,6 +21,20 @@ class TestCategoryV2List:
         content = auth_client.get(reverse('core:category_v2_list')).content.decode()
         assert 'Food' in content and 'Groceries' in content
 
+    def test_child_counts_only_appear_next_to_parent_names(self, auth_client, user, category_groups):
+        food = make_node(user, 'Food')
+        groceries = make_node(user, 'Groceries', parent=food)
+        make_node(user, 'Produce', parent=groceries)
+        make_node(user, 'Restaurants', parent=food)
+        content = auth_client.get(reverse('core:category_v2_list')).content.decode()
+        assert '<th class="text-center">Subcategories</th>' not in content
+        assert content.count('cat-v2-child-count') == 2
+        assert 'aria-label="2 direct subcategories">2</span>' in content
+        assert 'aria-label="1 direct subcategory">1</span>' in content
+        food_row = content.split(f'data-id="{food.pk}"')[1].split('</tr>')[0]
+        name_cell = food_row.split('<td style="padding-left:')[1].split('</td>')[0]
+        assert 'Food</span>' in name_cell and 'cat-v2-child-count' in name_cell
+
     def test_requires_login(self, client):
         resp = client.get(reverse('core:category_v2_list'))
         assert resp.status_code == 302
@@ -58,6 +72,7 @@ class TestCategoryV2List:
         for category, count in ((parent, 1), (expense_category, 6), (protected, 1), (empty, 0)):
             link = (
                 f'{reverse("core:transaction_list")}?category={category.pk}&amp;category_scope=direct'
+                f'&amp;return_to={url}'
             )
             assert f'href="{link}"' in response.content.decode()
             filtered = auth_client.get(reverse('core:transaction_list'), {

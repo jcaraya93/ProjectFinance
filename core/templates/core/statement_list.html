@@ -95,7 +95,7 @@
             <td class="text-end">{{ lg.currency_symbol }}{{ lg.balance_at_cutoff|floatformat:lg.decimals }}</td>
             <td class="text-end">{{ lg.currency_symbol }}{{ lg.total_spent|floatformat:lg.decimals }}</td>
             <td class="text-end text-success">{{ lg.currency_symbol }}{{ lg.total_payments|floatformat:lg.decimals }}</td>
-            <td class="text-center"><a href="{% url 'core:transaction_list' %}?statement={{ lg.statement_import_id }}&adv_open=1" class="badge bg-secondary text-decoration-none">{{ lg.txn_count }}</a></td>
+            <td class="text-center"><a href="{% url 'core:transaction_list' %}?statement={{ lg.statement_import_id }}&adv_open=1&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary text-decoration-none">{{ lg.txn_count }}</a></td>
           </tr>
           {% else %}
           <tr>
@@ -104,7 +104,7 @@
             <td class="text-end">{{ lg.currency_symbol }}{{ lg.balance_at_cutoff|floatformat:lg.decimals }}</td>
             <td class="text-end text-success">{{ lg.currency_symbol }}{{ lg.total_income|floatformat:lg.decimals }}</td>
             <td class="text-end text-danger">{{ lg.currency_symbol }}{{ lg.total_expenses|floatformat:lg.decimals }}</td>
-            <td class="text-center"><a href="{% url 'core:transaction_list' %}?statement={{ lg.statement_import_id }}&adv_open=1" class="badge bg-secondary text-decoration-none">{{ lg.txn_count }}</a></td>
+            <td class="text-center"><a href="{% url 'core:transaction_list' %}?statement={{ lg.statement_import_id }}&adv_open=1&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary text-decoration-none">{{ lg.txn_count }}</a></td>
           </tr>
           {% endif %}
           {% endfor %}

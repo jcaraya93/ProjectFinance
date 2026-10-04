@@ -126,7 +126,7 @@
         </div>
         {% if unclassified_count > 20 %}
         <div class="mt-2">
-          <a href="{% url 'core:transaction_list' %}?cls_method=unclassified" class="btn btn-sm btn-outline-warning">
+          <a href="{% url 'core:transaction_list' %}?cls_method=unclassified&amp;return_to={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-outline-warning">
             View all {{ unclassified_count }} unclassified →
           </a>
         </div>

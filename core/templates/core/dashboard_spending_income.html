@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 {% load finance_filters %}
-{% block title %}Expense — Project Finance{% endblock %}
+{% block title %}Expense Composition — Project Finance{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -14,7 +14,7 @@
 
     <!-- Currency toggle + time frame -->
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Expense</h4>
+      <h4 class="mb-0">Expense Composition</h4>
       <div class="d-flex align-items-center gap-2">
         {% with lv=category_level|stringformat:"d" %}
         {% include "core/_currency_toggle.html" with extra_params="period_type="|add:period_type|add:"&period="|add:period_key|add:"&level="|add:lv %}
@@ -43,7 +43,7 @@
     </div>
 
     <!-- ═══ SPENDING ═══ -->
-    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expense</h5>
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Expense Composition</h5>
 
     {% with sm=expense_summary %}
     <div class="row g-3 mb-3">
@@ -124,6 +124,14 @@
   var crumb = document.getElementById('drillCrumb');
   var txBase = '{{ expense_transactions_url|escapejs }}';
 
+  function transactionUrl(id) {
+    var parts = txBase.split('?');
+    var params = new URLSearchParams(parts[1]);
+    params.set('return_to', location.pathname + location.search + (path.length ? '#drill=' + path.join(',') : ''));
+    if (id !== null) params.set('category', id);
+    return parts[0] + '?' + params.toString();
+  }
+
   function fmt(v) { return Math.round(v).toLocaleString(); }
   function current() { return path.length ? drill[path[path.length - 1]] : base; }
   function top10(d) {
@@ -134,7 +142,7 @@
     var d = current(), id = d.ids[index];
     if (id === null) return;
     if (drill[id]) { path.push(id); render(); }
-    else { window.location.href = txBase + '&category=' + id; }  // leaf: show its transactions
+    else { window.location.href = transactionUrl(id); }  // leaf: show its transactions
   }
 
   var donut = new ApexCharts(document.getElementById('expenseChart'), {
@@ -179,7 +187,7 @@
     var tx = document.createElement('a');
     tx.className = 'float-end ms-3';
     tx.textContent = 'View transactions \u2192';
-    tx.href = txBase + (path.length ? '&category=' + path[path.length - 1] : '');
+    tx.href = transactionUrl(path.length ? path[path.length - 1] : null);
     crumb.appendChild(tx);
     crumb.appendChild(share);
     if (!path.length) {

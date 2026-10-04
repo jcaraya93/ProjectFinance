@@ -720,7 +720,7 @@ def spending_income_dashboard(request, display_currency, time_group):
     )
     context['category_level'] = category_level
     context['category_levels'] = EXPENSE_LEVELS
-    tx_params = {'group': 'expense'}
+    tx_params = {'group': 'expense', 'return_to': request.get_full_path()}
     if start_date:
         tx_params['start_date'] = start_date.isoformat()
     if end_date:

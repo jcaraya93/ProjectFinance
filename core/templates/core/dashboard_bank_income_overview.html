@@ -98,7 +98,7 @@
 
     <!-- View Transactions Link -->
     <div class="text-end mb-4">
-      <a href="{% url 'core:transaction_list' %}?group=income&category={{ bank_category_ids }}" class="btn btn-outline-primary">
+      <a href="{% url 'core:transaction_list' %}?group=income&category={{ bank_category_ids }}&amp;return_to={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary">
         View All Bank Income Transactions →
       </a>
     </div>

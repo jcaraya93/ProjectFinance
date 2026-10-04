@@ -4,14 +4,17 @@
 {% block title %}Transactions — Project Finance{% endblock %}
 
 {% block content %}
+{% if return_to %}
+<div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+  <a href="{{ return_to }}" class="text-decoration-none small fw-semibold transaction-return-link">&larr; Back to {{ return_label }}</a>
+  <span class="small text-muted">Viewing transactions from {{ return_label }}</span>
+</div>
+{% endif %}
 <!-- Filters -->
 <div class="card filter-card mb-3">
   <div class="card-body py-2">
     <form id="filterForm" method="get">
-      <div class="form-check mb-2">
-        <input class="form-check-input" type="checkbox" name="category_scope" value="direct" id="directCategoryScope" {% if request.GET.category_scope == 'direct' %}checked{% endif %}>
-        <label class="form-check-label" for="directCategoryScope">Selected categories only (exclude subcategories)</label>
-      </div>
+      {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
@@ -81,10 +84,18 @@
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
             Categories {% if selected_groups or selected_categories %}<span class="badge bg-primary">{% with ng=selected_groups|length nc=selected_categories|length %}{{ ng|add:nc }}{% endwith %}</span>{% endif %}
           </button>
-          <div class="dropdown-menu p-2" style="max-height: 500px; overflow-y: auto; min-width: 280px;">
-            <div class="d-flex justify-content-between mb-1 px-2">
-              <a href="#" class="small check-all">All</a>
-              <a href="#" class="small check-none">None</a>
+          <div class="dropdown-menu p-2 transaction-category-menu">
+            <div class="d-flex align-items-center justify-content-between gap-3 px-1 transaction-category-controls">
+              <div class="form-check form-switch mb-0" title="Exclude subcategories">
+                <input class="form-check-input" type="checkbox" name="category_scope" value="direct" id="directCategoryScope" aria-describedby="directCategoryScopeHelp" {% if request.GET.category_scope == 'direct' %}checked{% endif %}>
+                <label class="form-check-label small" for="directCategoryScope">Selected only</label>
+                <span class="visually-hidden" id="directCategoryScopeHelp">Exclude subcategories</span>
+              </div>
+              <div class="d-flex align-items-center gap-2 small">
+                <a href="#" class="check-all">All</a>
+                <span class="text-muted" aria-hidden="true">&middot;</span>
+                <a href="#" class="check-none">None</a>
+              </div>
             </div>
             <div class="dropdown-divider mt-1 mb-1"></div>
             {% for entry in category_groups %}
@@ -94,7 +105,7 @@
             </div>
             <div class="category-group-items">
             {% for row in entry.rows %}
-            <label class="dropdown-item d-flex align-items-center gap-2 px-2" style="padding-left: {{ row.padding|add:12 }}px !important;">
+            <label class="dropdown-item d-flex align-items-center transaction-category-item" style="padding-left: calc(12px + {{ row.depth }} * 12px);">
               <input type="checkbox" name="category" value="{{ row.node.id }}" class="form-check-input" {% if row.node.id|stringformat:"d" in selected_categories %}checked{% endif %}>
               <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: {{ row.node.color }};"></span>
               {{ row.node.name }}
@@ -158,7 +169,7 @@
                onkeydown="if(event.key==='Enter'){document.getElementById('filterForm').submit();}"
                onblur="if(this.value!=='{{ search }}'){document.getElementById('filterForm').submit();}" style="width: 180px;">
         <button type="submit" class="btn btn-sm btn-primary">Apply</button>
-        <a href="{% url 'core:transaction_list' %}" class="btn btn-outline-secondary btn-sm">Clear</a>
+        <a href="{% url 'core:transaction_list' %}{% if return_to %}?return_to={{ return_to|urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm">Clear</a>
         <a href="#" class="small text-decoration-none ms-auto" data-bs-toggle="collapse" data-bs-target="#advancedSearch">
           Advanced search {% if advanced_meta_filters or rule_ids or statement_ids or transaction_code or reference_number %}<span class="badge bg-primary">✓</span>{% endif %}
         </a>
@@ -386,5 +397,5 @@
      data-saved-columns='{{ saved_columns_json }}'
      data-save-url="{% url 'core:save_transaction_columns' %}">
 </div>
-<script src="{% static 'core/js/transaction-list.js' %}"></script>
+<script src="{% static 'core/js/transaction-list.js' %}?v=20261003-category-scope"></script>
 {% endblock %}

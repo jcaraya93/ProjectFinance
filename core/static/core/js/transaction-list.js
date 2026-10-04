@@ -60,13 +60,13 @@
   document.querySelectorAll('.check-all').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.preventDefault();
-      this.closest('.dropdown-menu').querySelectorAll('.form-check-input').forEach(function (cb) { cb.checked = true; });
+      this.closest('.dropdown-menu').querySelectorAll('.form-check-input:not([name="category_scope"])').forEach(function (cb) { cb.checked = true; });
     });
   });
   document.querySelectorAll('.check-none').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.preventDefault();
-      this.closest('.dropdown-menu').querySelectorAll('.form-check-input').forEach(function (cb) { cb.checked = false; });
+      this.closest('.dropdown-menu').querySelectorAll('.form-check-input:not([name="category_scope"])').forEach(function (cb) { cb.checked = false; });
     });
   });
 

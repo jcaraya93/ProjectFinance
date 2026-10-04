@@ -39,7 +39,6 @@
         <col style="width: 40px;">
         <col>
         <col style="width: 80px;">
-        <col style="width: 160px;">
         <col style="width: 130px;">
         <col style="width: 140px;">
       </colgroup>
@@ -50,7 +49,6 @@
           </th>
           <th>Name</th>
           <th>Color</th>
-          <th class="text-center">Subcategories</th>
           <th class="text-center">Transactions</th>
           <th class="text-end"><span class="visually-hidden">Actions</span></th>
         </tr>
@@ -65,8 +63,7 @@
             <span class="badge bg-light text-muted border ms-2" title="Protected: cannot be edited, moved or deleted">&#128274; Protected</span>
           </td>
           <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ row.node.color }};"></span></td>
-          <td></td>
-          <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
+          <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
           <td></td>
         </tr>
         {% else %}
@@ -81,10 +78,10 @@
           <td style="padding-left: {{ row.padding }}px;">
             {% if row.depth %}<span class="text-muted me-1" aria-hidden="true">&#8627;</span>{% endif %}
             <span class="{% if row.is_leaf %}{% else %}fw-bold{% endif %}">{{ row.node.name }}</span>
+            {% if row.child_count %}<span class="badge bg-secondary ms-2 cat-v2-child-count" title="{{ row.child_count }} direct subcategor{{ row.child_count|pluralize:'y,ies' }}" aria-label="{{ row.child_count }} direct subcategor{{ row.child_count|pluralize:'y,ies' }}">{{ row.child_count }}</span>{% endif %}
           </td>
           <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ row.node.color }};"></span></td>
-          <td class="text-center"><span class="badge bg-secondary">{{ row.child_count }}</span></td>
-          <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
+          <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
           <td class="text-end text-nowrap">
             <div class="dropdown d-inline-block">
               <button type="button" class="btn btn-sm btn-outline-secondary cat-v2-menu-btn" data-bs-toggle="dropdown"
@@ -102,7 +99,7 @@
         {% endif %}
         {% empty %}
         <tr>
-          <td colspan="6" class="text-center text-muted py-3">No categories in this group.</td>
+          <td colspan="5" class="text-center text-muted py-3">No categories in this group.</td>
         </tr>
         {% endfor %}
       </tbody>
