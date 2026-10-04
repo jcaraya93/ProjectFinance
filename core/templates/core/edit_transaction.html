@@ -68,6 +68,7 @@
               {% for lt in logical_txns %}
               <tr class="split-row">
                 <td>
+                  <input type="hidden" name="split_id" value="{{ lt.pk }}">
                   <input type="text" name="split_description" class="form-control form-control-sm" value="{{ lt.description }}" required>
                 </td>
                 <td>
@@ -175,7 +176,7 @@
     var tbody = document.querySelector('#splitTable tbody');
     var tr = document.createElement('tr');
     tr.className = 'split-row';
-    tr.innerHTML = '<td><input type="text" name="split_description" class="form-control form-control-sm" value="{{ raw.description }}" required></td>' +
+    tr.innerHTML = '<td><input type="hidden" name="split_id" value=""><input type="text" name="split_description" class="form-control form-control-sm" value="{{ raw.description }}" required></td>' +
       '<td><input type="text" name="split_note" class="form-control form-control-sm" placeholder="Optional note"></td>' +
       '<td><select name="split_category" class="form-select form-select-sm" required>' + catOptions + '</select></td>' +
       '<td><input type="number" name="split_amount" class="form-control form-control-sm split-amount" value="0" step="0.01" required></td>' +

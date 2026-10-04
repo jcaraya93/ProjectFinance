@@ -11,6 +11,7 @@ A personal finance web application for importing bank statements, classifying tr
 - The Rules V2 page includes **Apply Rules to Unclassified**, which runs all saved rules only on unclassified transactions, preserves existing rule/manual classifications, and returns to the selected category.
 - Selecting a category on Rules V2 shows only rules assigned directly to it, not rules of its children. All rules remains the combined view.
 - Matching rules copy their Note into empty transaction notes during imports and rule application. Existing notes and manually classified transactions are preserved; dry runs do not save notes.
+- Editing a transaction or an existing split preserves its classification method and matched rule unless its category changes. New splits receive manual classification (or unclassified for protected categories); the explicit Unsplit action still resets classification.
 - **Dashboards** — Spending/income trends, category breakdowns, car cost analysis (gas, parking), salary tracking, and chart comparisons.
 - Dashboard values, chart labels, and tooltips are always visible; the former hide-values toggle and stored privacy preference are no longer used.
 - Category dashboards (Car, Car Gas, and Car Parking) share calendar and rolling period filters, defaulting to Last 12 Months. The selected dates apply to all summaries, charts, tables, salary comparisons, and transaction links and persist when switching currencies.

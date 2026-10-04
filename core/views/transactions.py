@@ -348,9 +348,14 @@ def edit_transaction(request, raw_id):
         category_ids = request.POST.getlist('split_category')
         notes = request.POST.getlist('split_note')
         notes += [''] * (len(descriptions) - len(notes))
+        entry_ids = request.POST.getlist('split_id')
+        if not entry_ids:
+            entry_ids = [str(lt.pk) for lt in logical_txns[:len(descriptions)]]
+        entry_ids += [''] * (len(descriptions) - len(entry_ids))
 
         try:
-            parsed = [(d.strip(), Decimal(a.strip()), int(c), n.strip()) for d, a, c, n in zip(descriptions, amounts, category_ids, notes) if a.strip()]
+            parsed = [(d.strip(), Decimal(a.strip()), int(c), n.strip(), int(pk) if pk else None)
+                      for d, a, c, n, pk in zip(descriptions, amounts, category_ids, notes, entry_ids) if a.strip()]
         except (ValueError, InvalidOperation):
             messages.error(request, 'Invalid amount values.')
             return redirect('core:edit_transaction', raw_id=raw_id)
@@ -364,25 +369,34 @@ def edit_transaction(request, raw_id):
             messages.error(request, f'Amounts ({total}) must equal the original amount ({raw.normalized_amount}).')
             return redirect('core:edit_transaction', raw_id=raw_id)
 
-        first_logical = logical_txns[0] if logical_txns else None
-        if len(logical_txns) > 1:
-            for lt in logical_txns[1:]:
-                lt.delete()
+        existing = {lt.pk: lt for lt in logical_txns}
+        retained_ids = [p[4] for p in parsed if p[4] is not None]
+        if len(retained_ids) != len(set(retained_ids)) or any(pk not in existing for pk in retained_ids):
+            messages.error(request, 'Invalid transaction entries.')
+            return redirect('core:edit_transaction', raw_id=raw_id)
+        categories = {
+            cat_id: get_object_or_404(CategoryNode, pk=cat_id, user=request.user)
+            for cat_id in {p[2] for p in parsed}
+        }
 
         from ..services.exchange_rates import convert_transaction
 
-        for i, (desc, amt, cat_id, note) in enumerate(parsed):
-            cat = get_object_or_404(CategoryNode, pk=cat_id, user=request.user)
-            if i == 0 and first_logical:
-                first_logical.description = desc
-                first_logical.note = note
-                first_logical.amount = amt
-                first_logical.category_v2 = cat
-                first_logical.classification_method_v2 = 'unclassified' if cat.is_protected else 'manual'
-                first_logical.matched_rule_v2 = None
-                first_logical.save(update_fields=['description', 'note', 'amount', 'category_v2', 'classification_method_v2', 'matched_rule_v2'])
-                convert_transaction(first_logical)
-                first_logical.save(update_fields=['amount_crc', 'amount_usd'])
+        for desc, amt, cat_id, note, entry_id in parsed:
+            cat = categories[cat_id]
+            if entry_id is not None:
+                txn = existing[entry_id]
+                txn.description = desc
+                txn.note = note
+                txn.amount = amt
+                update_fields = ['description', 'note', 'amount']
+                if txn.category_v2_id != cat.pk:
+                    txn.category_v2 = cat
+                    txn.classification_method_v2 = 'unclassified' if cat.is_protected else 'manual'
+                    txn.matched_rule_v2 = None
+                    update_fields.extend(['category_v2', 'classification_method_v2', 'matched_rule_v2'])
+                txn.save(update_fields=update_fields)
+                convert_transaction(txn)
+                txn.save(update_fields=['amount_crc', 'amount_usd'])
             else:
                 txn = LogicalTransaction.objects.create(
                     raw_transaction=raw,
@@ -396,6 +410,10 @@ def edit_transaction(request, raw_id):
                 )
                 convert_transaction(txn)
                 txn.save(update_fields=['amount_crc', 'amount_usd'])
+
+        for lt in logical_txns:
+            if lt.pk not in retained_ids:
+                lt.delete()
 
         if len(parsed) > 1:
             messages.success(request, f'Transaction saved with {len(parsed)} splits.')

@@ -265,6 +265,85 @@ class TestEditTransaction:
         resp = auth_client.get(reverse('core:edit_transaction', args=[raw.pk]))
         assert 'first note' in resp.content.decode()
 
+    @pytest.mark.parametrize('method', ['rule', 'manual', 'unclassified'])
+    def test_same_category_preserves_classification(self, auth_client, user, sample_data, method):
+        txn = sample_data['transactions'][0]
+        node = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'))
+        rule = ClassificationRuleV2.objects.create(user=user, category=node, description='MATCH')
+        txn.category_v2 = node
+        txn.classification_method_v2 = method
+        txn.matched_rule_v2 = rule if method == 'rule' else None
+        txn.save()
+        response = auth_client.post(reverse('core:edit_transaction', args=[txn.raw_transaction_id]), {
+            'split_id': [txn.pk], 'split_description': ['Updated Description'],
+            'split_amount': [str(txn.amount)], 'split_category': [node.pk], 'split_note': ['My note'],
+        })
+        assert response.status_code == 302
+        txn.refresh_from_db()
+        assert txn.note == 'My note' and txn.description == 'Updated Description'
+        assert txn.classification_method_v2 == method
+        assert txn.matched_rule_v2_id == (rule.pk if method == 'rule' else None)
+
+    def test_split_notes_preserve_each_rows_rule_when_rows_removed(self, auth_client, user, sample_data, exchange_rates):
+        from core.models import LogicalTransaction
+        txn = sample_data['transactions'][0]
+        raw = txn.raw_transaction
+        node = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'))
+        rule = ClassificationRuleV2.objects.create(user=user, category=node, description='MATCH')
+        txn.amount = raw.normalized_amount / 2
+        txn.category_v2 = node
+        txn.classification_method_v2 = 'manual'
+        txn.save()
+        second = LogicalTransaction.objects.create(
+            user=user, raw_transaction=raw, date=raw.date, description='Second',
+            amount=raw.normalized_amount / 2, category_v2=node,
+            classification_method_v2='rule', matched_rule_v2=rule,
+        )
+        url = reverse('core:edit_transaction', args=[raw.pk])
+        response = auth_client.post(url, {
+            'split_id': [txn.pk, second.pk], 'split_description': ['First', 'Second'],
+            'split_amount': [str(txn.amount), str(second.amount)], 'split_category': [node.pk, node.pk],
+            'split_note': ['First note', 'Second note'],
+        })
+        assert response.status_code == 302
+        txn.refresh_from_db()
+        second.refresh_from_db()
+        assert txn.classification_method_v2 == 'manual' and txn.note == 'First note'
+        assert second.classification_method_v2 == 'rule' and second.matched_rule_v2 == rule
+        assert second.note == 'Second note'
+        auth_client.post(url, {
+            'split_id': [second.pk], 'split_description': ['Second'],
+            'split_amount': [str(raw.normalized_amount)], 'split_category': [node.pk],
+            'split_note': ['Retained note'],
+        })
+        second.refresh_from_db()
+        assert raw.logical_transactions.count() == 1
+        assert second.note == 'Retained note'
+        assert second.classification_method_v2 == 'rule' and second.matched_rule_v2 == rule
+
+    def test_category_change_to_protected_resets_method(self, auth_client, user, sample_data):
+        txn = sample_data['transactions'][0]
+        CategoryNode.ensure_protected(user)
+        protected = CategoryNode.objects.get(user=user, group__slug='unclassified', name='Unclassified')
+        response = auth_client.post(reverse('core:edit_transaction', args=[txn.raw_transaction_id]), {
+            'split_id': [txn.pk], 'split_description': [txn.description],
+            'split_amount': [str(txn.amount)], 'split_category': [protected.pk], 'split_note': ['Note'],
+        })
+        assert response.status_code == 302
+        txn.refresh_from_db()
+        assert txn.classification_method_v2 == 'unclassified' and txn.matched_rule_v2 is None
+
+    def test_invalid_split_identity_does_not_modify_transaction(self, auth_client, sample_data):
+        txn = sample_data['transactions'][0]
+        before = (txn.description, txn.category_v2_id, txn.classification_method_v2, txn.matched_rule_v2_id)
+        response = auth_client.post(reverse('core:edit_transaction', args=[txn.raw_transaction_id]), {
+            'split_id': [sample_data['transactions'][1].pk], 'split_description': ['Wrong row'],
+            'split_amount': [str(txn.amount)], 'split_category': [txn.category_v2_id],
+        }, follow=True)
+        assert 'Invalid transaction entries.' in response.content.decode()
+        txn.refresh_from_db()
+        assert (txn.description, txn.category_v2_id, txn.classification_method_v2, txn.matched_rule_v2_id) == before
+
     def test_edit_rejects_other_users_node(self, auth_client, sample_data):
         from core.models import User
         other = User.objects.create_user(email='o@example.com', password='x')
