@@ -333,91 +333,91 @@
   "name": "Bank",
   "group": "income",
   "parent": null,
-  "color": "#e53935"
+  "color": "#5E60CE"
  },
  {
   "name": "Refund",
   "group": "income",
   "parent": null,
-  "color": "#6d4c41"
+  "color": "#F4A261"
  },
  {
   "name": "Work",
   "group": "income",
   "parent": null,
-  "color": "#43a047"
+  "color": "#2A9D8F"
  },
  {
   "name": "Bank CDP",
   "group": "income",
   "parent": "Bank",
-  "color": "#e9537d"
+  "color": "#5E60CE"
  },
  {
   "name": "Bank Cashback",
   "group": "income",
   "parent": "Bank",
-  "color": "#e74451"
+  "color": "#4EA8DE"
  },
  {
   "name": "Bank Interest Credit",
   "group": "income",
   "parent": "Bank",
-  "color": "#e33d26"
+  "color": "#56CFE1"
  },
  {
   "name": "Bank Interest Reversals",
   "group": "income",
   "parent": "Bank",
-  "color": "#cd541a"
+  "color": "#9D8DF1"
  },
  {
   "name": "Refund General",
   "group": "income",
   "parent": "Refund",
-  "color": "#ae3339"
+  "color": "#E9C46A"
  },
  {
   "name": "Refund Housing",
   "group": "income",
   "parent": "Refund",
-  "color": "#943b2b"
+  "color": "#F4A261"
  },
  {
   "name": "Refund Insurance",
   "group": "income",
   "parent": "Refund",
-  "color": "#8e4d29"
+  "color": "#E76F51"
  },
  {
   "name": "Refund Partner",
   "group": "income",
   "parent": "Refund",
-  "color": "#8e6129"
+  "color": "#B5838D"
  },
  {
   "name": "Work Association",
   "group": "income",
   "parent": "Work",
-  "color": "#6ccb4b"
+  "color": "#A8DADC"
  },
  {
   "name": "Work Bonuses",
   "group": "income",
   "parent": "Work",
-  "color": "#3fbd37"
+  "color": "#8AB17D"
  },
  {
   "name": "Work Government",
   "group": "income",
   "parent": "Work",
-  "color": "#2fa340"
+  "color": "#264653"
  },
  {
   "name": "Work Salary",
   "group": "income",
   "parent": "Work",
-  "color": "#298e4c"
+  "color": "#2A9D8F"
  },
  {
   "name": "Bank",

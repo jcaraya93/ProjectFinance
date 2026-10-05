@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from ..models import Account, CategoryGroup, CategoryNode, ClassificationRuleV2
+from ..models import Account, CategoryGroup, CategoryNode, ClassificationRuleV2, LogicalTransaction
 from .categories_v2 import _build_tree
 
 __all__ = [
@@ -105,8 +105,10 @@ def rules_v2_save(request):
         messages.error(request, str(exc))
         return redirect('core:rules_v2_list')
 
+    previous_category_id = None
     if rule_id:
         rule = get_object_or_404(ClassificationRuleV2, pk=rule_id, user=request.user)
+        previous_category_id = rule.category_id
     else:
         rule = ClassificationRuleV2(user=request.user)
     rule.category = category
@@ -121,7 +123,17 @@ def rules_v2_save(request):
         messages.error(request, '; '.join(exc.messages))
         return redirect('core:rules_v2_list')
 
-    messages.success(request, f'Saved rule \u2192 {category.name}.')
+    moved = 0
+    if previous_category_id is not None and previous_category_id != category.pk:
+        # Manual classifications are left untouched.
+        moved = LogicalTransaction.objects.filter(
+            user=request.user, matched_rule_v2=rule, classification_method_v2='rule',
+        ).update(category_v2=category)
+
+    message = f'Saved rule \u2192 {category.name}.'
+    if moved:
+        message += f' {moved} transaction{"s" if moved != 1 else ""} moved to {category.name}.'
+    messages.success(request, message)
     return _back(request, category.pk)
 
 

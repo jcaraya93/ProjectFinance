@@ -27,6 +27,7 @@ __all__ = [
     'car_dashboard',
     'car_gas_dashboard',
     'car_parking_dashboard',
+    'food_dashboard',
     'income_salary_dashboard',
     'income_bonus_dashboard',
     'income_overview_dashboard',
@@ -62,6 +63,9 @@ CHART_COLORS = {
 CAR_CATEGORIES = ['Car Gas', 'Car Insurance', 'Car Maintenance', 'Car Parking & Toll', 'Car Tax', 'Car Wash']
 RUNNING_CATEGORIES = ['Car Gas', 'Car Parking & Toll', 'Car Wash']
 OWNERSHIP_CATEGORIES = ['Car Maintenance', 'Car Insurance', 'Car Tax']
+FOOD_CATEGORY = 'Food'
+CREDIT_MATCH_MAX_DAYS = 2
+CREDIT_MATCH_TOLERANCE = 0.03
 CREDIT_PAYMENT_CATEGORY = 'Credit'
 PERSONAL_ACCOUNT_CATEGORY = 'Internal'
 
@@ -78,6 +82,7 @@ DASHBOARD_CATEGORIES = {
     'credit_transfers': 'transfers', 'external_transfers': 'transfers',
     'transaction_pairing': 'transfers',
     'car': 'category', 'car_gas': 'category', 'car_parking': 'category',
+    'food': 'category',
     'transaction_health': 'data_quality', 'rule_matching': 'data_quality',
     'default_buckets': 'data_quality', 'manual_classification': 'data_quality',
 }
@@ -1445,6 +1450,130 @@ def car_parking_dashboard(request, display_currency, time_group):
     return context
 
 
+@dashboard_view("food", "core/dashboard_food.html")
+def food_dashboard(request, display_currency, time_group):
+    """Dashboard focused on the Food category and its sub categories."""
+    from collections import defaultdict
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncMonth, Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    currency_symbol = '₡' if display_currency == 'CRC' else '$'
+    abs_field = Abs(amount_field)
+
+    nodes = list(CategoryNode.objects.filter(user=request.user, group__slug='expense')
+                 .values('id', 'name', 'parent_id', 'color'))
+    by_id = {n['id']: n for n in nodes}
+    children_of = defaultdict(list)
+    for n in nodes:
+        children_of[n['parent_id']].append(n)
+    root = next((n for n in nodes if n['name'] == FOOD_CATEGORY and n['parent_id'] is None), None)
+
+    # Each segment is a direct child of Food (with its whole subtree rolled up); Food itself is "Food (other)".
+    segments = []  # {'name', 'color', 'ids'}
+    node_segment = {}
+    palette = ['#E67E22', '#18BC9C', '#3498DB', '#8E44AD', '#E74C3C', '#F1C40F', '#16A085', '#2C3E50']
+    if root:
+        def subtree(node):
+            ids = [node['id']]
+            for ch in children_of[node['id']]:
+                ids.extend(subtree(ch))
+            return ids
+        for i, ch in enumerate(sorted(children_of[root['id']], key=lambda n: n['name'])):
+            seg = {'name': ch['name'], 'color': ch['color'] or palette[i % len(palette)], 'ids': subtree(ch)}
+            segments.append(seg)
+            for nid in seg['ids']:
+                node_segment[nid] = seg['name']
+        segments.append({'name': f'{FOOD_CATEGORY} (other)', 'color': '#95A5A6', 'ids': [root['id']]})
+        node_segment[root['id']] = segments[-1]['name']
+    all_ids = set(node_segment)
+
+    food_qs = Transaction.objects.filter(user=request.user, category_v2_id__in=all_ids,
+                                         **{f'{amount_field}__isnull': False})
+    period, food_qs = _dashboard_period_filter(request, food_qs, all_ids, 'expense', 'category')
+
+    monthly = (food_qs.annotate(month=TruncMonth('date')).values('month', 'category_v2_id')
+               .annotate(total=Sum(abs_field), count=Count('id')))
+    spend = defaultdict(lambda: defaultdict(float))
+    counts = defaultdict(lambda: defaultdict(int))
+    for r in monthly:
+        m = r['month'].strftime('%Y-%m')
+        seg = node_segment[r['category_v2_id']]
+        spend[seg][m] += float(r['total'] or 0)
+        counts[seg][m] += r['count']
+    sorted_months = sorted({m for s in spend.values() for m in s})
+    month_totals = [sum(spend[s['name']].get(m, 0) for s in segments) for m in sorted_months]
+    month_counts = [sum(counts[s['name']].get(m, 0) for s in segments) for m in sorted_months]
+    last_month = sorted_months[-1] if sorted_months else ''
+
+    nonzero = sorted(v for v in month_totals if v > 0)
+    nonzero_counts = sorted(c for c in month_counts if c > 0)
+    median_monthly = nonzero[len(nonzero) // 2] if nonzero else 0
+    last_month_total = month_totals[-1] if month_totals else 0
+    median_pct = ((last_month_total - median_monthly) / median_monthly * 100) if median_monthly else 0
+    total = sum(month_totals)
+
+    def seg_urls(seg):
+        return _month_segment_urls(request, period, sorted_months, seg['ids'])
+
+    def whole_period_url(ids):
+        params = [('group', 'expense'), ('category_scope', 'direct'), ('return_to', request.get_full_path())]
+        params.extend(('category', cid) for cid in sorted(ids))
+        params.extend((k, period[k].isoformat()) for k in ('start_date', 'end_date') if period[k])
+        return reverse('core:transaction_list') + '?' + urlencode(params)
+
+    active_segments = [s for s in segments if any(spend[s['name']].values())]
+    spend_datasets = [{'label': s['name'], 'backgroundColor': s['color'], 'urls': seg_urls(s),
+                       'data': [spend[s['name']].get(m, 0) for m in sorted_months]} for s in active_segments]
+    count_datasets = [{'label': s['name'], 'backgroundColor': s['color'], 'urls': seg_urls(s),
+                       'data': [counts[s['name']].get(m, 0) for m in sorted_months]} for s in active_segments]
+
+    subcategory_table = []
+    for s in active_segments:
+        seg_total = sum(spend[s['name']].values())
+        seg_count = sum(counts[s['name']].values())
+        subcategory_table.append({
+            'name': s['name'], 'color': s['color'], 'total': seg_total, 'count': seg_count,
+            'avg': seg_total / seg_count if seg_count else 0,
+            'share': seg_total / total * 100 if total else 0,
+            'url': whole_period_url(s['ids']),
+        })
+    subcategory_table.sort(key=lambda r: -r['total'])
+
+    top_merchants = list(food_qs.values('description')
+                         .annotate(count=Count('id'), total=Sum(abs_field)).order_by('-total')[:10])
+    for r in top_merchants:
+        r['total'] = float(r['total'])
+        r['avg'] = r['total'] / r['count'] if r['count'] else 0
+
+    context = {
+        **period,
+        'currency_symbol': currency_symbol,
+        'food_found': root is not None,
+        'last_month_label': f'Latest Month ({last_month})' if last_month else 'No expenses in this period',
+        'food_last_month': last_month_total, 'food_avg_monthly': total / len(month_totals) if month_totals else 0,
+        'food_median_monthly': median_monthly, 'food_median_pct': median_pct, 'food_total': total,
+        'food_last_month_count': month_counts[-1] if month_counts else 0,
+        'food_avg_count_monthly': sum(month_counts) / len(month_counts) if month_counts else 0,
+        'food_median_count_monthly': nonzero_counts[len(nonzero_counts) // 2] if nonzero_counts else 0,
+        'food_count_total': sum(month_counts),
+        'subcategory_table': subcategory_table,
+        'top_merchants': top_merchants,
+        'food_data': json.dumps({
+            'labels': sorted_months,
+            'spend_datasets': spend_datasets,
+            'count_datasets': count_datasets,
+            'breakdown': {
+                'labels': [r['name'] for r in subcategory_table],
+                'values': [r['total'] for r in subcategory_table],
+                'colors': [r['color'] for r in subcategory_table],
+                'urls': [r['url'] for r in subcategory_table],
+            },
+        }, cls=DecimalEncoder),
+    }
+    return context
+
+
 @dashboard_view("income_salary", "core/dashboard_income_salary.html", default_time_group="biweekly")
 def income_salary_dashboard(request, display_currency, time_group):
     """Salary statistics and charts within the selected period."""
@@ -2533,34 +2662,44 @@ def credit_transfers_dashboard(request, display_currency, time_group):
         else:
             debit_txns.append(entry)
 
-    # Match debit→credit pairs
+    # Match debit→credit pairs. Candidates must be within 2 days and within a relative amount
+    # tolerance (covers the exchange-rate drift when a USD card is paid from a CRC account).
+    # The closest candidates are paired first so a loose match can't steal a better one's partner.
+    def _relative_diff(a, b):
+        diffs = []
+        for field in ('amount_crc', 'amount_usd'):
+            x, y = abs(a[field]), abs(b[field])
+            if x and y:
+                diffs.append(abs(x - y) / max(x, y))
+        return min(diffs) if diffs else None
+
+    candidates = []
+    for ci, ct in enumerate(credit_txns):
+        for di, dt in enumerate(debit_txns):
+            day_diff = abs((ct['date'] - dt['date']).days)
+            if day_diff > CREDIT_MATCH_MAX_DAYS:
+                continue
+            rel = _relative_diff(ct, dt)
+            if rel is not None and rel <= CREDIT_MATCH_TOLERANCE:
+                candidates.append((rel, day_diff, ci, di))
+    candidates.sort()
+
     matched_debits = set()
     matched_credits = set()
     pairs = []
     unmatched_credit = []
     unmatched_debit = []
 
+    for rel, day_diff, ci, di in candidates:
+        if ci in matched_credits or di in matched_debits:
+            continue
+        matched_credits.add(ci)
+        matched_debits.add(di)
+        credit_txns[ci]['abs_amount'] = abs(credit_txns[ci]['amount'])
+        pairs.append({'debit': debit_txns[di], 'credit': credit_txns[ci]})
+
     for ci, ct in enumerate(credit_txns):
-        best_match = None
-        best_diff = float('inf')
-        for di, dt in enumerate(debit_txns):
-            if di in matched_debits:
-                continue
-            day_diff = abs((ct['date'] - dt['date']).days)
-            if day_diff > 2:
-                continue
-            crc_diff = abs(abs(ct['amount_crc']) - abs(dt['amount_crc'])) if ct['amount_crc'] and dt['amount_crc'] else float('inf')
-            usd_diff = abs(abs(ct['amount_usd']) - abs(dt['amount_usd'])) if ct['amount_usd'] and dt['amount_usd'] else float('inf')
-            amt_diff = min(crc_diff, usd_diff)
-            if amt_diff < 5000 and amt_diff < best_diff:
-                best_diff = amt_diff
-                best_match = di
-        if best_match is not None:
-            matched_credits.add(ci)
-            matched_debits.add(best_match)
-            ct['abs_amount'] = abs(ct['amount'])
-            pairs.append({'debit': debit_txns[best_match], 'credit': ct})
-        else:
+        if ci not in matched_credits:
             unmatched_credit.append(ct)
 
     for di, dt in enumerate(debit_txns):

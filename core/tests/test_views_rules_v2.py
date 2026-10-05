@@ -99,6 +99,38 @@ class TestRulesV2Views:
         rule.refresh_from_db()
         assert rule.category == fun and rule.description == 'B'
 
+    def test_changing_rule_category_moves_its_rule_classified_transactions(self, auth_client, user, category_groups):
+        from core.tests.factories import LogicalTransactionFactory
+
+        food, fun = make_node(user, 'Food'), make_node(user, 'Fun')
+        rule = ClassificationRuleV2.objects.create(category=food, user=user, description='A')
+        other_rule = ClassificationRuleV2.objects.create(category=food, user=user, description='Z')
+        mine = LogicalTransactionFactory(user=user, description='A', category_v2=food,
+                                         matched_rule_v2=rule, classification_method_v2='rule')
+        manual = LogicalTransactionFactory(user=user, description='A', category_v2=food,
+                                           matched_rule_v2=rule, classification_method_v2='manual')
+        elsewhere = LogicalTransactionFactory(user=user, description='Z', category_v2=food,
+                                              matched_rule_v2=other_rule, classification_method_v2='rule')
+        resp = auth_client.post(reverse('core:rules_v2_save'),
+                                {'id': rule.pk, 'category': fun.pk, 'description': 'A'}, follow=True)
+        assert '1 transaction moved to Fun.' in resp.content.decode()
+        for txn, expected in ((mine, fun), (manual, food), (elsewhere, food)):
+            txn.refresh_from_db()
+            assert txn.category_v2 == expected
+
+    def test_editing_rule_without_category_change_moves_nothing(self, auth_client, user, category_groups):
+        from core.tests.factories import LogicalTransactionFactory
+
+        food = make_node(user, 'Food')
+        rule = ClassificationRuleV2.objects.create(category=food, user=user, description='A')
+        txn = LogicalTransactionFactory(user=user, description='A', category_v2=food,
+                                        matched_rule_v2=rule, classification_method_v2='rule')
+        resp = auth_client.post(reverse('core:rules_v2_save'),
+                                {'id': rule.pk, 'category': food.pk, 'description': 'B'}, follow=True)
+        assert 'moved' not in resp.content.decode()
+        txn.refresh_from_db()
+        assert txn.category_v2 == food
+
     def test_invalid_input_is_rejected(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')
         url = reverse('core:rules_v2_save')

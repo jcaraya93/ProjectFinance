@@ -12,6 +12,7 @@ DASHBOARD_URLS = [
     'core:car_dashboard',
     'core:car_gas_dashboard',
     'core:car_parking_dashboard',
+    'core:food_dashboard',
     'core:income_salary_dashboard',
     'core:income_overview_dashboard',
     'core:income_composition_over_time_dashboard',
@@ -461,7 +462,7 @@ class TestSpendingIncomeLevel:
         ('expense_range_dashboard', 'expense', [
             'spending_income_dashboard', 'expense_composition_over_time_dashboard', 'expense_range_dashboard',
         ]),
-        ('car_dashboard', 'category', ['car_dashboard', 'car_gas_dashboard', 'car_parking_dashboard']),
+        ('car_dashboard', 'category', ['car_dashboard', 'car_gas_dashboard', 'car_parking_dashboard', 'food_dashboard']),
     ])
     def test_dashboard_sections_have_separate_sidebars(self, auth_client, route, group, links):
         response = auth_client.get(reverse('core:' + route))
@@ -947,3 +948,37 @@ class TestExpenseMedianComparison:
         assert summary['median_label'] is None
         assert summary['change_pct'] is None
         assert 'Select a month, quarter, semester, or year' in response.content.decode()
+
+
+@pytest.mark.django_db
+class TestCreditTransferMatching:
+    def _txn(self, user, account, category, day, crc, usd):
+        from decimal import Decimal
+        from core.tests.factories import (
+            CurrencyLedgerFactory, LogicalTransactionFactory, RawTransactionFactory, StatementImportFactory,
+        )
+        ledger = CurrencyLedgerFactory(
+            statement_import=StatementImportFactory(account=account, user=user), user=user)
+        raw = RawTransactionFactory(ledger=ledger, user=user, date=day, amount=Decimal(crc))
+        txn = LogicalTransactionFactory(raw_transaction=raw, user=user, date=day, category_v2=category)
+        type(txn).objects.filter(pk=txn.pk).update(amount_crc=Decimal(crc), amount_usd=Decimal(usd))
+        return txn
+
+    def test_closest_pairs_win_and_tolerance_is_relative(self, auth_client, user, transfer_category):
+        from datetime import date
+        from core.tests.factories import CreditAccountFactory, DebitAccountFactory
+
+        card, bank = CreditAccountFactory(user=user), DebitAccountFactory(user=user)
+        day = date(2025, 2, 10)
+        # A small payment must not lose its debit to a larger, loosely similar credit seen first.
+        self._txn(user, card, transfer_category, day, '287382', '563')
+        self._txn(user, card, transfer_category, day, '38861', '76')
+        self._txn(user, bank, transfer_category, day, '-38861', '-76')
+        # Cross-currency payment drifting ~1.3% with the exchange rate still pairs.
+        self._txn(user, card, transfer_category, day, '191339', '375')
+        self._txn(user, bank, transfer_category, day, '-193640', '-380')
+
+        ctx = auth_client.get(reverse('core:credit_transfers_dashboard')).context
+        assert ctx['pair_count'] == 2
+        assert [round(u['abs_amount']) for u in ctx['unmatched_credit']] == [287382]
+        assert ctx['unmatched_debit_count'] == 0
