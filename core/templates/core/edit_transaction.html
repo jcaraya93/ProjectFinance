@@ -3,6 +3,12 @@
 {% block title %}Edit Transaction — Project Finance{% endblock %}
 
 {% block content %}
+<style>
+  .tag-picker { width: 180px; max-width: 100%; }
+  .tag-picker-toggle { min-width: 0; overflow: hidden; }
+  .tag-picker-label { min-width: 0; }
+  .tag-picker-menu { min-width: 220px; max-height: 240px; overflow-y: auto; }
+</style>
 <div class="row justify-content-center">
   <div class="col-md-10">
     <h2 class="mb-4">Edit Transaction</h2>
@@ -54,12 +60,14 @@
           <input type="hidden" name="action" value="save">
           {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
 
+          <template id="tagPickerTpl">{% include 'core/_tag_picker.html' with selected_ids='' %}</template>
           <table class="table table-sm align-middle" id="splitTable">
             <thead class="table-light">
               <tr>
                 <th>Description</th>
                 <th>Note</th>
                 <th style="width: 250px;">Category</th>
+                <th style="width: 200px;">Tags</th>
                 <th style="width: 180px;">Amount</th>
                 <th style="width: 50px;"></th>
               </tr>
@@ -84,6 +92,9 @@
                     </optgroup>
                     {% endfor %}
                   </select>
+                </td>
+                <td>
+                  {% include 'core/_tag_picker.html' with selected_ids=lt.tags.all %}
                 </td>
                 <td>
                   <input type="number" name="split_amount" class="form-control form-control-sm split-amount"
@@ -171,6 +182,21 @@
     document.getElementById('saveBtn').disabled = Math.abs(remaining) >= 0.01;
   }
 
+  // Tag pickers: keep each row's hidden split_tags field in sync with its checked boxes
+  function syncTagPicker(picker) {
+    var checked = Array.prototype.filter.call(picker.querySelectorAll('.tag-check'), function(c) { return c.checked; });
+    picker.querySelector('input[name="split_tags"]').value = checked.map(function(c) { return c.value; }).join(',');
+    var names = checked.map(function(c) { return c.dataset.name; }).join(', ');
+    picker.querySelector('.tag-picker-label').textContent = names || 'No tags';
+    picker.querySelector('.tag-picker-toggle').title = names;
+    var count = picker.querySelector('.tag-picker-count');
+    count.textContent = checked.length;
+    count.hidden = checked.length < 2;
+  }
+  document.querySelector('#splitTable').addEventListener('change', function(e) {
+    if (e.target.classList.contains('tag-check')) syncTagPicker(e.target.closest('.tag-picker'));
+  });
+
   // Add split row
   document.getElementById('addSplit').addEventListener('click', function() {
     var tbody = document.querySelector('#splitTable tbody');
@@ -179,6 +205,7 @@
     tr.innerHTML = '<td><input type="hidden" name="split_id" value=""><input type="text" name="split_description" class="form-control form-control-sm" value="{{ raw.description }}" required></td>' +
       '<td><input type="text" name="split_note" class="form-control form-control-sm" placeholder="Optional note"></td>' +
       '<td><select name="split_category" class="form-select form-select-sm" required>' + catOptions + '</select></td>' +
+      '<td>' + document.getElementById('tagPickerTpl').innerHTML + '</td>' +
       '<td><input type="number" name="split_amount" class="form-control form-control-sm split-amount" value="0" step="0.01" required></td>' +
       '<td><button type="button" class="btn btn-sm btn-outline-danger remove-split">✕</button></td>';
     tbody.appendChild(tr);

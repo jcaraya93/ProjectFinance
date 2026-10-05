@@ -118,6 +118,40 @@ class TestRulesV2Views:
             txn.refresh_from_db()
             assert txn.category_v2 == expected
 
+    def test_save_assigns_tags_and_tags_existing_matches(self, auth_client, user, category_groups):
+        from core.models import Tag
+        from core.tests.factories import LogicalTransactionFactory
+
+        food = make_node(user, 'Food')
+        tag = Tag.objects.create(user=user, name='Trip')
+        rule = ClassificationRuleV2.objects.create(category=food, user=user, description='A')
+        txn = LogicalTransactionFactory(user=user, description='A', category_v2=food,
+                                        matched_rule_v2=rule, classification_method_v2='rule')
+        auth_client.post(reverse('core:rules_v2_save'),
+                         {'id': rule.pk, 'category': food.pk, 'description': 'A', 'tags': [tag.pk]})
+        assert list(rule.tags.all()) == [tag]
+        assert list(txn.tags.all()) == [tag]
+        auth_client.post(reverse('core:rules_v2_save'), {'id': rule.pk, 'category': food.pk, 'description': 'A'})
+        assert rule.tags.count() == 0
+
+    def test_save_rejects_other_users_tags(self, auth_client, user, category_groups):
+        from core.models import Tag
+
+        food = make_node(user, 'Food')
+        other = User.objects.create_user(email='o@example.com', password='x')
+        theirs = Tag.objects.create(user=other, name='Theirs')
+        auth_client.post(reverse('core:rules_v2_save'), {'category': food.pk, 'description': 'A', 'tags': [theirs.pk]})
+        assert not ClassificationRuleV2.objects.filter(user=user).exists()
+
+    def test_list_and_transactions_render_with_rule_tags(self, auth_client, user, category_groups):
+        from core.models import Tag
+
+        food = make_node(user, 'Food')
+        rule = ClassificationRuleV2.objects.create(category=food, user=user, description='A')
+        rule.tags.add(Tag.objects.create(user=user, name='Trip'))
+        assert 'Trip' in auth_client.get(reverse('core:rules_v2_list')).content.decode()
+        assert auth_client.get(reverse('core:transaction_list')).status_code == 200
+
     def test_editing_rule_without_category_change_moves_nothing(self, auth_client, user, category_groups):
         from core.tests.factories import LogicalTransactionFactory
 

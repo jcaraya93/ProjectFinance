@@ -30,11 +30,11 @@
               <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="last-year">Last Year</button>
               <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="all">All</button>
             </div>
-            {% if trips %}
+            {% if dated_tags %}
             <div class="dropdown-divider"></div>
-            <div class="small text-muted mt-2 mb-1">Trips</div>
+            <div class="small text-muted mt-2 mb-1">Tag dates</div>
             <div class="d-flex flex-wrap gap-1 mb-2">
-              {% for trip in trips %}
+              {% for trip in dated_tags %}
               <button type="button" class="btn btn-sm {% if start_date == trip.start_date|date:'Y-m-d' and end_date == trip.end_date|date:'Y-m-d' %}btn-primary{% else %}btn-outline-secondary{% endif %} date-preset" data-start="{{ trip.start_date|date:'Y-m-d' }}" data-end="{{ trip.end_date|date:'Y-m-d' }}" title="{{ trip.start_date|date:'Y-m-d' }} to {{ trip.end_date|date:'Y-m-d' }}">{{ trip.name }}</button>
               {% endfor %}
             </div>
@@ -124,6 +124,27 @@
             {% endfor %}
           </div>
         </div>
+        {% if tags %}
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+            Tags {% if selected_tags %}<span class="badge bg-primary">{{ selected_tags|length }}</span>{% endif %}
+          </button>
+          <div class="dropdown-menu p-2" style="min-width: 200px;">
+            <div class="d-flex justify-content-between mb-1 px-2">
+              <a href="#" class="small check-all">All</a>
+              <a href="#" class="small check-none">None</a>
+            </div>
+            <div class="dropdown-divider mt-1 mb-1"></div>
+            {% for tag in tags %}
+            <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+              <input type="checkbox" name="tag" value="{{ tag.pk }}" class="form-check-input auto-submit" {% if tag.pk|stringformat:"d" in selected_tags %}checked{% endif %}>
+              <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: {{ tag.color }};"></span>
+              {{ tag.name }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
             Split {% if split_filter %}<span class="badge bg-primary">1</span>{% endif %}
@@ -308,7 +329,7 @@
           <td class="text-nowrap">{{ txn.date|date:"Y-m-d" }}</td>
           <td class="text-nowrap small text-muted">{{ txn.ledger.statement_import.account.nickname|default:txn.ledger.statement_import.account }}</td>
           <td class="small text-nowrap">
-            {% if txn.classification_method_v2 == 'rule' %}<span class="badge bg-primary">Rule</span>
+            {% if txn.classification_method_v2 == 'rule' %}{% if txn.matched_rule_v2 %}<button type="button" class="badge bg-primary border-0 rule-edit-btn" title="Edit this rule" data-id="{{ txn.matched_rule_v2.pk }}" data-category="{{ txn.matched_rule_v2.category_id }}" data-description="{{ txn.matched_rule_v2.description }}" data-account-type="{{ txn.matched_rule_v2.account_type }}" data-amount-min="{{ txn.matched_rule_v2.amount_min|default_if_none:'' }}" data-amount-max="{{ txn.matched_rule_v2.amount_max|default_if_none:'' }}" data-detail="{{ txn.matched_rule_v2.detail }}" data-tags="{% for t in txn.matched_rule_v2.tags.all %}{{ t.pk }}{% if not forloop.last %},{% endif %}{% endfor %}" data-metadata="{% for k, v in txn.matched_rule_v2.metadata.items %}{{ k }}={{ v }}&#10;{% endfor %}">Rule</button>{% else %}<span class="badge bg-primary">Rule</span>{% endif %}
             {% elif txn.classification_method_v2 == 'manual' %}<span class="badge bg-warning text-dark">Manual</span>
             {% else %}<span class="badge bg-secondary">Unclassified</span>{% endif %}
           </td>
@@ -325,7 +346,7 @@
             <span class="text-muted">—</span>
             {% endif %}
           </td>
-          <td>{{ txn.description }}</td>
+          <td>{{ txn.description }}{% for tag in txn.tags.all %} <a href="{% url 'core:transaction_list' %}?tag={{ tag.pk }}" class="badge text-decoration-none" style="background-color: {{ tag.color }};" title="Show transactions tagged {{ tag.name }}">{{ tag.name }}</a>{% endfor %}</td>
           <td class="small">{{ txn.note|default:"—" }}</td>
           <td class="small text-muted text-nowrap">
             {% for k, v in txn.account_metadata.items %}<code>{{ k }}={{ v }}</code>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
@@ -395,10 +416,19 @@
       {% endfor %}
     </select>
     <button type="submit" class="btn btn-sm btn-primary">Assign Category</button>
+    <span class="border-start border-secondary ps-3 d-flex align-items-center gap-2">
+      <select name="tag_id" class="form-select form-select-sm bg-white" style="width: 150px;" aria-label="Tag">
+        <option value="">Tag…</option>
+        {% for tag in tags %}<option value="{{ tag.pk }}">{{ tag.name }}</option>{% endfor %}
+      </select>
+      <button type="submit" formaction="{% url 'core:bulk_tag' %}" formnovalidate name="mode" value="add" class="btn btn-sm btn-success">Add</button>
+      <button type="submit" formaction="{% url 'core:bulk_tag' %}" formnovalidate name="mode" value="remove" class="btn btn-sm btn-outline-light">Remove</button>
+    </span>
     <button type="button" class="btn btn-sm btn-outline-light" id="bulkCancel">Cancel</button>
   </form>
 </div>
 
+{% include 'core/_rule_edit_modal.html' %}
 {% endblock %}
 
 {% block extra_js %}
@@ -406,5 +436,27 @@
      data-saved-columns='{{ saved_columns_json }}'
      data-save-url="{% url 'core:save_transaction_columns' %}">
 </div>
-<script src="{% static 'core/js/transaction-list.js' %}?v=20261004-trip-presets"></script>
+<script>
+(function () {
+  var modalEl = document.getElementById('ruleV2Modal');
+  var modal = new bootstrap.Modal(modalEl);
+  function $(id) { return document.getElementById(id); }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.rule-edit-btn');
+    if (!btn) return;
+    var d = btn.dataset;
+    $('ruleV2Id').value = d.id;
+    $('ruleV2Category').value = d.category;
+    $('ruleV2Description').value = d.description || '';
+    $('ruleV2AccountType').value = d.accountType || '';
+    $('ruleV2Min').value = d.amountMin || '';
+    $('ruleV2Max').value = d.amountMax || '';
+    $('ruleV2Metadata').value = (d.metadata || '').trim();
+    $('ruleV2Detail').value = d.detail || '';
+    setRuleTags(d.tags);
+    modal.show();
+  });
+})();
+</script>
+<script src="{% static 'core/js/transaction-list.js' %}?v=20261004-tag-presets"></script>
 {% endblock %}

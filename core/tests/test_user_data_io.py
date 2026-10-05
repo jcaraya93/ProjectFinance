@@ -9,7 +9,7 @@ from django.test import Client
 from core.models import (
     User, UserPreference, CategoryGroup, CategoryNode, ClassificationRuleV2,
     CreditAccount, DebitAccount, Account, StatementImport, CurrencyLedger,
-    RawTransaction, LogicalTransaction, ExchangeRate,
+    RawTransaction, LogicalTransaction, ExchangeRate, Tag, TagGroup,
 )
 from core.services.user_data_io import (
     export_user_data, import_user_data, ImportError as DataImportError,
@@ -173,6 +173,8 @@ class TestImport:
         CategoryNode.objects.filter(user=user, parent__isnull=False).delete()
         CategoryNode.objects.filter(user=user).exclude(name=CategoryNode.UNCLASSIFIED_NAME).delete()
         UserPreference.objects.filter(user=user).delete()
+        Tag.objects.filter(user=user).delete()
+        TagGroup.objects.filter(user=user).delete()
 
         return data
 
@@ -185,6 +187,32 @@ class TestImport:
         assert counts['accounts'] == 2
         assert counts['statements'] == 2
         assert counts['logical_transactions'] == 3
+
+    def test_round_trip_preserves_tags_groups_and_dates(self, user, full_data):
+        mex = Tag.objects.create(user=user, name='Mexico', color='#ff0000')
+        Tag.objects.create(user=user, name='Unused')
+        full_data['transactions'][0].tags.add(mex)
+        trips = TagGroup.objects.create(user=user, name='Trips')
+        Tag.objects.create(user=user, name='Mexico trip', group=trips, start_date=date(2025, 10, 27), end_date=date(2025, 11, 3), notes='CDMX')
+        data = self._export_and_clear(user)
+        counts = import_user_data(user, data)
+
+        assert (counts['tags'], counts['tag_groups']) == (3, 1)
+        assert Tag.objects.get(user=user, name='Mexico').color == '#ff0000'
+        tagged = LogicalTransaction.objects.get(user=user, tags__name='Mexico')
+        assert tagged.description == 'WALMART ESCAZU'
+        trip = Tag.objects.get(user=user, name='Mexico trip')
+        assert trip.group.name == 'Trips'
+        assert (trip.name, trip.start_date, trip.end_date, trip.notes) == ('Mexico trip', date(2025, 10, 27), date(2025, 11, 3), 'CDMX')
+
+    def test_round_trip_preserves_rule_tags(self, user, full_data):
+        mex = Tag.objects.create(user=user, name='Mexico')
+        rule = ClassificationRuleV2.objects.filter(user=user).first()
+        rule.tags.add(mex)
+        data = self._export_and_clear(user)
+        import_user_data(user, data)
+
+        assert [t.name for t in ClassificationRuleV2.objects.get(user=user, description=rule.description).tags.all()] == ['Mexico']
 
     def test_round_trip_preserves_categories(self, user, full_data):
         data = self._export_and_clear(user)

@@ -5,11 +5,18 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db.models import Count
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from ..models import Account, CategoryGroup, CategoryNode, ClassificationRuleV2, LogicalTransaction
+from ..models import Account, CategoryGroup, CategoryNode, ClassificationRuleV2, LogicalTransaction, Tag
+from ..services.rules_v2 import apply_rule_tags
 from .categories_v2 import _build_tree
+
+
+def _tag_sections(tags):
+    from .transactions import _tag_sections as build
+    return build(tags)
 
 __all__ = [
     'rules_v2_list',
@@ -42,7 +49,17 @@ def _parse_amount(raw, label):
         raise ValueError(f'{label} must be a number.')
 
 
+def _safe_next(request):
+    target = request.POST.get('next') or request.GET.get('next') or ''
+    if target.startswith('/') and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}):
+        return target
+    return ''
+
+
 def _back(request, fallback_node=None):
+    target = _safe_next(request)
+    if target:
+        return redirect(target)
     """Redirect to the list, keeping the node selected in the left pane when there was one."""
     node = request.POST.get('selected_node') or ''
     if not node.isdigit():
@@ -57,7 +74,7 @@ def rules_v2_list(request):
     CategoryNode.ensure_protected(request.user)
     rules = list(
         ClassificationRuleV2.objects.filter(user=request.user).select_related('category__group')
-        .annotate(txn_count=Count('matched_transactions'))
+        .prefetch_related('tags').annotate(txn_count=Count('matched_transactions'))
     )
     tree = _build_tree(list(CategoryNode.objects.filter(user=request.user).select_related('group')))
 
@@ -66,10 +83,16 @@ def rules_v2_list(request):
     if selected_id.isdigit():
         selected = next((r for r in tree if r['node'].pk == int(selected_id)), None)
 
+    tag_filter = None
+    if request.GET.get('tag', '').isdigit():
+        tag_filter = Tag.objects.filter(user=request.user, pk=int(request.GET['tag'])).first()
+
     if selected:
         shown = [r for r in rules if r.category_id == selected['node'].pk]
     else:
         shown = list(rules)
+    if tag_filter:
+        shown = [r for r in shown if any(t.pk == tag_filter.pk for t in r.tags.all())]
     order = {row['node'].pk: i for i, row in enumerate(tree)}
     shown.sort(key=lambda r: (order.get(r.category_id, 0), r.pk))
 
@@ -82,7 +105,9 @@ def rules_v2_list(request):
         'sections': sections,
         'rules': shown,
         'selected': selected,
+        'tag_filter': tag_filter,
         'category_options': tree,
+        'tag_sections': _tag_sections(Tag.objects.filter(user=request.user).select_related('group')),
         'account_types': Account.ACCOUNT_TYPES,
     })
 
@@ -97,7 +122,7 @@ def rules_v2_save(request):
     account_type = request.POST.get('account_type', '').strip()
     if account_type and account_type not in dict(Account.ACCOUNT_TYPES):
         messages.error(request, 'Invalid account type.')
-        return redirect('core:rules_v2_list')
+        return _back(request)
 
     try:
         amount_min = _parse_amount(request.POST.get('amount_min'), 'Minimum amount')
@@ -105,7 +130,7 @@ def rules_v2_save(request):
         metadata = _parse_metadata(request.POST.get('metadata', ''))
     except ValueError as exc:
         messages.error(request, str(exc))
-        return redirect('core:rules_v2_list')
+        return _back(request)
 
     previous_category_id = None
     if rule_id:
@@ -119,11 +144,22 @@ def rules_v2_save(request):
     rule.amount_min, rule.amount_max, rule.metadata = amount_min, amount_max, metadata
     rule.detail = request.POST.get('detail', '').strip()
 
+    tag_ids = {int(t) for t in request.POST.getlist('tags') if t.isdigit()}
+    tags = list(Tag.objects.filter(user=request.user, pk__in=tag_ids))
+    if len(tags) != len(tag_ids):
+        messages.error(request, 'Unknown tag selected.')
+        return _back(request)
+
     try:
         rule.save()
     except ValidationError as exc:
         messages.error(request, '; '.join(exc.messages))
-        return redirect('core:rules_v2_list')
+        return _back(request)
+    rule.tags.set(tags)
+    # Bring transactions this rule already classified up to date; tags are only ever added.
+    already = list(LogicalTransaction.objects.filter(
+        user=request.user, matched_rule_v2=rule, classification_method_v2='rule').values_list('pk', flat=True))
+    apply_rule_tags([(pk, rule.pk) for pk in already])
 
     moved = 0
     if previous_category_id is not None and previous_category_id != category.pk:

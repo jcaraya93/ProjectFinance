@@ -111,6 +111,7 @@ def classify_transactions_v2(user, dry_run=False, queryset=None, only_unclassifi
         queryset = queryset.filter(classification_method_v2='unclassified')
     total = changed = skipped_manual = unmatched = 0
     to_update = []
+    matched = []
     for txn in queryset.iterator(chunk_size=500):
         total += 1
         if txn.classification_method_v2 == 'manual':
@@ -120,6 +121,7 @@ def classify_transactions_v2(user, dry_run=False, queryset=None, only_unclassifi
         if rule is None:
             unmatched += 1
             continue
+        matched.append((txn.pk, rule.pk))
         copy_note = not txn.note and bool(rule.detail)
         if txn.category_v2_id == rule.category_id and txn.matched_rule_v2_id == rule.pk \
                 and txn.classification_method_v2 == 'rule' and not copy_note:
@@ -135,4 +137,39 @@ def classify_transactions_v2(user, dry_run=False, queryset=None, only_unclassifi
         LogicalTransaction.objects.bulk_update(
             to_update, ['category_v2', 'matched_rule_v2', 'classification_method_v2', 'note'], batch_size=500
         )
+    changed_ids = {t.pk for t in to_update}
+    tagged = apply_rule_tags(matched, dry_run=dry_run)
+    changed += len(tagged - changed_ids)
     return total, changed, skipped_manual, unmatched
+
+
+def apply_rule_tags(matched, dry_run=False):
+    """Add each matched rule's tags to its transaction (never removes tags).
+
+    matched is a list of (transaction_id, rule_id). Returns the set of transaction ids
+    that gained at least one tag.
+    """
+    if not matched:
+        return set()
+    Through = LogicalTransaction.tags.through
+    rule_tags = {}
+    for rule_id, tag_id in ClassificationRuleV2.tags.through.objects.filter(
+            classificationrulev2_id__in={r for _, r in matched}).values_list('classificationrulev2_id', 'tag_id'):
+        rule_tags.setdefault(rule_id, set()).add(tag_id)
+    if not rule_tags:
+        return set()
+    txn_ids = [t for t, r in matched if r in rule_tags]
+    existing = set()
+    for i in range(0, len(txn_ids), 500):
+        existing.update(
+            Through.objects.filter(logicaltransaction_id__in=txn_ids[i:i + 500])
+            .values_list('logicaltransaction_id', 'tag_id')
+        )
+    new_rows = [
+        Through(logicaltransaction_id=t, tag_id=tag)
+        for t, r in matched for tag in rule_tags.get(r, ())
+        if (t, tag) not in existing
+    ]
+    if new_rows and not dry_run:
+        Through.objects.bulk_create(new_rows, batch_size=500, ignore_conflicts=True)
+    return {row.logicaltransaction_id for row in new_rows}

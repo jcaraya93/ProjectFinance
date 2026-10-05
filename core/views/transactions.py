@@ -12,12 +12,13 @@ from django.views.decorators.http import require_POST
 from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 
 from ..models import (
-    Transaction, LogicalTransaction, RawTransaction, Trip,
+    Account, Transaction, LogicalTransaction, RawTransaction, Tag,
     CategoryGroup, CategoryNode, CurrencyLedger, UserPreference,
 )
 from ..filters import TransactionFilter
 from ..ratelimit import ratelimit
 from ._helpers import _safe_next_url
+
 from .categories_v2 import _build_tree
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ def _transaction_return_link(request):
     sources = {
         'category_v2_list': 'Categories',
         'rules_v2_list': 'Rules',
-        'trip_list': 'Trips',
+        'tag_list': 'Tags',
         'statement_list': 'Statements',
         'spending_income_dashboard': 'Expense Composition',
         'expense_composition_over_time_dashboard': 'Expense Time Composition',
@@ -90,10 +91,10 @@ def _transaction_return_link(request):
 def transaction_list(request):
     from django.db.models import Count, Subquery, OuterRef
     qs = Transaction.objects.filter(user=request.user).select_related(
-        'category_v2__group', 'raw_transaction__ledger',
+        'category_v2__group', 'matched_rule_v2', 'raw_transaction__ledger',
         'raw_transaction__ledger__statement_import',
         'raw_transaction__ledger__statement_import__account'
-    ).annotate(
+    ).prefetch_related('tags', 'matched_rule_v2__tags').annotate(
         split_count=Subquery(
             LogicalTransaction.objects.filter(user=request.user).filter(raw_transaction=OuterRef('raw_transaction'))
             .values('raw_transaction').annotate(c=Count('id')).values('c')
@@ -230,7 +231,12 @@ def transaction_list(request):
         'selected_cls_methods': cls_methods,
         'advanced_meta_filters': advanced_meta_filters,
         'rule_ids': rule_ids,
-        'trips': Trip.objects.filter(user=request.user),
+        'dated_tags': Tag.objects.filter(user=request.user, start_date__isnull=False).order_by('-start_date', 'name'),
+        'tags': Tag.objects.filter(user=request.user),
+        'selected_tags': request.GET.getlist('tag'),
+        'account_types': Account.ACCOUNT_TYPES,
+        'tag_sections': _tag_sections(Tag.objects.filter(user=request.user).select_related('group')),
+        'next_url': request.get_full_path(),
         'statement_ids': statement_ids,
         'split_filter': split_filter,
         'amount_min': amount_min,
@@ -311,12 +317,30 @@ def bulk_update_category(request):
     return redirect(next_url or 'core:transaction_list')
 
 
+def _tag_sections(tags):
+    """Group tags by their TagGroup (ungrouped last) for display in pickers."""
+    sections, by_group = [], {}
+    for tag in tags:
+        key = tag.group_id
+        if key not in by_group:
+            by_group[key] = {'group': tag.group, 'tags': []}
+            sections.append(by_group[key])
+        by_group[key]['tags'].append(tag)
+    sections.sort(key=lambda s: (s['group'] is None, (s['group'].name.lower() if s['group'] else '')))
+    return sections
+
+
+def _parse_tag_ids(raw):
+    return sorted({int(p) for p in (raw or '').split(',') if p.strip().isdigit()})
+
+
 @login_required
 def edit_transaction(request, raw_id):
     """Edit a transaction: change description/category, or split into multiple."""
     from decimal import Decimal, InvalidOperation
     raw = get_object_or_404(RawTransaction, pk=raw_id, user=request.user)
-    logical_txns = list(raw.logical_transactions.select_related('category_v2__group').order_by('pk'))
+    all_tags = list(Tag.objects.filter(user=request.user).select_related('group'))
+    logical_txns = list(raw.logical_transactions.select_related('category_v2__group').prefetch_related('tags').order_by('pk'))
     category_groups = get_category_node_groups(request.user)
     is_split = len(logical_txns) > 1
     next_url = _safe_next_url(request)
@@ -352,14 +376,17 @@ def edit_transaction(request, raw_id):
         category_ids = request.POST.getlist('split_category')
         notes = request.POST.getlist('split_note')
         notes += [''] * (len(descriptions) - len(notes))
+        tags_submitted = 'split_tags' in request.POST
+        tag_inputs = request.POST.getlist('split_tags')
+        tag_inputs += [''] * (len(descriptions) - len(tag_inputs))
         entry_ids = request.POST.getlist('split_id')
         if not entry_ids:
             entry_ids = [str(lt.pk) for lt in logical_txns[:len(descriptions)]]
         entry_ids += [''] * (len(descriptions) - len(entry_ids))
 
         try:
-            parsed = [(d.strip(), Decimal(a.strip()), int(c), n.strip(), int(pk) if pk else None)
-                      for d, a, c, n, pk in zip(descriptions, amounts, category_ids, notes, entry_ids) if a.strip()]
+            parsed = [(d.strip(), Decimal(a.strip()), int(c), n.strip(), int(pk) if pk else None, _parse_tag_ids(tg))
+                      for d, a, c, n, pk, tg in zip(descriptions, amounts, category_ids, notes, entry_ids, tag_inputs) if a.strip()]
         except (ValueError, InvalidOperation):
             messages.error(request, 'Invalid amount values.')
             return redirect('core:edit_transaction', raw_id=raw_id)
@@ -383,9 +410,14 @@ def edit_transaction(request, raw_id):
             for cat_id in {p[2] for p in parsed}
         }
 
+        tag_objs = {t.pk: t for t in Tag.objects.filter(user=request.user)}
+        if any(i not in tag_objs for p in parsed for i in p[5]):
+            messages.error(request, 'Unknown tag selected.')
+            return redirect('core:edit_transaction', raw_id=raw_id)
+
         from ..services.exchange_rates import convert_transaction
 
-        for desc, amt, cat_id, note, entry_id in parsed:
+        for desc, amt, cat_id, note, entry_id, tag_ids in parsed:
             cat = categories[cat_id]
             if entry_id is not None:
                 txn = existing[entry_id]
@@ -401,6 +433,8 @@ def edit_transaction(request, raw_id):
                 txn.save(update_fields=update_fields)
                 convert_transaction(txn)
                 txn.save(update_fields=['amount_crc', 'amount_usd'])
+                if tags_submitted:
+                    txn.tags.set(tag_objs[i] for i in tag_ids)
             else:
                 txn = LogicalTransaction.objects.create(
                     raw_transaction=raw,
@@ -414,6 +448,8 @@ def edit_transaction(request, raw_id):
                 )
                 convert_transaction(txn)
                 txn.save(update_fields=['amount_crc', 'amount_usd'])
+                if tags_submitted:
+                    txn.tags.set(tag_objs[i] for i in tag_ids)
 
         for lt in logical_txns:
             if lt.pk not in retained_ids:
@@ -428,6 +464,8 @@ def edit_transaction(request, raw_id):
     return render(request, 'core/edit_transaction.html', {
         'raw': raw,
         'logical_txns': logical_txns,
+        'all_tags': all_tags,
+        'tag_sections': _tag_sections(all_tags),
         'category_groups': category_groups,
         'is_split': is_split,
         'next_url': next_url,

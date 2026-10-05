@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from django.db import models
+from django.db.models.functions import Lower
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.core.exceptions import ValidationError
 
@@ -339,6 +340,7 @@ class LogicalTransaction(models.Model):
     matched_rule_v2 = models.ForeignKey(
         'ClassificationRuleV2', on_delete=models.SET_NULL, null=True, blank=True, related_name='matched_transactions'
     )
+    tags = models.ManyToManyField('Tag', blank=True, related_name='logical_transactions')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -420,6 +422,7 @@ class ClassificationRuleV2(models.Model):
     amount_max = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True, help_text='Key-value conditions, e.g. {"transaction_code": "PT"}')
     detail = models.CharField(max_length=500, blank=True, help_text='Documentation note')
+    tags = models.ManyToManyField('Tag', blank=True, related_name='rules')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -469,27 +472,62 @@ class ClassificationRuleV2(models.Model):
         return d
 
 
-class Trip(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trips')
-    name = models.CharField(max_length=100)
-    start_date = models.DateField()
-    end_date = models.DateField()
+class TagGroup(models.Model):
+    """Optional bucket used to organise tags on the Tags page."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tag_groups')
+    name = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = [Lower('name')]
+        constraints = [
+            models.UniqueConstraint(Lower('name'), 'user', name='taggroup_unique_name_per_user'),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class Tag(models.Model):
+    """Free-form label a user attaches to transactions, independent of their category.
+
+    A tag with a date range is a "trip"-style tag: the range is only a shortcut for
+    filtering transactions by date; it never assigns the tag automatically.
+    """
+    DEFAULT_COLOR = '#6c757d'
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tags')
+    group = models.ForeignKey(TagGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='tags')
+    name = models.CharField(max_length=50)
+    color = models.CharField(max_length=7, default=DEFAULT_COLOR)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
     notes = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-start_date', '-pk']
+        ordering = [Lower('name')]
         constraints = [
-            models.CheckConstraint(condition=models.Q(end_date__gte=models.F('start_date')), name='trip_end_not_before_start'),
+            models.UniqueConstraint(Lower('name'), 'user', name='tag_unique_name_per_user'),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(start_date__isnull=True, end_date__isnull=True)
+                    | models.Q(start_date__isnull=False, end_date__gte=models.F('start_date'))
+                ),
+                name='tag_valid_date_range',
+            ),
         ]
 
     @property
+    def has_dates(self):
+        return self.start_date is not None
+
+    @property
     def duration_days(self):
-        return (self.end_date - self.start_date).days + 1
+        return (self.end_date - self.start_date).days + 1 if self.has_dates else None
 
     def __str__(self):
-        return f'{self.name} ({self.start_date} - {self.end_date})'
-
+        return self.name
 
 class UserPreference(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preferences')

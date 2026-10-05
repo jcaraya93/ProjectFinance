@@ -1,0 +1,23 @@
+{# Per-row tag selector limited to the user's existing tags, grouped for readability; posts ids via the hidden split_tags field. #}
+<div class="tag-picker dropdown">
+  <input type="hidden" name="split_tags" value="{% for t in selected_ids %}{{ t.pk }}{% if not forloop.last %},{% endif %}{% endfor %}">
+  <button type="button" class="btn btn-sm btn-outline-secondary w-100 text-start d-flex align-items-center gap-1 tag-picker-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" {% if not all_tags %}disabled{% endif %}
+          title="{% for t in selected_ids %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+    <span class="tag-picker-label flex-grow-1 text-truncate">{% for t in selected_ids %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% empty %}{% if all_tags %}No tags{% else %}No tags defined{% endif %}{% endfor %}</span>
+    <span class="badge bg-secondary tag-picker-count"{% if selected_ids|length < 2 %} hidden{% endif %}>{{ selected_ids|length }}</span>
+    <span class="tag-picker-caret">▾</span>
+  </button>
+  <ul class="dropdown-menu p-2 tag-picker-menu">
+    {% for section in tag_sections %}
+    <li><h6 class="dropdown-header px-1 pt-1">{% if section.group %}{{ section.group.name }}{% else %}No group{% endif %}</h6></li>
+    {% for tag in section.tags %}
+    <li>
+      <label class="form-check d-flex align-items-center gap-2 mb-1 ms-1">
+        <input type="checkbox" class="form-check-input tag-check" value="{{ tag.pk }}" data-name="{{ tag.name }}"{% for t in selected_ids %}{% if t.pk == tag.pk %} checked{% endif %}{% endfor %}>
+        <span class="badge" style="background-color: {{ tag.color }};">{{ tag.name }}</span>
+      </label>
+    </li>
+    {% endfor %}
+    {% endfor %}
+  </ul>
+</div>

@@ -1,6 +1,6 @@
 import pytest
 
-from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2, LogicalTransaction
+from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2, LogicalTransaction, Tag
 from core.services.rules_v2 import classify_transactions_v2
 
 
@@ -81,6 +81,33 @@ class TestClassifyTransactionsV2:
         hit.refresh_from_db()
         assert hit.note == 'New rule note'
         assert classify_transactions_v2(user)[1] == 0
+
+    def test_rule_tags_are_added_and_existing_tags_kept(self, user, sample_data):
+        _, rule = self._setup(user, sample_data)
+        a, b = Tag.objects.create(user=user, name='A'), Tag.objects.create(user=user, name='B')
+        rule.tags.set([a])
+        hit = sample_data['transactions'][1]
+        hit.tags.add(b)
+        assert classify_transactions_v2(user, dry_run=True)[1] == 1
+        assert set(hit.tags.all()) == {b}
+        assert classify_transactions_v2(user)[1] == 1
+        assert set(hit.tags.all()) == {a, b}
+        assert classify_transactions_v2(user)[1] == 0
+        others = [t for t in sample_data['transactions'] if t.pk != hit.pk]
+        assert not any(t.tags.exists() for t in others)
+
+    def test_rule_tags_added_to_already_matched_transaction_and_skip_manual(self, user, sample_data):
+        _, rule = self._setup(user, sample_data)
+        classify_transactions_v2(user)
+        rule.tags.add(Tag.objects.create(user=user, name='A'))
+        hit = sample_data['transactions'][1]
+        assert classify_transactions_v2(user)[1] == 1
+        assert hit.tags.count() == 1
+        hit.tags.clear()
+        hit.classification_method_v2 = 'manual'
+        hit.save()
+        classify_transactions_v2(user)
+        assert hit.tags.count() == 0
 
     def test_rule_note_leaves_manual_transactions_untouched(self, user, sample_data):
         _, rule = self._setup(user, sample_data)

@@ -1,0 +1,20 @@
+{# Grouped tag checkboxes for the rule dialogs; needs tag_sections. #}
+<div class="border rounded p-2" style="max-height: 160px; overflow-y: auto;">
+  {% for section in tag_sections %}
+  <div class="small text-muted">{{ section.group.name|default:"No group" }}</div>
+  {% for t in section.tags %}
+  <div class="form-check">
+    <input class="form-check-input rule-tag-check" type="checkbox" name="tags" value="{{ t.pk }}" id="ruleTag{{ t.pk }}">
+    <label class="form-check-label" for="ruleTag{{ t.pk }}"><span class="badge" style="background-color: {{ t.color }};">{{ t.name }}</span></label>
+  </div>
+  {% endfor %}
+  {% empty %}
+  <span class="text-muted small">No tags yet. Create them in Data Management &rarr; Tags.</span>
+  {% endfor %}
+</div>
+<script>
+function setRuleTags(csv) {
+  var ids = (csv || '').split(',');
+  document.querySelectorAll('.rule-tag-check').forEach(function (c) { c.checked = ids.indexOf(c.value) !== -1; });
+}
+</script>

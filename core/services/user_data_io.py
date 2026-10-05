@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from core.models import (
-    User, UserPreference, CategoryGroup, CategoryNode, ClassificationRuleV2,
+    User, UserPreference, Tag, TagGroup, CategoryGroup, CategoryNode, ClassificationRuleV2,
     Account, CreditAccount, DebitAccount, StatementImport, CurrencyLedger,
     RawTransaction, LogicalTransaction, ExchangeRate,
 )
@@ -43,6 +43,8 @@ def _to_decimal(value):
 
 def _to_date(value):
     """ISO date string → date object."""
+    if not value:
+        return None
     if isinstance(value, date):
         return value
     return datetime.strptime(value, '%Y-%m-%d').date()
@@ -80,7 +82,7 @@ def export_user_data(user):
 
     # Classification rules
     rules = []
-    for rule in ClassificationRuleV2.objects.filter(user=user).select_related('category__group').order_by('pk'):
+    for rule in ClassificationRuleV2.objects.filter(user=user).select_related('category__group').prefetch_related('tags').order_by('pk'):
         r = {
             'category_name': rule.category.name,
             'category_group_slug': rule.category.group.slug,
@@ -90,6 +92,7 @@ def export_user_data(user):
             'amount_max': _dec(rule.amount_max),
             'metadata': rule.metadata,
             'detail': rule.detail,
+            'tags': sorted(t.name for t in rule.tags.all()),
         }
         rules.append(r)
 
@@ -163,6 +166,7 @@ def export_user_data(user):
                             'category_group_slug': ltxn.category_v2.group.slug if ltxn.category_v2 else None,
                             'classification_method': ltxn.classification_method_v2,
                             'matched_rule_description': ltxn.matched_rule_v2.description if ltxn.matched_rule_v2 else None,
+                            'tags': sorted(t.name for t in ltxn.tags.all()),
                         }
                         raw_data['logical_transactions'].append(ltxn_data)
 
@@ -199,6 +203,16 @@ def export_user_data(user):
         'preferences': prefs,
         'categories': categories,
         'classification_rules': rules,
+        'tag_groups': [{'name': g.name} for g in TagGroup.objects.filter(user=user)],
+        'tags': [
+            {
+                'name': t.name, 'color': t.color, 'group': t.group.name if t.group else None,
+                'start_date': str(t.start_date) if t.start_date else None,
+                'end_date': str(t.end_date) if t.end_date else None,
+                'notes': t.notes,
+            }
+            for t in Tag.objects.filter(user=user).select_related('group')
+        ],
         'accounts': accounts,
         'exchange_rates': exchange_rates,
     }
@@ -255,6 +269,8 @@ def import_user_data(user, data):
         'raw_transactions': 0,
         'logical_transactions': 0,
         'exchange_rates': 0,
+        'tags': 0,
+        'tag_groups': 0,
     }
 
     with transaction.atomic():
@@ -309,6 +325,7 @@ def import_user_data(user, data):
 
         # 3. Classification rules
         rule_lookup = {}  # (group_slug, cat_name, description) → ClassificationRuleV2
+        rule_tag_names = []
         for rule_data in data.get('classification_rules', []):
             cat_key = (rule_data['category_group_slug'], rule_data['category_name'])
             cat = cat_lookup.get(cat_key)
@@ -328,7 +345,40 @@ def import_user_data(user, data):
                 detail=rule_data.get('detail', ''),
             )
             rule_lookup[(cat_key[0], cat_key[1], rule_data.get('description', ''))] = rule
+            rule_tag_names.append((rule, rule_data.get('tags') or []))
             counts['rules'] += 1
+
+        group_lookup = {}
+        def _group(name):
+            if name and name.lower() not in group_lookup:
+                group_lookup[name.lower()] = TagGroup.objects.create(user=user, name=name)
+                counts['tag_groups'] += 1
+            return group_lookup.get((name or '').lower())
+
+        for group_data in data.get('tag_groups', []):
+            _group(group_data['name'])
+
+        tag_lookup = {}
+        for tag_data in data.get('tags', []):
+            tag_lookup[tag_data['name'].lower()] = Tag.objects.create(
+                user=user, name=tag_data['name'], color=tag_data.get('color') or Tag.DEFAULT_COLOR,
+                group=_group(tag_data.get('group')), notes=tag_data.get('notes') or '',
+                start_date=_to_date(tag_data.get('start_date')), end_date=_to_date(tag_data.get('end_date')))
+            counts['tags'] += 1
+        # Exports made before trips became dated tags
+        for trip_data in data.get('trips', []):
+            name = trip_data['name']
+            if name.lower() in tag_lookup:
+                name = f"{name} (trip)"
+            tag_lookup[name.lower()] = Tag.objects.create(
+                user=user, name=name, notes=trip_data.get('notes') or '', group=_group('Trips'),
+                start_date=_to_date(trip_data['start_date']), end_date=_to_date(trip_data['end_date']))
+            counts['tags'] += 1
+
+        for rule, names in rule_tag_names:
+            found = [tag_lookup[n.lower()] for n in names if n.lower() in tag_lookup]
+            if found:
+                rule.tags.set(found)
 
         # 4. Accounts → Statements → Ledgers → RawTxns → LogicalTxns
         for acct_data in data.get('accounts', []):
@@ -411,7 +461,7 @@ def import_user_data(user, data):
                                 )
                                 matched_rule = rule_lookup.get(rule_key)
 
-                            LogicalTransaction.objects.create(
+                            ltxn = LogicalTransaction.objects.create(
                                 raw_transaction=raw,
                                 user=user,
                                 date=_to_date(ltxn_data.get('date', raw_data['date'])),
@@ -424,6 +474,7 @@ def import_user_data(user, data):
                                 classification_method_v2=ltxn_data.get('classification_method', 'unclassified'),
                                 matched_rule_v2=matched_rule,
                             )
+                            ltxn.tags.set([tag_lookup[n.lower()] for n in ltxn_data.get('tags', []) if n.lower() in tag_lookup])
                             counts['logical_transactions'] += 1
 
         # 5. Exchange rates

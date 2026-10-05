@@ -1,7 +1,7 @@
 import django_filters
 from django.db.models import Q
 
-from .models import CategoryNode, LogicalTransaction
+from .models import CategoryNode, LogicalTransaction, Tag
 
 
 class TransactionFilter(django_filters.FilterSet):
@@ -37,6 +37,8 @@ class TransactionFilter(django_filters.FilterSet):
         field_name='raw_transaction__account_metadata__reference_number',
     )
     meta = django_filters.CharFilter(method='filter_metadata')
+    # Any of the selected tags.
+    tag = django_filters.ModelMultipleChoiceFilter(queryset=Tag.objects.none(), method='filter_tag')
 
     class Meta:
         model = LogicalTransaction
@@ -47,6 +49,7 @@ class TransactionFilter(django_filters.FilterSet):
         self.user = user
         if user:
             self.filters['category'].queryset = CategoryNode.objects.filter(user=user)
+            self.filters['tag'].queryset = Tag.objects.filter(user=user)
         from .models import CategoryGroup
         self.filters['group'].extra['choices'] = list(CategoryGroup.SLUG_CHOICES)
 
@@ -83,6 +86,12 @@ class TransactionFilter(django_filters.FilterSet):
                 result.add(pk)
                 stack.extend(children.get(pk, []))
         return result
+
+    def filter_tag(self, queryset, name, value):
+        if not value:
+            return queryset
+        through = LogicalTransaction.tags.through
+        return queryset.filter(pk__in=through.objects.filter(tag__in=list(value)).values('logicaltransaction_id'))
 
     def filter_wallets(self, queryset, name, value):
         """Handle wallet filters (format: 'account_id:currency')."""
