@@ -37,10 +37,21 @@ def get_category_node_groups(user):
     """Categories V2 as [{'group', 'rows'}] (depth-first tree rows per CategoryGroup), for dropdowns."""
     CategoryNode.ensure_protected(user)
     tree = _build_tree(list(CategoryNode.objects.filter(user=user).select_related('group')))
-    return [
-        {'group': grp, 'rows': [r for r in tree if r['node'].group_id == grp.pk]}
-        for grp in CategoryGroup.objects.order_by('name')
-    ]
+    groups = []
+    for group in CategoryGroup.objects.order_by('name'):
+        rows = [row for row in tree if row['node'].group_id == group.pk]
+        roots_by_id = {}
+        roots = []
+        for row in rows:
+            root_id = row['node'].pk if row['depth'] == 0 else int(row['ancestors'].split(',', 1)[0])
+            root = roots_by_id.get(root_id)
+            if root is None:
+                root = {'rows': []}
+                roots_by_id[root_id] = root
+                roots.append(root)
+            root['rows'].append(row)
+        groups.append({'group': group, 'rows': rows, 'roots': roots})
+    return groups
 
 
 def _unclassified_node(user):

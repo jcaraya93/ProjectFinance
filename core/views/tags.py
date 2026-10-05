@@ -4,7 +4,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError
-from django.db.models import Count
+from django.db.models import Count, F
 from django.http import QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -52,7 +52,8 @@ def _parse_date(value):
 @login_required
 def tag_list(request):
     tags = list(Tag.objects.filter(user=request.user).select_related('group').annotate(
-        txn_count=Count('logical_transactions', distinct=True), rule_count=Count('rules', distinct=True)))
+        txn_count=Count('logical_transactions', distinct=True), rule_count=Count('rules', distinct=True)
+    ).order_by(F('start_date').desc(nulls_last=True), 'name'))
     all_txns = LogicalTransaction.objects.filter(user=request.user)
     for tag in tags:
         tag.txn_url = reverse('core:transaction_list') + '?' + urlencode([

@@ -107,20 +107,30 @@
               </div>
             </div>
             <div class="dropdown-divider mt-1 mb-1"></div>
+            <ul class="nav nav-pills nav-fill transaction-category-tabs" role="tablist" aria-label="Category groups">
             {% for entry in category_groups %}
-            <div class="dropdown-header small fw-bold group-toggle" role="button" style="cursor: pointer;">
-              <input type="checkbox" name="group" value="{{ entry.group.slug }}" class="form-check-input me-1" {% if entry.group.slug in selected_groups %}checked{% endif %}>
-              {{ entry.group.name }}
+            {% if entry.group.slug != 'unclassified' %}
+            <li class="nav-item" role="presentation">
+              <button class="nav-link{% if entry.group.slug == 'expense' %} active{% endif %}" id="category-tab-{{ entry.group.slug }}" data-bs-toggle="pill" data-bs-target="#category-pane-{{ entry.group.slug }}" type="button" role="tab" aria-controls="category-pane-{{ entry.group.slug }}" aria-selected="{% if entry.group.slug == 'expense' %}true{% else %}false{% endif %}">{{ entry.group.name }}</button>
+            </li>
+            {% endif %}
+            {% endfor %}
+            </ul>
+            <div class="tab-content transaction-category-tab-content">
+            {% for entry in category_groups %}
+            {% if entry.group.slug != 'unclassified' %}
+            <div class="tab-pane fade{% if entry.group.slug == 'expense' %} show active{% endif %}" id="category-pane-{{ entry.group.slug }}" role="tabpanel" aria-labelledby="category-tab-{{ entry.group.slug }}" tabindex="0">
+              {% include 'core/_transaction_category_group.html' with entry=entry selected_groups=selected_groups selected_categories=selected_categories %}
             </div>
-            <div class="category-group-items">
-            {% for row in entry.rows %}
-            <label class="dropdown-item d-flex align-items-center transaction-category-item" style="padding-left: calc(12px + {{ row.depth }} * 12px);">
-              <input type="checkbox" name="category" value="{{ row.node.id }}" class="form-check-input" {% if row.node.id|stringformat:"d" in selected_categories %}checked{% endif %}>
-              <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: {{ row.node.color }};"></span>
-              {{ row.node.name }}
-            </label>
+            {% endif %}
             {% endfor %}
             </div>
+            {% for entry in category_groups %}
+            {% if entry.group.slug == 'unclassified' %}
+            <div class="transaction-category-unclassified">
+              {% include 'core/_transaction_category_group.html' with entry=entry selected_groups=selected_groups selected_categories=selected_categories %}
+            </div>
+            {% endif %}
             {% endfor %}
           </div>
         </div>
@@ -285,19 +295,22 @@
         <input type="checkbox" class="form-check-input col-toggle" data-col="5" checked> Category
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="6" checked> Description
+        <input type="checkbox" class="form-check-input col-toggle" data-col="11" data-cell="6" checked> Tags
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="10" data-cell="7" checked> Note
+        <input type="checkbox" class="form-check-input col-toggle" data-col="6" data-cell="7" checked> Description
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="7" data-cell="8" checked> Metadata
+        <input type="checkbox" class="form-check-input col-toggle" data-col="10" data-cell="8" checked> Note
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="8" data-cell="9" checked> Amount
+        <input type="checkbox" class="form-check-input col-toggle" data-col="7" data-cell="9" checked> Metadata
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="9" data-cell="10" checked> Actions
+        <input type="checkbox" class="form-check-input col-toggle" data-col="8" data-cell="10" checked> Amount
+      </label>
+      <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+        <input type="checkbox" class="form-check-input col-toggle" data-col="9" data-cell="11" checked> Actions
       </label>
       </div>
     </div>
@@ -314,6 +327,7 @@
         <th><a href="?{{ filter_qs }}&sort=method&dir={% if sc == 'method' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Method{% if sc == 'method' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=group&dir={% if sc == 'group' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Group{% if sc == 'group' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=category&dir={% if sc == 'category' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Category{% if sc == 'category' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
+        <th>Tags</th>
         <th><a href="?{{ filter_qs }}&sort=description&dir={% if sc == 'description' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Description{% if sc == 'description' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=note&dir={% if sc == 'note' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Note{% if sc == 'note' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th>Metadata</th>
@@ -346,7 +360,10 @@
             <span class="text-muted">—</span>
             {% endif %}
           </td>
-          <td>{{ txn.description }}{% for tag in txn.tags.all %} <a href="{% url 'core:transaction_list' %}?tag={{ tag.pk }}" class="badge text-decoration-none" style="background-color: {{ tag.color }};" title="Show transactions tagged {{ tag.name }}">{{ tag.name }}</a>{% endfor %}</td>
+          <td class="text-nowrap">
+            {% for tag in txn.tags.all %}<a href="{% url 'core:transaction_list' %}?tag={{ tag.pk }}" class="badge text-decoration-none me-1" style="background-color: {{ tag.color }};" title="Show transactions tagged {{ tag.name }}">{{ tag.name }}</a>{% empty %}<span class="text-muted">—</span>{% endfor %}
+          </td>
+          <td>{{ txn.description }}</td>
           <td class="small">{{ txn.note|default:"—" }}</td>
           <td class="small text-muted text-nowrap">
             {% for k, v in txn.account_metadata.items %}<code>{{ k }}={{ v }}</code>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
@@ -361,7 +378,7 @@
         </tr>
       {% empty %}
         <tr>
-          <td colspan="11" class="text-center text-muted py-4">No transactions found.</td>
+          <td colspan="12" class="text-center text-muted py-4">No transactions found.</td>
         </tr>
       {% endfor %}
     </tbody>

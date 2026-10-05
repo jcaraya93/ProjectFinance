@@ -18,6 +18,17 @@ def txns(user):
 
 
 class TestTagGroupsAndDates:
+    def test_tags_are_ordered_by_start_date_most_recent_first(self, auth_client, user):
+        group = TagGroup.objects.create(user=user, name='Trips')
+        Tag.objects.create(user=user, group=group, name='Later', start_date='2025-11-03', end_date='2025-11-04')
+        Tag.objects.create(user=user, group=group, name='Undated')
+        Tag.objects.create(user=user, group=group, name='Earlier', start_date='2025-10-27', end_date='2025-10-28')
+
+        response = auth_client.get(reverse('core:tag_list'))
+
+        section = next(section for section in response.context['sections'] if section['group'] == group)
+        assert [tag.name for tag in section['tags']] == ['Later', 'Earlier', 'Undated']
+
     def test_group_crud_and_ungroup_on_delete(self, auth_client, user):
         auth_client.post(reverse('core:tag_group_save'), {'name': 'Trips'})
         group = TagGroup.objects.get(user=user)

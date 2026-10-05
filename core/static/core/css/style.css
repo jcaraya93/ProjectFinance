@@ -10,10 +10,64 @@
 }
 
 .transaction-category-menu {
-  max-height: 500px;
+  width: min(760px, calc(100vw - 2rem));
+  max-height: min(72vh, 720px);
   overflow-y: auto;
-  min-width: 280px;
   font-size: .875rem;
+}
+
+.transaction-category-menu .transaction-category-group {
+  margin-bottom: .25rem;
+}
+
+.transaction-category-tabs {
+  gap: .25rem;
+}
+
+.transaction-category-tabs .nav-link {
+  padding: .3rem .5rem;
+  font-size: .8125rem;
+  white-space: nowrap;
+}
+
+.transaction-category-tab-content {
+  padding-top: .35rem;
+}
+
+.transaction-category-unclassified {
+  padding-top: .25rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.transaction-category-menu .category-group-items {
+  display: block;
+}
+
+.transaction-category-menu .transaction-category-root {
+  display: block;
+  min-width: 0;
+  margin-bottom: .35rem;
+  padding-bottom: .2rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.transaction-category-menu .transaction-category-descendants {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: .1rem .35rem;
+  padding-left: .25rem;
+}
+
+.transaction-category-menu .category-root-item {
+  border-radius: .25rem;
+  background-color: #f1f3f5;
+  font-weight: 600;
+}
+
+.transaction-category-menu .category-tree-branch {
+  color: #6c757d;
+  flex-shrink: 0;
 }
 
 .transaction-category-controls {
@@ -35,11 +89,33 @@
 
 .transaction-category-item {
   gap: 6px;
+  min-width: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.transaction-category-item .category-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .transaction-category-item .form-check-input,
 .transaction-category-item .rounded-circle {
   flex-shrink: 0;
+}
+
+@media (max-width: 767.98px) {
+  .transaction-category-menu .transaction-category-descendants {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  .transaction-category-menu .transaction-category-descendants {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .dashboard-filter-toolbar .btn-outline-secondary {

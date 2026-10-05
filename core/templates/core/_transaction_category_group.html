@@ -1,0 +1,33 @@
+<section class="transaction-category-group">
+  <div class="dropdown-header small fw-bold group-toggle" role="button" style="cursor: pointer;">
+    <input type="checkbox" name="group" value="{{ entry.group.slug }}" class="form-check-input me-1" {% if entry.group.slug in selected_groups %}checked{% endif %}>
+    {{ entry.group.name }}
+  </div>
+  <div class="category-group-items">
+    {% for root in entry.roots %}
+    <div class="transaction-category-root">
+      {% with row=root.rows.0 %}
+      <label class="dropdown-item d-flex align-items-center transaction-category-item category-root-item fw-bold" title="{{ row.node.name }}">
+        <input type="checkbox" name="category" value="{{ row.node.id }}" class="form-check-input" {% if row.node.id|stringformat:"d" in selected_categories %}checked{% endif %}>
+        <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: {{ row.node.color }};"></span>
+        <span class="category-name">{{ row.node.name }}</span>
+      </label>
+      {% endwith %}
+      {% if root.rows|length > 1 %}
+      <div class="transaction-category-descendants">
+        {% for row in root.rows %}
+        {% if not forloop.first %}
+        <label class="dropdown-item d-flex align-items-center transaction-category-item" title="{{ row.node.name }}" style="padding-left: calc(12px + {{ row.depth }} * 12px);">
+          <input type="checkbox" name="category" value="{{ row.node.id }}" class="form-check-input" {% if row.node.id|stringformat:"d" in selected_categories %}checked{% endif %}>
+          <span class="category-tree-branch" aria-hidden="true">&#8627;</span>
+          <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: {{ row.node.color }};"></span>
+          <span class="category-name">{{ row.node.name }}</span>
+        </label>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>

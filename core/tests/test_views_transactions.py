@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from core.models import (
     Transaction, LogicalTransaction, CategoryGroup, CategoryNode,
-    ClassificationRuleV2, UserPreference,
+    ClassificationRuleV2, UserPreference, Tag,
 )
 from core.tests.factories import RawTransactionFactory, LogicalTransactionFactory
 
@@ -28,6 +28,18 @@ class TestTransactionListSmoke:
         resp = auth_client.get(reverse('core:transaction_list'))
         content = resp.content.decode()
         assert 'TRANSACTION' in content
+
+    def test_tags_have_a_dedicated_column(self, auth_client, user, sample_data):
+        txn = sample_data['transactions'][0]
+        tag = Tag.objects.create(user=user, name='Trip')
+        txn.tags.add(tag)
+
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+
+        assert content.index('>Category') < content.index('<th>Tags</th>') < content.index('>Description')
+        assert f'<td>{txn.description}</td>' in content
+        assert f'href="/transactions/?tag={tag.pk}" class="badge' in content
+        assert 'data-col="11" data-cell="6" checked> Tags' in content
 
 
 class TestTransactionReturnLink:
@@ -133,11 +145,36 @@ class TestTransactionListFilters:
         assert 'id="directCategoryScope"' in categories_dropdown
         assert 'Selected only' in categories_dropdown
         assert 'transaction-category-controls' in categories_dropdown
+        assert 'transaction-category-group' in categories_dropdown
+        assert 'category-group-items' in categories_dropdown
+        assert 'category-root-item fw-bold' in categories_dropdown
+        assert 'category-name' in categories_dropdown
+        assert 'id="category-tab-expense"' in categories_dropdown
+        assert 'id="category-tab-income"' in categories_dropdown
+        assert 'id="category-tab-transfer"' in categories_dropdown
+        assert 'id="category-pane-expense" role="tabpanel"' in categories_dropdown
+        assert 'id="category-pane-income" role="tabpanel"' in categories_dropdown
+        assert 'id="category-pane-transfer" role="tabpanel"' in categories_dropdown
+        assert 'name="group" value="unclassified"' in categories_dropdown
         assert 'aria-describedby="directCategoryScopeHelp"' in categories_dropdown
         assert 'Exclude subcategories' in categories_dropdown
-        assert 'padding-left: calc(12px + ' in categories_dropdown
         assert content.count('id="directCategoryScope"') == 1
         assert 'id="directCategoryScope" aria-describedby="directCategoryScopeHelp" checked' not in content
+
+    def test_category_dropdown_keeps_each_parent_with_its_descendants(self, auth_client, user, sample_data):
+        food, snacks, _, _ = self._v2_setup(user, sample_data)
+
+        response = auth_client.get(reverse('core:transaction_list'))
+
+        expense = next(group for group in response.context['category_groups'] if group['group'].slug == 'expense')
+        food_root = next(root for root in expense['roots'] if root['rows'][0]['node'] == food)
+        assert [row['node'].pk for row in food_root['rows']] == [food.pk, snacks.pk]
+        content = response.content.decode()
+        assert 'transaction-category-root' in content
+        assert 'category-root-item fw-bold' in content
+        assert 'transaction-category-descendants' in content
+        assert 'category-tree-branch' in content
+        assert 'padding-left: calc(12px + ' in content
 
     def _v2_setup(self, user, sample_data):
         group = CategoryGroup.get_group('expense')
