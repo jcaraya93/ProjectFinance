@@ -12,7 +12,7 @@
   "color": "#1e88e5"
  },
  {
-  "name": "Family Pet",
+  "name": "Pets",
   "group": "expense",
   "parent": null,
   "color": "#fb8c00"
@@ -72,7 +72,7 @@
   "color": "#e9537d"
  },
  {
-  "name": "Bank Insurance",
+  "name": "Bank Card Insurance",
   "group": "expense",
   "parent": "Bank",
   "color": "#e74451"
@@ -90,16 +90,10 @@
   "color": "#cd541a"
  },
  {
-  "name": "Car Ownership Costs",
+  "name": "Bank Reimbursement",
   "group": "expense",
-  "parent": "Car",
-  "color": "#4cd0ea"
- },
- {
-  "name": "Car Running Costs",
-  "group": "expense",
-  "parent": "Car",
-  "color": "#163cba"
+  "parent": "Bank",
+  "color": "#6c757d"
  },
  {
   "name": "Food Delivery",
@@ -160,6 +154,12 @@
   "group": "expense",
   "parent": "Health",
   "color": "#69298e"
+ },
+ {
+  "name": "Health Psychology",
+  "group": "expense",
+  "parent": "Health",
+  "color": "#6c757d"
  },
  {
   "name": "Housing General",
@@ -296,37 +296,37 @@
  {
   "name": "Car Gas",
   "group": "expense",
-  "parent": "Car Running Costs",
+  "parent": "Car",
   "color": "#1a69da"
  },
  {
   "name": "Car Insurance",
   "group": "expense",
-  "parent": "Car Ownership Costs",
+  "parent": "Car",
   "color": "#52ebe8"
  },
  {
   "name": "Car Maintenance",
   "group": "expense",
-  "parent": "Car Ownership Costs",
+  "parent": "Car",
   "color": "#4cd0ea"
  },
  {
   "name": "Car Parking & Toll",
   "group": "expense",
-  "parent": "Car Running Costs",
+  "parent": "Car",
   "color": "#163cba"
  },
  {
   "name": "Car Tax",
   "group": "expense",
-  "parent": "Car Ownership Costs",
+  "parent": "Car",
   "color": "#2ca6e6"
  },
  {
   "name": "Car Wash",
   "group": "expense",
-  "parent": "Car Running Costs",
+  "parent": "Car",
   "color": "#131ba4"
  },
  {
@@ -336,7 +336,7 @@
   "color": "#e53935"
  },
  {
-  "name": "Reimbursement",
+  "name": "Refund",
   "group": "income",
   "parent": null,
   "color": "#6d4c41"
@@ -348,13 +348,13 @@
   "color": "#43a047"
  },
  {
-  "name": "Bank Interest CDP",
+  "name": "Bank CDP",
   "group": "income",
   "parent": "Bank",
   "color": "#e9537d"
  },
  {
-  "name": "Bank Interest Cashback",
+  "name": "Bank Cashback",
   "group": "income",
   "parent": "Bank",
   "color": "#e74451"
@@ -372,27 +372,27 @@
   "color": "#cd541a"
  },
  {
-  "name": "Reimbursement General",
+  "name": "Refund General",
   "group": "income",
-  "parent": "Reimbursement",
+  "parent": "Refund",
   "color": "#ae3339"
  },
  {
-  "name": "Reimbursement Housing",
+  "name": "Refund Housing",
   "group": "income",
-  "parent": "Reimbursement",
+  "parent": "Refund",
   "color": "#943b2b"
  },
  {
-  "name": "Reimbursement Insurance",
+  "name": "Refund Insurance",
   "group": "income",
-  "parent": "Reimbursement",
+  "parent": "Refund",
   "color": "#8e4d29"
  },
  {
-  "name": "Reimbursement Partner",
+  "name": "Refund Partner",
   "group": "income",
-  "parent": "Reimbursement",
+  "parent": "Refund",
   "color": "#8e6129"
  },
  {

@@ -160,8 +160,13 @@
     return ds.backgroundColor || '#6c757d';
   });
 
-  new ApexCharts(document.getElementById('parkingSpendChart'), {
-    chart: { type: 'bar', height: 280, stacked: true, toolbar: { show: false } },
+  var spendUrls = (park.spend_datasets || []).map(function(ds) { return ds.urls || []; });
+  var spendChart = new ApexCharts(document.getElementById('parkingSpendChart'), {
+    chart: { type: 'bar', height: 280, stacked: true, toolbar: { show: false },
+      events: { dataPointSelection: function(e, ctx, config) {
+        var url = spendUrls[config.seriesIndex] && spendUrls[config.seriesIndex][config.dataPointIndex];
+        if (url) window.location.href = url;
+      } } },
     series: spendSeries,
     colors: spendColors,
     xaxis: { categories: park.labels || [] },
@@ -177,7 +182,9 @@
       y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
     grid: { borderColor: '#e9ecef' },
-  }).render();
+  });
+  spendChart.render();
+  DashboardCharts.addVisibilityToggle(spendChart, document.getElementById('parkingSpendChart'), spendSeries.map(function(s) { return s.name; }));
 
   // Parking Frequency (stacked bar)
   var countSeries = (park.count_datasets || []).map(function(ds) {
@@ -187,8 +194,13 @@
     return ds.backgroundColor || '#6c757d';
   });
 
-  new ApexCharts(document.getElementById('parkingFreqChart'), {
-    chart: { type: 'bar', height: 280, stacked: true, toolbar: { show: false } },
+  var countUrls = (park.count_datasets || []).map(function(ds) { return ds.urls || []; });
+  var freqChart = new ApexCharts(document.getElementById('parkingFreqChart'), {
+    chart: { type: 'bar', height: 280, stacked: true, toolbar: { show: false },
+      events: { dataPointSelection: function(e, ctx, config) {
+        var url = countUrls[config.seriesIndex] && countUrls[config.seriesIndex][config.dataPointIndex];
+        if (url) window.location.href = url;
+      } } },
     series: countSeries,
     colors: countColors,
     xaxis: { categories: park.labels || [] },
@@ -205,7 +217,9 @@
       y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
     grid: { borderColor: '#e9ecef' },
-  }).render();
+  });
+  freqChart.render();
+  DashboardCharts.addVisibilityToggle(freqChart, document.getElementById('parkingFreqChart'), countSeries.map(function(s) { return s.name; }));
 })();
 </script>
 {% endblock %}

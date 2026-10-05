@@ -474,7 +474,7 @@ class TestSpendingIncomeLevel:
         assert sidebar.count('list-group-item-action') == len(links)
         assert sidebar.count(' active"') == 1
         assert f'href="{reverse("core:spending_income_dashboard")}">Expense</a>' in content
-        assert f'href="{reverse("core:car_dashboard")}">Category</a>' in content
+        assert f'href="{reverse("core:car_dashboard")}">Expense Category</a>' in content
 
     def _breakdown(self, resp):
         import json

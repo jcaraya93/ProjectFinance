@@ -79,9 +79,10 @@ class CategoryNode(models.Model):
     ]
     DEFAULT_INCOME_ROLES = {
         'Work Salary': 'salary', 'Work Bonuses': 'bonus', 'Work Association': 'association',
-        'Work Government': 'government', 'Reimbursement': 'reimbursement', 'Bank': 'bank',
-        **{f'Reimbursement {name}': 'reimbursement' for name in ('General', 'Housing', 'Insurance', 'Partner')},
-        **{f'Bank Interest {name}': 'bank' for name in ('CDP', 'Cashback', 'Reversals', 'Credit')},
+        'Work Government': 'government',         'Refund': 'reimbursement', 'Bank': 'bank',
+                **{f'Refund {name}': 'reimbursement' for name in ('General', 'Housing', 'Insurance', 'Partner')},
+                'Bank CDP': 'bank', 'Bank Cashback': 'bank',
+                'Bank Interest Reversals': 'bank', 'Bank Interest Credit': 'bank',
     }
 
     name = models.CharField(max_length=100)

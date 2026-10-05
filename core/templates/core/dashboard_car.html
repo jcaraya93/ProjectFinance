@@ -252,8 +252,13 @@
     trendColors.push(trend.colors[cat] || '#6c757d');
   });
 
-  new ApexCharts(document.getElementById('trendChart'), {
-    chart: { type: 'bar', height: 260, stacked: true, toolbar: { show: false } },
+  var trendUrls = Object.keys(trend.datasets).map(function(cat) { return (trend.urls || {})[cat] || []; });
+  var trendChart = new ApexCharts(document.getElementById('trendChart'), {
+    chart: { type: 'bar', height: 260, stacked: true, toolbar: { show: false },
+      events: { dataPointSelection: function(e, ctx, config) {
+        var url = trendUrls[config.seriesIndex] && trendUrls[config.seriesIndex][config.dataPointIndex];
+        if (url) window.location.href = url;
+      } } },
     series: trendSeries,
     colors: trendColors,
     xaxis: { categories: trend.labels || [] },
@@ -269,11 +274,21 @@
       y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
     grid: { borderColor: '#e9ecef' },
-  }).render();
+  });
+  trendChart.render();
+  DashboardCharts.addVisibilityToggle(trendChart, document.getElementById('trendChart'), trendSeries.map(function(s) { return s.name; }));
 
   // Cost Breakdown (donut)
   new ApexCharts(document.getElementById('breakdownChart'), {
-    chart: { type: 'donut', height: 260 },
+    chart: {
+      type: 'donut', height: 260,
+      events: {
+        dataPointSelection: function(e, ctx, cfg) {
+          var url = (bd.urls || [])[cfg.dataPointIndex];
+          if (url) { window.location.href = url; }
+        }
+      }
+    },
     series: (bd.values || []).map(Math.round),
     labels: bd.labels || [],
     colors: bd.colors || [],
@@ -298,8 +313,13 @@
     return ds.backgroundColor || '#6c757d';
   });
 
-  new ApexCharts(document.getElementById('runningChart'), {
-    chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
+  var runningUrls = (running.datasets || []).map(function(ds) { return ds.urls || []; });
+  var runningChart = new ApexCharts(document.getElementById('runningChart'), {
+    chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false },
+      events: { dataPointSelection: function(e, ctx, config) {
+        var url = runningUrls[config.seriesIndex] && runningUrls[config.seriesIndex][config.dataPointIndex];
+        if (url) window.location.href = url;
+      } } },
     series: runningSeries,
     colors: runningColors,
     xaxis: { categories: running.labels || [] },
@@ -315,7 +335,9 @@
       y: { formatter: function(v) { return Math.round(v).toLocaleString(); } },
     },
     grid: { borderColor: '#e9ecef' },
-  }).render();
+  });
+  runningChart.render();
+  DashboardCharts.addVisibilityToggle(runningChart, document.getElementById('runningChart'), runningSeries.map(function(s) { return s.name; }));
 })();
 </script>
 {% endblock %}

@@ -161,10 +161,16 @@
   var gas = JSON.parse(document.getElementById('gasData').textContent);
   var sym = '{{ currency_symbol }}';
   var thr = gas.threshold;
+  var gasEvents = {
+    dataPointSelection: function(e, ctx, cfg) {
+      var url = (gas.urls || [])[cfg.dataPointIndex];
+      if (url) { window.location.href = url; }
+    }
+  };
 
   // Monthly gas spend (bar)
   new ApexCharts(document.getElementById('gasSpendChart'), {
-    chart: { type: 'bar', height: 280, toolbar: { show: false } },
+    chart: { type: 'bar', height: 280, toolbar: { show: false }, events: gasEvents },
     series: [{ name: 'Monthly Gas Spend', data: (gas.spend || []).map(Math.round) }],
     colors: [CHART_COLORS.carBlue],
     xaxis: { categories: gas.labels || [] },
@@ -192,7 +198,7 @@
   // Fill-ups count per month
   var totalCounts = (gas.count_above || []).map(function(v, i) { return Math.round(v) + Math.round((gas.count_below || [])[i] || 0); });
   new ApexCharts(document.getElementById('gasFreqChart'), {
-    chart: { type: 'bar', height: 280, toolbar: { show: false } },
+    chart: { type: 'bar', height: 280, toolbar: { show: false }, events: gasEvents },
     series: [
       { name: 'Fill-ups', data: totalCounts },
     ],

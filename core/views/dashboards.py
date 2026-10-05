@@ -850,6 +850,7 @@ def car_dashboard(request, display_currency, time_group):
     car_qs = Transaction.objects.filter(user=request.user).filter(
         category_v2__name__in=CAR_CATEGORIES, **{f'{amount_field}__isnull': False})
     period, car_qs = _category_period_filter(request, car_qs, CAR_CATEGORIES)
+    car_ids = _category_ids_by_name(request.user, CAR_CATEGORIES)
     income_roles = income_category_roles(request.user)
     salary_qs = Transaction.objects.filter(user=request.user).filter(
         category_v2_id__in=income_roles['salary'] | income_roles['bonus'], **{f'{amount_field}__isnull': False})
@@ -1138,7 +1139,8 @@ def car_dashboard(request, display_currency, time_group):
         'running_last_year': running_last_year,
         'running_data': json.dumps({
             'labels': sorted_months,
-            'datasets': [{'label': c, 'data': [running_cat_data[c].get(m, 0) for m in sorted_months], 'backgroundColor': running_colors[c]} for c in RUNNING_CATEGORIES],
+            'datasets': [{'label': c, 'data': [running_cat_data[c].get(m, 0) for m in sorted_months], 'backgroundColor': running_colors[c],
+                          'urls': _month_segment_urls(request, period, sorted_months, [car_ids[c]]) if c in car_ids else []} for c in RUNNING_CATEGORIES],
         }, cls=DecimalEncoder),
         # Gas
         'gas_last_month': gas_by_month.get(last_month, {}).get('total', 0),
@@ -1174,11 +1176,20 @@ def car_dashboard(request, display_currency, time_group):
         # Chart JSON
         'trend_data': json.dumps({
             'labels': sorted_months, 'datasets': trend_datasets, 'colors': cat_colors,
+            'urls': {c: _month_segment_urls(request, period, sorted_months, [car_ids[c]]) for c in CAR_CATEGORIES if c in car_ids},
         }, cls=DecimalEncoder),
         'breakdown_data': json.dumps({
             'labels': [r['category_v2__name'] for r in category_totals],
             'values': [float(r['total']) for r in category_totals],
             'colors': [cat_colors.get(r['category_v2__name'], '#6c757d') for r in category_totals],
+            'urls': [
+                reverse('core:transaction_list') + '?' + urlencode(
+                    [('group', 'expense'), ('category_scope', 'direct'), ('return_to', request.get_full_path()),
+                     ('category', car_ids.get(r['category_v2__name']))]
+                    + [(k, period[k].isoformat()) for k in ('start_date', 'end_date') if period[k]]
+                ) if car_ids.get(r['category_v2__name']) else ''
+                for r in category_totals
+            ],
         }, cls=DecimalEncoder),
         'cost_type_data': json.dumps({
             'labels': ['Running Costs', 'Ownership Costs'],
@@ -1307,6 +1318,9 @@ def car_gas_dashboard(request, display_currency, time_group):
         'fillup_table': [{'month': m, 'min': gas_min_per[i], 'median': gas_median_per[i], 'avg': gas_avg_per[i], 'max': gas_max_per[i]} for i, m in enumerate(sorted_months)][::-1],
         'gas_data': json.dumps({
             'labels': sorted_months, 'counts': gas_counts,
+            'urls': _month_segment_urls(
+                request, period, sorted_months,
+                _category_ids_by_name(request.user, ['Car Gas']).values()),
             'avg_per_fillup': gas_avg_per, 'median_per_fillup': gas_median_per,
             'min_per_fillup': gas_min_per, 'max_per_fillup': gas_max_per,
             'spend': gas_monthly_spend,
@@ -1365,10 +1379,10 @@ def car_parking_dashboard(request, display_currency, time_group):
         .order_by('month'))
 
     top_by_cost = list(park_qs.values('description')
-        .annotate(total=Sum(abs_field)).order_by('-total')[:5]
+        .annotate(total=Sum(abs_field)).order_by('-total')[:10]
         .values_list('description', flat=True))
     top_by_visits = list(park_qs.values('description')
-        .annotate(cnt=Count('id')).order_by('-cnt')[:5]
+        .annotate(cnt=Count('id')).order_by('-cnt')[:10]
         .values_list('description', flat=True))
 
     def _build_loc_data(top_list, top_set, field):
@@ -1385,12 +1399,21 @@ def car_parking_dashboard(request, display_currency, time_group):
     spend_by_loc = _build_loc_data(top_by_cost, set(top_by_cost), 'total')
     count_by_loc = _build_loc_data(top_by_visits, set(top_by_visits), 'count')
 
-    def _loc_color(i):
-        colors = ['#2C3E50', '#18BC9C', '#3498DB', '#F39C12', '#E74C3C', '#95A5A6']
-        return colors[i % len(colors)]
+    def _loc_color(i, total):
+        colors = ['#2C3E50', '#18BC9C', '#3498DB', '#F39C12', '#E74C3C',
+                  '#8E44AD', '#16A085', '#D35400', '#2980B9', '#C0392B']
+        return '#95A5A6' if i == total - 1 else colors[i % len(colors)]
 
-    park_spend_datasets = [{'label': loc[:15], 'data': [spend_by_loc[loc].get(m, 0) for m in sorted_months], 'backgroundColor': _loc_color(i)} for i, loc in enumerate(top_by_cost + ['Others'])]
-    park_count_datasets = [{'label': loc[:15], 'data': [count_by_loc[loc].get(m, 0) for m in sorted_months], 'backgroundColor': _loc_color(i)} for i, loc in enumerate(top_by_visits + ['Others'])]
+    park_ids = list(_category_ids_by_name(request.user, ['Car Parking & Toll']).values())
+
+    def park_urls(loc):
+        # "Others" mixes many descriptions, so it has no single transaction filter to link to.
+        if loc == 'Others':
+            return []
+        return _month_segment_urls(request, period, sorted_months, park_ids, loc)
+
+    park_spend_datasets = [{'label': loc[:15], 'full_label': loc, 'data': [spend_by_loc[loc].get(m, 0) for m in sorted_months], 'backgroundColor': _loc_color(i, len(top_by_cost) + 1), 'urls': park_urls(loc)} for i, loc in enumerate(top_by_cost + ['Others'])]
+    park_count_datasets = [{'label': loc[:15], 'full_label': loc, 'data': [count_by_loc[loc].get(m, 0) for m in sorted_months], 'backgroundColor': _loc_color(i, len(top_by_visits) + 1), 'urls': park_urls(loc)} for i, loc in enumerate(top_by_visits + ['Others'])]
 
     # Top locations table
     park_locations = list(park_qs.values('description')
@@ -1847,6 +1870,33 @@ def _dashboard_period_filter(request, qs, category_ids, group_slug, prefix):
 
 def _income_period_filter(request, qs, category_ids):
     return _dashboard_period_filter(request, qs, category_ids, 'income', 'income')
+
+
+def _month_segment_urls(request, period, months, category_ids, search=None):
+    """Transaction-list URLs for one chart segment, one per 'YYYY-MM' month, clamped to the selected period."""
+    from calendar import monthrange
+    urls = []
+    for month in months:
+        year, mon = map(int, month.split('-'))
+        start = date(year, mon, 1)
+        end = date(year, mon, monthrange(year, mon)[1])
+        if period['start_date']:
+            start = max(start, period['start_date'])
+        if period['end_date']:
+            end = min(end, period['end_date'])
+        params = [('group', 'expense'), ('category_scope', 'direct'), ('return_to', request.get_full_path())]
+        params.extend(('category', cid) for cid in sorted(category_ids))
+        params.extend([('start_date', start.isoformat()), ('end_date', end.isoformat())])
+        if search:
+            params.append(('search', search))
+        urls.append(reverse('core:transaction_list') + '?' + urlencode(params))
+    return urls
+
+
+def _category_ids_by_name(user, names):
+    return dict(CategoryNode.objects.filter(
+        user=user, group__slug='expense', name__in=names,
+    ).values_list('name', 'id'))
 
 
 def _category_period_filter(request, qs, category_names):
