@@ -66,6 +66,13 @@ class TestTransactionListSmoke:
 
         assert 'class="btn btn-sm btn-outline-danger date-preset" data-range="all">Clear dates</button>' in content
 
+    def test_table_width_toggle_is_available(self, auth_client):
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+
+        assert 'id="toggleTransactionWidth"' in content
+        assert '>Expand table</button>' in content
+        assert 'transaction-list.js?v=20261005-expand-table' in content
+
     def test_tags_have_a_dedicated_column(self, auth_client, user, sample_data):
         txn = sample_data['transactions'][0]
         tag = Tag.objects.create(user=user, name='Trip')

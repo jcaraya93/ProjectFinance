@@ -2,6 +2,10 @@
 {% block title %}Tags — Project Finance{% endblock %}
 
 {% block content %}
+<style>
+  .tag-group-menu-container { margin-right: -.75rem; }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-2">
   <h2 class="mb-0">Tags</h2>
   <div class="d-flex gap-2">
@@ -16,10 +20,14 @@
   <div class="card-header d-flex justify-content-between align-items-center">
     {% if section.group %}
     <span class="fw-bold">{{ section.group.name }}</span>
-    <span class="text-nowrap">
-      <button type="button" class="btn btn-sm btn-outline-primary tag-group-edit" data-id="{{ section.group.pk }}" data-name="{{ section.group.name }}">Rename</button>
-      <button type="button" class="btn btn-sm btn-outline-danger tag-group-delete" data-id="{{ section.group.pk }}">Delete</button>
-    </span>
+    <div class="dropdown tag-group-menu-container">
+      <button type="button" class="btn btn-sm btn-outline-secondary tag-group-menu-btn" data-bs-toggle="dropdown"
+              aria-expanded="false" aria-label="Actions for tag group {{ section.group.name }}">&#8943;</button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><button type="button" class="dropdown-item tag-group-edit" data-id="{{ section.group.pk }}" data-name="{{ section.group.name }}">Rename</button></li>
+        <li><button type="button" class="dropdown-item text-danger tag-group-delete" data-id="{{ section.group.pk }}">Delete</button></li>
+      </ul>
+    </div>
     {% else %}
     <span class="fw-bold text-muted">No group</span>
     {% endif %}

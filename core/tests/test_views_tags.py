@@ -18,6 +18,19 @@ def txns(user):
 
 
 class TestTagGroupsAndDates:
+    def test_group_actions_are_in_three_dot_menu(self, auth_client, user):
+        group = TagGroup.objects.create(user=user, name='Trips')
+
+        html = auth_client.get(reverse('core:tag_list')).content.decode()
+        header = html.split('Trips</span>', 1)[1].split('</div>', 4)[0]
+
+        assert f'aria-label="Actions for tag group Trips"' in header
+        assert 'data-bs-toggle="dropdown"' in header
+        assert 'dropdown tag-group-menu-container' in header
+        assert f'class="dropdown-item tag-group-edit" data-id="{group.pk}" data-name="Trips"' in header
+        assert f'class="dropdown-item text-danger tag-group-delete" data-id="{group.pk}"' in header
+        assert 'btn-outline-primary tag-group-edit' not in html
+
     def test_tags_are_ordered_by_start_date_most_recent_first(self, auth_client, user):
         group = TagGroup.objects.create(user=user, name='Trips')
         Tag.objects.create(user=user, group=group, name='Later', start_date='2025-11-03', end_date='2025-11-04')

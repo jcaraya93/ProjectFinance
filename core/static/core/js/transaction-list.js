@@ -92,6 +92,20 @@
   // Column visibility toggle
   var config = document.getElementById('js-config').dataset;
   var txnTable = document.querySelector('.table-responsive table');
+  var transactionWidthToggle = document.getElementById('toggleTransactionWidth');
+  var transactionMain = document.querySelector('main.container');
+  var transactionWidthKey = 'transactions-expanded-width';
+  function setTransactionWidthExpanded(expanded) {
+    transactionMain.classList.toggle('transactions-expanded', expanded);
+    transactionWidthToggle.setAttribute('aria-pressed', String(expanded));
+    transactionWidthToggle.textContent = expanded ? 'Restore table width' : 'Expand table';
+    localStorage.setItem(transactionWidthKey, expanded ? 'true' : 'false');
+  }
+  setTransactionWidthExpanded(localStorage.getItem(transactionWidthKey) === 'true');
+  transactionWidthToggle.addEventListener('click', function () {
+    setTransactionWidthExpanded(!transactionMain.classList.contains('transactions-expanded'));
+  });
+
   function toggleColumn(colIdx, show) {
     txnTable.querySelectorAll('tr').forEach(function (row) {
       var cells = row.querySelectorAll('th, td');

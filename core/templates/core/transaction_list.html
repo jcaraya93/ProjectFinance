@@ -4,6 +4,12 @@
 {% block title %}Transactions — Project Finance{% endblock %}
 
 {% block content %}
+<style>
+  main.container.transactions-expanded {
+    max-width: none;
+    width: 100%;
+  }
+</style>
 {% if return_to %}
 <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
   <a href="{{ return_to }}" class="text-decoration-none small fw-semibold transaction-return-link">&larr; Back to {{ return_label }}</a>
@@ -244,6 +250,8 @@
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <button type="submit" class="btn btn-sm btn-outline-secondary">Apply Rules to Unclassified</button>
     </form>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleTransactionWidth"
+            aria-pressed="false">Expand table</button>
     <div class="dropdown">
       <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
         Reset
@@ -488,5 +496,5 @@
   });
 })();
 </script>
-<script src="{% static 'core/js/transaction-list.js' %}?v=20261005-filter-dropdown-scope"></script>
+<script src="{% static 'core/js/transaction-list.js' %}?v=20261005-expand-table"></script>
 {% endblock %}
