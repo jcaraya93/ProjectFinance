@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 {% load static %}
-{% block title %}Categories V2 — Project Finance{% endblock %}
+{% block title %}Categories — Project Finance{% endblock %}
 
 {% block content %}
 <style>
@@ -10,7 +10,12 @@
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h2 class="mb-0">Categories <span class="badge bg-warning text-dark align-middle fs-6">V2</span></h2>
+  <h2 class="mb-0">Categories</h2>
+  <form method="post" action="{% url 'core:classify_unclassified' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{% url 'core:category_v2_list' %}">
+    <button type="submit" class="btn btn-sm btn-outline-secondary">Apply Rules to Unclassified</button>
+  </form>
 </div>
 <p class="text-muted">Hierarchical categories used by transactions and rules. Transaction counts include direct assignments only, not subcategories.</p>
 
@@ -52,6 +57,7 @@
         <col>
         <col style="width: 80px;">
         <col style="width: 130px;">
+        <col style="width: 90px;">
         <col style="width: 140px;">
       </colgroup>
       <thead class="table-light">
@@ -62,6 +68,7 @@
           <th>Name</th>
           <th>Color</th>
           <th class="text-center">Transactions</th>
+          <th class="text-center">Rules</th>
           <th class="text-end"><span class="visually-hidden">Actions</span></th>
         </tr>
       </thead>
@@ -76,6 +83,7 @@
           </td>
           <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ row.node.color }};"></span></td>
           <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
+          <td class="text-center"><a href="{% url 'core:category_rules_list' row.node.pk %}" class="badge bg-secondary cat-v2-rule-count" aria-label="Manage {{ row.rule_count }} {{ row.rule_count|pluralize:'rule,rules' }} for {{ row.node.name }}">{{ row.rule_count }}</a></td>
           <td></td>
         </tr>
         {% else %}
@@ -94,6 +102,7 @@
           </td>
           <td><span class="d-inline-block rounded-circle" style="width: 20px; height: 20px; background-color: {{ row.node.color }};"></span></td>
           <td class="text-center"><a href="{% url 'core:transaction_list' %}?category={{ row.node.pk }}&amp;category_scope=direct&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary cat-v2-transaction-count" aria-label="View transactions assigned directly to {{ row.node.name }}">{{ row.node.transaction_count }}</a></td>
+          <td class="text-center"><a href="{% url 'core:category_rules_list' row.node.pk %}" class="badge bg-secondary cat-v2-rule-count" aria-label="Manage {{ row.rule_count }} {{ row.rule_count|pluralize:'rule,rules' }} for {{ row.node.name }}">{{ row.rule_count }}</a></td>
           <td class="text-end text-nowrap">
             <div class="dropdown d-inline-block">
               <button type="button" class="btn btn-sm btn-outline-secondary cat-v2-menu-btn" data-bs-toggle="dropdown"
@@ -102,6 +111,7 @@
                 <li><button type="button" class="dropdown-item cat-v2-act-add">Add subcategory</button></li>
                 <li><button type="button" class="dropdown-item cat-v2-act-edit">Edit</button></li>
                 <li><button type="button" class="dropdown-item cat-v2-act-move">Move to…</button></li>
+                <li><a class="dropdown-item" href="{% url 'core:category_rules_list' row.node.pk %}">Manage rules{% if row.rule_count %} ({{ row.rule_count }}){% endif %}</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><button type="button" class="dropdown-item text-danger cat-v2-act-delete">Delete</button></li>
               </ul>
@@ -111,7 +121,7 @@
         {% endif %}
         {% empty %}
         <tr>
-          <td colspan="5" class="text-center text-muted py-3">No categories in this group.</td>
+          <td colspan="6" class="text-center text-muted py-3">No categories in this group.</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -15,6 +15,8 @@
   <div class="card-body py-2">
     <form id="filterForm" method="get">
       {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
+      <input type="hidden" name="sort" value="{{ sort_col }}">
+      <input type="hidden" name="dir" value="{{ sort_dir }}">
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
@@ -28,7 +30,7 @@
               <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="6-months">6 Months</button>
               <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="ytd">YTD</button>
               <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="last-year">Last Year</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="all">All</button>
+              <button type="button" class="btn btn-sm btn-outline-danger date-preset" data-range="all">Clear dates</button>
             </div>
             {% if dated_tags %}
             <div class="dropdown-divider"></div>
@@ -295,22 +297,27 @@
         <input type="checkbox" class="form-check-input col-toggle" data-col="5" checked> Category
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="11" data-cell="6" checked> Tags
+        <input type="checkbox" class="form-check-input col-toggle" data-col="11" data-cell="6" checked> Ungrouped tags
+      </label>
+      {% for tag_group in transaction_tag_groups %}
+      <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+        <input type="checkbox" class="form-check-input col-toggle" data-col="tag-group-column-{{ tag_group.pk }}" data-cell="{{ forloop.counter|add:6 }}" checked> {{ tag_group.name }}
+      </label>
+      {% endfor %}
+      <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+        <input type="checkbox" class="form-check-input col-toggle" data-col="6" data-cell="{{ transaction_tag_groups|length|add:7 }}" checked> Description
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="6" data-cell="7" checked> Description
+        <input type="checkbox" class="form-check-input col-toggle" data-col="10" data-cell="{{ transaction_tag_groups|length|add:8 }}" checked> Note
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="10" data-cell="8" checked> Note
+        <input type="checkbox" class="form-check-input col-toggle" data-col="7" data-cell="{{ transaction_tag_groups|length|add:9 }}" checked> Metadata
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="7" data-cell="9" checked> Metadata
+        <input type="checkbox" class="form-check-input col-toggle" data-col="8" data-cell="{{ transaction_tag_groups|length|add:10 }}" checked> Amount
       </label>
       <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="8" data-cell="10" checked> Amount
-      </label>
-      <label class="dropdown-item d-flex align-items-center gap-2 px-2">
-        <input type="checkbox" class="form-check-input col-toggle" data-col="9" data-cell="11" checked> Actions
+        <input type="checkbox" class="form-check-input col-toggle" data-col="9" data-cell="{{ transaction_tag_groups|length|add:11 }}" checked> Actions
       </label>
       </div>
     </div>
@@ -327,7 +334,8 @@
         <th><a href="?{{ filter_qs }}&sort=method&dir={% if sc == 'method' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Method{% if sc == 'method' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=group&dir={% if sc == 'group' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Group{% if sc == 'group' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=category&dir={% if sc == 'category' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Category{% if sc == 'category' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
-        <th>Tags</th>
+        <th>Ungrouped tags</th>
+        {% for tag_group in transaction_tag_groups %}<th data-tag-group="{{ tag_group.pk }}">{{ tag_group.name }}</th>{% endfor %}
         <th><a href="?{{ filter_qs }}&sort=description&dir={% if sc == 'description' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Description{% if sc == 'description' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th><a href="?{{ filter_qs }}&sort=note&dir={% if sc == 'note' and sd == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Note{% if sc == 'note' %}{% if sd == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a></th>
         <th>Metadata</th>
@@ -339,7 +347,7 @@
     <tbody>
       {% for txn in page_obj %}
         <tr>
-          <td><input type="checkbox" class="form-check-input txn-select" value="{{ txn.id }}"></td>
+          <td><input type="checkbox" class="form-check-input txn-select" value="{{ txn.id }}" {% if selected_all_matching or txn.id|stringformat:"d" in selected_transactions %}checked{% endif %}></td>
           <td class="text-nowrap">{{ txn.date|date:"Y-m-d" }}</td>
           <td class="text-nowrap small text-muted">{{ txn.ledger.statement_import.account.nickname|default:txn.ledger.statement_import.account }}</td>
           <td class="small text-nowrap">
@@ -361,8 +369,13 @@
             {% endif %}
           </td>
           <td class="text-nowrap">
-            {% for tag in txn.tags.all %}<a href="{% url 'core:transaction_list' %}?tag={{ tag.pk }}" class="badge text-decoration-none me-1" style="background-color: {{ tag.color }};" title="Show transactions tagged {{ tag.name }}">{{ tag.name }}</a>{% empty %}<span class="text-muted">—</span>{% endfor %}
+            {% for tag in txn.tags.all %}{% if not tag.group_id %}<a href="{% url 'core:transaction_list' %}?tag={{ tag.pk }}" class="badge text-decoration-none me-1" style="background-color: {{ tag.color }};" title="Show transactions tagged {{ tag.name }}">{{ tag.name }}</a>{% endif %}{% empty %}<span class="text-muted">—</span>{% endfor %}
           </td>
+          {% for tag_group in transaction_tag_groups %}
+          <td class="text-nowrap" data-tag-group="{{ tag_group.pk }}">
+            {% for tag in txn.tags.all %}{% if tag.group_id == tag_group.pk %}<a href="{% url 'core:transaction_list' %}?tag={{ tag.pk }}" class="badge text-decoration-none me-1" style="background-color: {{ tag.color }};" title="Show transactions tagged {{ tag.name }}">{{ tag.name }}</a>{% endif %}{% empty %}<span class="text-muted">—</span>{% endfor %}
+          </td>
+          {% endfor %}
           <td>{{ txn.description }}</td>
           <td class="small">{{ txn.note|default:"—" }}</td>
           <td class="small text-muted text-nowrap">
@@ -378,7 +391,7 @@
         </tr>
       {% empty %}
         <tr>
-          <td colspan="12" class="text-center text-muted py-4">No transactions found.</td>
+          <td colspan="{{ transaction_tag_groups|length|add:12 }}" class="text-center text-muted py-4">No transactions found.</td>
         </tr>
       {% endfor %}
     </tbody>
@@ -417,7 +430,7 @@
   <form method="post" action="{% url 'core:bulk_update_category' %}" class="d-flex align-items-center justify-content-center gap-3">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.get_full_path }}">
-    <input type="hidden" name="select_all_matching" id="selectAllMatchingInput" value="">
+    <input type="hidden" name="select_all_matching" id="selectAllMatchingInput" value="{% if selected_all_matching %}1{% endif %}">
     <input type="hidden" name="filter_qs" value="{{ pagination_qs }}">
     <div id="bulkIds"></div>
     <span id="bulkCount" class="fw-bold">0 selected</span>
@@ -475,5 +488,5 @@
   });
 })();
 </script>
-<script src="{% static 'core/js/transaction-list.js' %}?v=20261004-tag-presets"></script>
+<script src="{% static 'core/js/transaction-list.js' %}?v=20261005-filter-dropdown-scope"></script>
 {% endblock %}

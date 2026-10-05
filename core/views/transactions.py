@@ -12,12 +12,12 @@ from django.views.decorators.http import require_POST
 from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 
 from ..models import (
-    Account, Transaction, LogicalTransaction, RawTransaction, Tag,
+    Account, Transaction, LogicalTransaction, RawTransaction, Tag, TagGroup,
     CategoryGroup, CategoryNode, CurrencyLedger, UserPreference,
 )
 from ..filters import TransactionFilter
 from ..ratelimit import ratelimit
-from ._helpers import _safe_next_url
+from ._helpers import _bulk_selection_url, _safe_next_url
 
 from .categories_v2 import _build_tree
 
@@ -71,7 +71,7 @@ def _transaction_return_link(request):
         return '', ''
     sources = {
         'category_v2_list': 'Categories',
-        'rules_v2_list': 'Rules',
+        'rules_v2_list': 'Categories',
         'tag_list': 'Tags',
         'statement_list': 'Statements',
         'spending_income_dashboard': 'Expense Composition',
@@ -204,6 +204,10 @@ def transaction_list(request):
     if return_to:
         query_params['return_to'] = return_to
     query_params.pop('page', None)
+    selected_transactions = [
+        txn_id for txn_id in request.GET.getlist('selected_txn') if txn_id.isdigit()
+    ]
+    selected_all_matching = request.GET.get('selected_all') == '1'
     # pagination_qs: includes sort/dir for pagination links
     pagination_qs = query_params.urlencode()
     # filter_qs: excludes sort/dir for sort header links
@@ -229,6 +233,8 @@ def transaction_list(request):
         'return_to': return_to,
         'return_label': return_label,
         'page_obj': page_obj,
+        'selected_transactions': selected_transactions,
+        'selected_all_matching': selected_all_matching,
         'category_groups': category_groups,
         'wallets': wallet_list,
         'total_count': paginator.count,
@@ -244,6 +250,7 @@ def transaction_list(request):
         'rule_ids': rule_ids,
         'dated_tags': Tag.objects.filter(user=request.user, start_date__isnull=False).order_by('-start_date', 'name'),
         'tags': Tag.objects.filter(user=request.user),
+        'transaction_tag_groups': TagGroup.objects.filter(user=request.user).order_by('name'),
         'selected_tags': request.GET.getlist('tag'),
         'account_types': Account.ACCOUNT_TYPES,
         'tag_sections': _tag_sections(Tag.objects.filter(user=request.user).select_related('group')),
@@ -292,11 +299,12 @@ def bulk_update_category(request):
     """
     category_id = request.POST.get('category_id')
     next_url = _safe_next_url(request)
+    destination = _bulk_selection_url(request, next_url)
     select_all_matching = request.POST.get('select_all_matching') == '1'
 
     if not category_id:
         messages.error(request, 'No category selected.')
-        return redirect(next_url or 'core:transaction_list')
+        return redirect(destination or 'core:transaction_list')
 
     cat = get_object_or_404(CategoryNode.objects.filter(user=request.user).select_related('group'), pk=category_id)
     method = 'unclassified' if cat.is_protected else 'manual'
@@ -317,7 +325,7 @@ def bulk_update_category(request):
         txn_ids = request.POST.getlist('txn_ids')
         if not txn_ids:
             messages.error(request, 'No transactions selected.')
-            return redirect(next_url or 'core:transaction_list')
+            return redirect(destination or 'core:transaction_list')
         updated = Transaction.objects.filter(user=request.user, pk__in=txn_ids).update(
             category_v2=cat,
             classification_method_v2=method,
@@ -325,7 +333,7 @@ def bulk_update_category(request):
         )
 
     messages.success(request, f'{updated} transaction{"s" if updated != 1 else ""} updated to {cat.name}.')
-    return redirect(next_url or 'core:transaction_list')
+    return redirect(destination or 'core:transaction_list')
 
 
 def _tag_sections(tags):

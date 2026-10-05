@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 
 from ..models import LogicalTransaction, Tag, TagGroup
 from ..ratelimit import ratelimit
-from ._helpers import _safe_next_url
+from ._helpers import _bulk_selection_url, _safe_next_url
 
 __all__ = ['tag_list', 'tag_save', 'tag_delete', 'tag_group_save', 'tag_group_delete', 'bulk_tag']
 
@@ -59,7 +59,6 @@ def tag_list(request):
         tag.txn_url = reverse('core:transaction_list') + '?' + urlencode([
             ('tag', tag.pk), ('return_to', request.get_full_path()),
         ])
-        tag.rules_url = reverse('core:rules_v2_list') + '?' + urlencode([('tag', tag.pk)])
         if tag.has_dates:
             tag.range_count = all_txns.filter(date__range=(tag.start_date, tag.end_date)).count()
             tag.range_url = reverse('core:transaction_list') + '?' + urlencode([
@@ -170,7 +169,7 @@ def bulk_tag(request):
     from .transactions import _apply_transaction_filters
 
     next_url = _safe_next_url(request)
-    destination = next_url or 'core:transaction_list'
+    destination = _bulk_selection_url(request, next_url) or 'core:transaction_list'
     mode = request.POST.get('mode')
     if mode not in ('add', 'remove'):
         messages.error(request, 'Unknown tag action.')

@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from core.models import (
     Transaction, LogicalTransaction, CategoryGroup, CategoryNode,
-    ClassificationRuleV2, UserPreference, Tag,
+    ClassificationRuleV2, UserPreference, Tag, TagGroup,
 )
 from core.tests.factories import RawTransactionFactory, LogicalTransactionFactory
 
@@ -29,6 +29,43 @@ class TestTransactionListSmoke:
         content = resp.content.decode()
         assert 'TRANSACTION' in content
 
+    def test_selected_transactions_are_restored_from_url(self, auth_client, sample_data):
+        selected = sample_data['transactions'][:2]
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'selected_txn': [str(txn.pk) for txn in selected],
+        })
+        content = response.content.decode()
+
+        assert response.context['selected_transactions'] == [str(txn.pk) for txn in selected]
+        for txn in selected:
+            assert f'value="{txn.pk}" checked' in content
+        assert 'id="bulkBar" class="d-none' in content
+
+    def test_all_matching_selection_is_restored_from_url(self, auth_client, sample_data):
+        response = auth_client.get(reverse('core:transaction_list'), {'selected_all': '1'})
+        content = response.content.decode()
+
+        assert response.context['selected_all_matching'] is True
+        assert 'id="selectAllMatchingInput" value="1"' in content
+        assert all(f'value="{txn.pk}" checked' in content for txn in sample_data['transactions'])
+
+    def test_filter_form_preserves_current_sort(self, auth_client):
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'sort': 'amount',
+            'dir': 'asc',
+        })
+        content = response.content.decode()
+
+        assert response.context['sort_col'] == 'amount'
+        assert response.context['sort_dir'] == 'asc'
+        assert '<input type="hidden" name="sort" value="amount">' in content
+        assert '<input type="hidden" name="dir" value="asc">' in content
+
+    def test_date_dropdown_has_explicit_clear_dates_button(self, auth_client):
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+
+        assert 'class="btn btn-sm btn-outline-danger date-preset" data-range="all">Clear dates</button>' in content
+
     def test_tags_have_a_dedicated_column(self, auth_client, user, sample_data):
         txn = sample_data['transactions'][0]
         tag = Tag.objects.create(user=user, name='Trip')
@@ -36,10 +73,30 @@ class TestTransactionListSmoke:
 
         content = auth_client.get(reverse('core:transaction_list')).content.decode()
 
-        assert content.index('>Category') < content.index('<th>Tags</th>') < content.index('>Description')
+        assert content.index('>Category') < content.index('<th>Ungrouped tags</th>') < content.index('>Description')
         assert f'<td>{txn.description}</td>' in content
         assert f'href="/transactions/?tag={tag.pk}" class="badge' in content
-        assert 'data-col="11" data-cell="6" checked> Tags' in content
+        assert 'data-col="11" data-cell="6" checked> Ungrouped tags' in content
+
+    def test_tag_groups_have_separate_columns(self, auth_client, user, sample_data):
+        txn = sample_data['transactions'][-1]
+        trips = TagGroup.objects.create(user=user, name='Trips')
+        work = TagGroup.objects.create(user=user, name='Work')
+        trip_tag = Tag.objects.create(user=user, group=trips, name='Vacation')
+        work_tag = Tag.objects.create(user=user, group=work, name='Reimbursement')
+        txn.tags.add(trip_tag, work_tag)
+
+        response = auth_client.get(reverse('core:transaction_list'))
+        content = response.content.decode()
+
+        assert f'<th data-tag-group="{trips.pk}">Trips</th>' in content
+        assert f'<th data-tag-group="{work.pk}">Work</th>' in content
+        assert f'data-col="tag-group-column-{trips.pk}"' in content
+        assert f'data-col="tag-group-column-{work.pk}"' in content
+        trips_cell = content.split(f'<td class="text-nowrap" data-tag-group="{trips.pk}">', 1)[1].split('</td>', 1)[0]
+        work_cell = content.split(f'<td class="text-nowrap" data-tag-group="{work.pk}">', 1)[1].split('</td>', 1)[0]
+        assert 'Vacation' in trips_cell and 'Reimbursement' not in trips_cell
+        assert 'Reimbursement' in work_cell and 'Vacation' not in work_cell
 
 
 class TestTransactionReturnLink:
@@ -437,6 +494,30 @@ class TestBulkUpdateCategory:
             assert txn.category_v2 == node
             assert txn.classification_method_v2 == 'manual'
             assert txn.matched_rule_v2 is None
+
+    def test_bulk_update_redirect_preserves_selected_transactions(self, auth_client, user, sample_data):
+        node = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'))
+        txns = sample_data['transactions'][:2]
+        response = auth_client.post(reverse('core:bulk_update_category'), {
+            'txn_ids': [str(txn.pk) for txn in txns],
+            'category_id': node.pk,
+            'next': '/transactions/?search=keep',
+        })
+
+        assert response['Location'] == (
+            f'/transactions/?search=keep&selected_txn={txns[0].pk}&selected_txn={txns[1].pk}'
+        )
+
+    def test_select_all_matching_redirect_preserves_selection_mode(self, auth_client, user, sample_data):
+        node = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'))
+        response = auth_client.post(reverse('core:bulk_update_category'), {
+            'select_all_matching': '1',
+            'filter_qs': 'search=TEST',
+            'category_id': node.pk,
+            'next': '/transactions/?search=TEST',
+        })
+
+        assert response['Location'] == '/transactions/?search=TEST&selected_all=1'
 
     def test_bulk_unclassified_node_sets_unclassified(self, auth_client, user, sample_data):
         CategoryNode.ensure_protected(user)

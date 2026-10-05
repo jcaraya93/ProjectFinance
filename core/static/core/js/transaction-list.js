@@ -52,10 +52,15 @@
     }
   });
 
-  // Submit when a checkbox dropdown closes
-  document.querySelectorAll('.dropdown').forEach(function (dd) {
+  // Submit after a dropdown closes so the outside click's default action completes first.
+  var filterSubmitTimer = null;
+  document.querySelectorAll('#filterForm .dropdown').forEach(function (dd) {
     dd.addEventListener('hidden.bs.dropdown', function () {
-      document.getElementById('filterForm').submit();
+      clearTimeout(filterSubmitTimer);
+      filterSubmitTimer = setTimeout(function () {
+        filterSubmitTimer = null;
+        document.getElementById('filterForm').requestSubmit();
+      }, 0);
     });
   });
 
@@ -111,7 +116,7 @@
   }
   document.querySelectorAll('.col-toggle').forEach(function (cb) {
     // data-col is the stable preference key; data-cell is the position in the table
-    var col = parseInt(cb.dataset.col);
+    var col = cb.dataset.col;
     var cell = parseInt(cb.dataset.cell || cb.dataset.col);
     if (savedCols[col] === false) {
       cb.checked = false;
@@ -148,7 +153,7 @@ advPanel.addEventListener('hidden.bs.collapse', function() { advField.value = ''
   var selectAllMatchingLink = document.getElementById('selectAllMatching');
   var clearAllMatchingLink = document.getElementById('clearAllMatching');
   var selectAllMatchingInput = document.getElementById('selectAllMatchingInput');
-  var allMatchingMode = false;
+  var allMatchingMode = selectAllMatchingInput.value === '1';
   var totalCount = parseInt(selectAllMatchingLink.textContent.match(/\d+/)) || 0;
   var pageCount = checkboxes.length;
 
@@ -224,4 +229,6 @@ advPanel.addEventListener('hidden.bs.collapse', function() { advField.value = ''
     checkboxes.forEach(function(cb) { cb.checked = false; });
     updateBulkBar();
   });
+
+  updateBulkBar();
 })();

@@ -1,0 +1,48 @@
+<script>
+(function () {
+  var formModal = new bootstrap.Modal(document.getElementById('ruleV2Modal'));
+  var deleteModal = new bootstrap.Modal(document.getElementById('ruleV2DeleteModal'));
+  function $(id) { return document.getElementById(id); }
+
+  function openForm(title, data) {
+    data = data || {};
+    $('ruleV2Title').textContent = title;
+    $('ruleV2Id').value = data.id || '';
+    $('ruleV2Category').value = data.category || '';
+    $('ruleV2Description').value = data.description || '';
+    $('ruleV2AccountType').value = data.accountType || '';
+    $('ruleV2Min').value = data.amountMin || '';
+    $('ruleV2Max').value = data.amountMax || '';
+    $('ruleV2Metadata').value = (data.metadata || '').trim();
+    $('ruleV2Detail').value = data.detail || '';
+    var template = $('ruleV2Next').dataset.urlTemplate;
+    $('ruleV2Next').value = template.replace('/0/', '/' + $('ruleV2Category').value + '/');
+    setRuleTags(data.tags);
+    formModal.show();
+  }
+
+  document.querySelectorAll('.rule-v2-add').forEach(function (button) {
+    button.addEventListener('click', function () {
+      openForm('Add Rule', { category: button.dataset.category });
+    });
+  });
+  document.querySelectorAll('.rule-v2-edit').forEach(function (button) {
+    button.addEventListener('click', function () {
+      openForm('Edit Rule', button.closest('tr').dataset);
+    });
+  });
+  document.querySelectorAll('.rule-v2-delete').forEach(function (button) {
+    button.addEventListener('click', function () {
+      $('ruleV2DeleteId').value = button.closest('tr').dataset.id;
+      deleteModal.show();
+    });
+  });
+  $('ruleV2Category').addEventListener('change', function () {
+    var template = $('ruleV2Next').dataset.urlTemplate;
+    $('ruleV2Next').value = template.replace('/0/', '/' + $('ruleV2Category').value + '/');
+  });
+  $('ruleV2Modal').addEventListener('shown.bs.modal', function () {
+    $('ruleV2Description').focus();
+  });
+})();
+</script>

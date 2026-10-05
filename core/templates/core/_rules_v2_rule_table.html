@@ -1,0 +1,32 @@
+<div class="table-responsive">
+  <table class="table table-hover align-middle table-sm mb-0">
+    <thead class="table-light">
+      <tr><th>Conditions</th><th>Tags</th><th>Note</th><th class="text-center">Transactions</th><th style="width: 130px;"></th></tr>
+    </thead>
+    <tbody>
+      {% for rule in rule_rows %}
+      <tr data-id="{{ rule.pk }}" data-category="{{ rule.category_id }}"
+          data-description="{{ rule.description }}" data-account-type="{{ rule.account_type }}"
+          data-amount-min="{{ rule.amount_min|default_if_none:'' }}" data-amount-max="{{ rule.amount_max|default_if_none:'' }}"
+          data-detail="{{ rule.detail }}"
+          data-tags="{% for t in rule.tags.all %}{{ t.pk }}{% if not forloop.last %},{% endif %}{% endfor %}"
+          data-metadata="{% for k, v in rule.metadata.items %}{{ k }}={{ v }}&#10;{% endfor %}">
+        <td>
+          {% if rule.description %}<span class="badge bg-light text-dark border">contains &ldquo;{{ rule.description }}&rdquo;</span>{% endif %}
+          {% if rule.account_type %}<span class="badge bg-light text-dark border">{{ rule.get_account_type_display }}</span>{% endif %}
+          {% if rule.amount_min is not None %}<span class="badge bg-light text-dark border">&ge; {{ rule.amount_min }}</span>{% endif %}
+          {% if rule.amount_max is not None %}<span class="badge bg-light text-dark border">&le; {{ rule.amount_max }}</span>{% endif %}
+          {% for k, v in rule.metadata.items %}<span class="badge bg-light text-dark border">{{ k }} = {{ v }}</span>{% endfor %}
+        </td>
+        <td>{% for t in rule.tags.all %}<span class="badge" style="background-color: {{ t.color }};">{{ t.name }}</span> {% endfor %}</td>
+        <td class="text-muted small">{{ rule.detail }}</td>
+        <td class="text-center"><a href="{% url 'core:transaction_list' %}?rule={{ rule.pk }}&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary" aria-label="View transactions classified by this rule">{{ rule.txn_count }}</a></td>
+        <td class="text-end text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-primary rule-v2-edit">Edit</button>
+          <button type="button" class="btn btn-sm btn-outline-danger rule-v2-delete">Delete</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -11,6 +11,14 @@ def make_node(user, name, parent=None, group_slug='expense'):
 
 
 class TestCategoryV2List:
+    def test_page_uses_categories_label_without_v2(self, auth_client, category_groups):
+        response = auth_client.get(reverse('core:category_v2_list'))
+        content = response.content.decode()
+
+        assert '<title>Categories — Project Finance</title>' in content
+        assert '<h2 class="mb-0">Categories</h2>' in content
+        assert '>Categories V2</a>' not in content
+
     def test_group_tabs_have_matching_panels_and_preserve_actions(self, auth_client, user, category_groups):
         make_node(user, 'Food')
         make_node(user, 'Salary', group_slug='income')
@@ -29,6 +37,8 @@ class TestCategoryV2List:
         assert 'cat-v2-act-move' in content
         assert 'cat-v2-act-delete' in content
         assert 'cat-v2-transaction-count' in content
+        assert '<th class="text-center">Rules</th>' in content
+        assert 'cat-v2-rule-count' in content
         assert '?v=20261004-income-roles' in content
 
     def test_empty_list_renders(self, auth_client, category_groups):
@@ -40,6 +50,52 @@ class TestCategoryV2List:
         make_node(user, 'Groceries', parent=food)
         content = auth_client.get(reverse('core:category_v2_list')).content.decode()
         assert 'Food' in content and 'Groceries' in content
+
+    def test_category_menu_links_to_direct_rules_page(self, auth_client, user, category_groups):
+        from core.models import ClassificationRuleV2
+
+        food = make_node(user, 'Food')
+        ClassificationRuleV2.objects.create(category=food, user=user, description='GROCERY STORE')
+
+        response = auth_client.get(reverse('core:category_v2_list'))
+        html = response.content.decode()
+
+        assert response.status_code == 200
+        assert f'href="{reverse("core:category_rules_list", args=[food.pk])}"' in html
+        assert 'categoryRulesModal' not in html
+        assert 'Apply Rules to Unclassified' in html
+        assert '>Category Rules</a>' not in html
+
+    def test_rules_column_counts_direct_rules_and_links_even_when_empty(self, auth_client, user, category_groups):
+        from core.models import ClassificationRuleV2
+
+        food = make_node(user, 'Food')
+        child = make_node(user, 'Groceries', parent=food)
+        empty = make_node(user, 'Empty')
+        ClassificationRuleV2.objects.create(category=food, user=user, description='FOOD SHOP')
+        ClassificationRuleV2.objects.create(category=food, user=user, description='MARKET')
+        ClassificationRuleV2.objects.create(category=child, user=user, description='PRODUCE')
+
+        html = auth_client.get(reverse('core:category_v2_list')).content.decode()
+
+        food_cell = html.split(f'data-id="{food.pk}"')[1].split('</tr>')[0]
+        child_cell = html.split(f'data-id="{child.pk}"')[1].split('</tr>')[0]
+        empty_cell = html.split(f'data-id="{empty.pk}"')[1].split('</tr>')[0]
+        assert f'aria-label="Manage 2 rules for Food">2</a>' in food_cell
+        assert f'href="{reverse("core:category_rules_list", args=[food.pk])}"' in food_cell
+        assert f'aria-label="Manage 1 rule for Groceries">1</a>' in child_cell
+        assert f'aria-label="Manage 0 rules for Empty">0</a>' in empty_cell
+
+    def test_category_rules_manager_is_user_scoped(self, auth_client, user, category_groups):
+        from core.models import ClassificationRuleV2
+
+        other = User.objects.create_user(email='other@example.com', password='x')
+        private = make_node(other, 'Private')
+        ClassificationRuleV2.objects.create(category=private, user=other, description='PRIVATE RULE')
+
+        response = auth_client.get(reverse('core:category_rules_list', args=[private.pk]))
+
+        assert response.status_code == 404
 
     def test_child_counts_only_appear_next_to_parent_names(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')

@@ -7,7 +7,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from ..models import CategoryGroup, CategoryNode
+from ..models import CategoryGroup, CategoryNode, ClassificationRuleV2
 
 __all__ = [
     'category_v2_list',
@@ -67,13 +67,21 @@ def category_v2_list(request):
         rows_by_group.setdefault(node.group_id, [])
 
     all_rows = _build_tree(nodes)
+    rule_counts = dict(
+        ClassificationRuleV2.objects.filter(user=request.user)
+        .values('category_id')
+        .annotate(total=Count('pk'))
+        .values_list('category_id', 'total')
+    )
     for row in all_rows:
+        row['rule_count'] = rule_counts.get(row['node'].pk, 0)
         rows_by_group[row['node'].group_id].append(row)
 
     groups = []
     for grp in CategoryGroup.objects.order_by('name'):
         rows = rows_by_group.get(grp.pk, [])
         groups.append({
+            'id': grp.pk,
             'slug': grp.slug,
             'name': grp.name,
             'rows': rows,

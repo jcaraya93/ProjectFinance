@@ -63,6 +63,17 @@ class TestTagGroupsAndDates:
 
 
 class TestTagManagement:
+    def test_tag_row_actions_are_in_three_dot_menu(self, auth_client, user):
+        tag = Tag.objects.create(user=user, name='Mexico')
+
+        html = auth_client.get(reverse('core:tag_list')).content.decode()
+        row = html.split(f'data-id="{tag.pk}"')[1].split('</tr>')[0]
+
+        assert 'aria-label="Actions for Mexico"' in row
+        assert 'data-bs-toggle="dropdown"' in row
+        assert 'class="dropdown-item tag-edit"' in row
+        assert 'class="dropdown-item text-danger tag-delete"' in row
+
     def test_create_edit_delete(self, auth_client, user):
         auth_client.post(reverse('core:tag_save'), {'name': 'Mexico', 'color': '#ff0000'})
         tag = Tag.objects.get(user=user)
@@ -97,7 +108,7 @@ class TestTagManagement:
 
 
 class TestTagRuleCount:
-    def test_rule_count_and_filtered_rules_page(self, auth_client, user, category_groups):
+    def test_rule_count_is_displayed_without_all_rules_link(self, auth_client, user, category_groups):
         from core.models import CategoryGroup, CategoryNode, ClassificationRuleV2
 
         node = CategoryNode.objects.create(name='Food', user=user, group=CategoryGroup.get_group('expense'))
@@ -109,11 +120,26 @@ class TestTagRuleCount:
         tags = {t.name: t for sec in ctx['sections'] for t in sec['tags']}
         tags.update({t.name: t for t in ctx.get('ungrouped', [])})
         assert (tags['Used'].rule_count, tags['Unused'].rule_count) == (2, 0)
-        resp = auth_client.get(reverse('core:rules_v2_list'), {'tag': used.pk})
-        assert sorted(r.description for r in resp.context['rules']) == ['A', 'B']
+        html = auth_client.get(reverse('core:tag_list')).content.decode()
+        assert 'View rules that apply' not in html
+        assert 'aria-label="2 rules use Used"' in html
 
 
 class TestBulkTag:
+    def test_bulk_tag_redirect_preserves_selected_transactions(self, auth_client, user, txns):
+        tag = Tag.objects.create(user=user, name='Trip')
+        selected = txns[:2]
+        response = auth_client.post(reverse('core:bulk_tag'), {
+            'txn_ids': [str(txn.pk) for txn in selected],
+            'tag_id': tag.pk,
+            'mode': 'add',
+            'next': '/transactions/?search=keep',
+        })
+
+        assert response['Location'] == (
+            f'/transactions/?search=keep&selected_txn={selected[0].pk}&selected_txn={selected[1].pk}'
+        )
+
     def test_add_and_remove(self, auth_client, user, txns):
         tag = Tag.objects.create(user=user, name='Trip')
         ids = [t.pk for t in txns[:2]]

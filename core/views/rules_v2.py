@@ -9,16 +9,25 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from ..models import Account, CategoryGroup, CategoryNode, ClassificationRuleV2, LogicalTransaction, Tag
+from ..models import Account, CategoryNode, ClassificationRuleV2, LogicalTransaction, Tag
 from ..services.rules_v2 import apply_rule_tags
 from .categories_v2 import _build_tree
 
 
 def _tag_sections(tags):
-    from .transactions import _tag_sections as build
-    return build(tags)
-
+    sections, by_group = [], {}
+    for tag in tags:
+        if tag.group_id not in by_group:
+            by_group[tag.group_id] = {'group': tag.group, 'tags': []}
+            sections.append(by_group[tag.group_id])
+        by_group[tag.group_id]['tags'].append(tag)
+    sections.sort(key=lambda section: (
+        section['group'] is None,
+        section['group'].name.lower() if section['group'] else '',
+    ))
+    return sections
 __all__ = [
+    'category_rules_list',
     'rules_v2_list',
     'rules_v2_save',
     'rules_v2_delete',
@@ -60,56 +69,49 @@ def _back(request, fallback_node=None):
     target = _safe_next(request)
     if target:
         return redirect(target)
-    """Redirect to the list, keeping the node selected in the left pane when there was one."""
+    """Return to the selected category's rule page when possible."""
     node = request.POST.get('selected_node') or ''
     if not node.isdigit():
         node = fallback_node
-    url = reverse('core:rules_v2_list')
-    return redirect(f'{url}?node={node}' if node else url)
+    if node:
+        return redirect('core:category_rules_list', category_id=int(node))
+    return redirect('core:category_v2_list')
+
+
+@login_required
+def category_rules_list(request, category_id):
+    """Show and manage rules assigned directly to one category."""
+    managed_category = get_object_or_404(CategoryNode, pk=category_id, user=request.user)
+    rules = list(
+        ClassificationRuleV2.objects.filter(user=request.user, category=managed_category)
+        .select_related('category__group')
+        .prefetch_related('tags')
+        .annotate(txn_count=Count('matched_transactions'))
+        .order_by('pk')
+    )
+    category_options = _build_tree(list(
+        CategoryNode.objects.filter(user=request.user).select_related('group')
+    ))
+    return render(request, 'core/category_rules_list.html', {
+        'managed_category': managed_category,
+        'managed_rules': rules,
+        'category_options': category_options,
+        'rule_next': reverse('core:category_rules_list', args=[managed_category.pk]),
+        'category_rules_url_template': reverse('core:category_rules_list', args=[0]),
+        'tag_sections': _tag_sections(
+            Tag.objects.filter(user=request.user).select_related('group').order_by('name')
+        ),
+        'account_types': Account.ACCOUNT_TYPES,
+    })
 
 
 @login_required
 def rules_v2_list(request):
-    """Show categories by group and rules assigned directly to the selected category."""
-    CategoryNode.ensure_protected(request.user)
-    rules = list(
-        ClassificationRuleV2.objects.filter(user=request.user).select_related('category__group')
-        .prefetch_related('tags').annotate(txn_count=Count('matched_transactions'))
-    )
-    tree = _build_tree(list(CategoryNode.objects.filter(user=request.user).select_related('group')))
-
-    selected = None
-    selected_id = request.GET.get('node', '')
-    if selected_id.isdigit():
-        selected = next((r for r in tree if r['node'].pk == int(selected_id)), None)
-
-    tag_filter = None
-    if request.GET.get('tag', '').isdigit():
-        tag_filter = Tag.objects.filter(user=request.user, pk=int(request.GET['tag'])).first()
-
-    if selected:
-        shown = [r for r in rules if r.category_id == selected['node'].pk]
-    else:
-        shown = list(rules)
-    if tag_filter:
-        shown = [r for r in shown if any(t.pk == tag_filter.pk for t in r.tags.all())]
-    order = {row['node'].pk: i for i, row in enumerate(tree)}
-    shown.sort(key=lambda r: (order.get(r.category_id, 0), r.pk))
-
-    sections = [
-        {'name': grp.name, 'slug': grp.slug, 'rows': [r for r in tree if r['node'].group_id == grp.pk]}
-        for grp in CategoryGroup.objects.order_by('name')
-    ]
-
-    return render(request, 'core/rules_v2_list.html', {
-        'sections': sections,
-        'rules': shown,
-        'selected': selected,
-        'tag_filter': tag_filter,
-        'category_options': tree,
-        'tag_sections': _tag_sections(Tag.objects.filter(user=request.user).select_related('group')),
-        'account_types': Account.ACCOUNT_TYPES,
-    })
+    """Redirect old Category Rules links to category-scoped rule management."""
+    category_id = request.GET.get('node', '')
+    if category_id.isdigit():
+        return redirect('core:category_rules_list', category_id=int(category_id))
+    return redirect('core:category_v2_list')
 
 
 @login_required

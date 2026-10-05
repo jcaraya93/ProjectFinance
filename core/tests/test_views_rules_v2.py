@@ -12,40 +12,42 @@ def make_node(user, name, slug='expense'):
 
 @pytest.mark.django_db
 class TestRulesV2Views:
-    def test_list_renders_rules_grouped_by_category(self, auth_client, user, category_groups):
+    def test_old_category_rules_url_redirects_to_category_rule_manager(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')
-        ClassificationRuleV2.objects.create(category=food, user=user, description='SUPERMARKET')
-        resp = auth_client.get(reverse('core:rules_v2_list'))
-        html = resp.content.decode()
-        assert resp.status_code == 200
-        assert 'SUPERMARKET' in html and 'Food' in html
-        assert '<th style="width: 22%;">Category</th>' in html
+        response = auth_client.get(reverse('core:rules_v2_list'), {'node': food.pk})
+        assert response.status_code == 302
+        assert response.url == reverse('core:category_rules_list', args=[food.pk])
+        assert auth_client.get(reverse('core:rules_v2_list')).url == reverse('core:category_v2_list')
 
-    def test_node_filter_includes_direct_rules_only(self, auth_client, user, category_groups):
+    def test_category_rules_page_lists_only_direct_rules(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')
-        kid = CategoryNode.objects.create(name='Snacks', user=user, group=food.group, parent=food)
-        other = make_node(user, 'Rent')
-        ClassificationRuleV2.objects.create(category=food, user=user, description='GROCER')
-        ClassificationRuleV2.objects.create(category=kid, user=user, description='CANDY')
-        ClassificationRuleV2.objects.create(category=other, user=user, description='LANDLORD')
-        url = reverse('core:rules_v2_list')
-        html = auth_client.get(url, {'node': food.pk}).content.decode()
-        assert 'GROCER' in html and 'CANDY' not in html and 'LANDLORD' not in html
-        assert '<th style="width: 22%;">Category</th>' not in html
-        html = auth_client.get(url, {'node': kid.pk}).content.decode()
-        assert 'CANDY' in html and 'GROCER' not in html
-        html = auth_client.get(url).content.decode()
-        assert all(description in html for description in ('GROCER', 'CANDY', 'LANDLORD'))
-        ClassificationRuleV2.objects.filter(category=food).delete()
-        response = auth_client.get(url, {'node': food.pk})
-        assert not response.context['rules']
-        assert 'No rules' in response.content.decode()
+        child = CategoryNode.objects.create(name='Groceries', user=user, group=food.group, parent=food)
+        ClassificationRuleV2.objects.create(category=food, user=user, description='GROCERY STORE')
+        ClassificationRuleV2.objects.create(category=child, user=user, description='MARKET')
+
+        response = auth_client.get(reverse('core:category_rules_list', args=[food.pk]))
+        html = response.content.decode()
+
+        assert response.status_code == 200
+        assert response.context['managed_category'] == food
+        assert [rule.description for rule in response.context['managed_rules']] == ['GROCERY STORE']
+        assert 'GROCERY STORE' in html and 'MARKET' not in html
+        assert 'not inherited by subcategories' in html
+        assert 'id="categoryRulesModal"' not in html
 
     def test_save_keeps_selected_node(self, auth_client, user, category_groups):
         food = make_node(user, 'Food')
         resp = auth_client.post(reverse('core:rules_v2_save'), {
             'category': food.pk, 'description': 'X', 'selected_node': food.pk})
-        assert resp.url.endswith(f'?node={food.pk}')
+        assert resp.url.endswith(f'/rules/{food.pk}/')
+
+    def test_rule_save_returns_to_category_rule_manager(self, auth_client, user, category_groups):
+        food = make_node(user, 'Food')
+        next_url = reverse('core:category_rules_list', args=[food.pk])
+        response = auth_client.post(reverse('core:rules_v2_save'), {
+            'category': food.pk, 'description': 'GROCER', 'next': next_url,
+        })
+        assert response.url == next_url
 
     def test_apply_unclassified_button_preserves_selection(self, auth_client, user, category_groups):
         from html import escape
@@ -64,7 +66,7 @@ class TestRulesV2Views:
         other_user = UserFactory()
         theirs = LogicalTransactionFactory(user=other_user, description='MATCH',
                                            classification_method_v2='unclassified')
-        next_url = reverse('core:rules_v2_list') + f'?node={other.pk}'
+        next_url = reverse('core:category_v2_list')
         page = auth_client.get(next_url)
         html = page.content.decode()
         assert f'action="{reverse("core:classify_unclassified")}"' in html
@@ -143,13 +145,14 @@ class TestRulesV2Views:
         auth_client.post(reverse('core:rules_v2_save'), {'category': food.pk, 'description': 'A', 'tags': [theirs.pk]})
         assert not ClassificationRuleV2.objects.filter(user=user).exists()
 
-    def test_list_and_transactions_render_with_rule_tags(self, auth_client, user, category_groups):
+    def test_category_rule_manager_and_transactions_render_rule_tags(self, auth_client, user, category_groups):
         from core.models import Tag
 
         food = make_node(user, 'Food')
         rule = ClassificationRuleV2.objects.create(category=food, user=user, description='A')
         rule.tags.add(Tag.objects.create(user=user, name='Trip'))
-        assert 'Trip' in auth_client.get(reverse('core:rules_v2_list')).content.decode()
+        manager_url = reverse('core:category_rules_list', args=[food.pk])
+        assert 'Trip' in auth_client.get(manager_url).content.decode()
         assert auth_client.get(reverse('core:transaction_list')).status_code == 200
 
     def test_editing_rule_without_category_change_moves_nothing(self, auth_client, user, category_groups):
@@ -161,7 +164,7 @@ class TestRulesV2Views:
                                         matched_rule_v2=rule, classification_method_v2='rule')
         resp = auth_client.post(reverse('core:rules_v2_save'),
                                 {'id': rule.pk, 'category': food.pk, 'description': 'B'}, follow=True)
-        assert 'moved' not in resp.content.decode()
+        assert '1 transaction moved' not in resp.content.decode()
         txn.refresh_from_db()
         assert txn.category_v2 == food
 
