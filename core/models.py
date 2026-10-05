@@ -469,6 +469,28 @@ class ClassificationRuleV2(models.Model):
         return d
 
 
+class Trip(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trips')
+    name = models.CharField(max_length=100)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    notes = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-start_date', '-pk']
+        constraints = [
+            models.CheckConstraint(condition=models.Q(end_date__gte=models.F('start_date')), name='trip_end_not_before_start'),
+        ]
+
+    @property
+    def duration_days(self):
+        return (self.end_date - self.start_date).days + 1
+
+    def __str__(self):
+        return f'{self.name} ({self.start_date} - {self.end_date})'
+
+
 class UserPreference(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preferences')
     transaction_columns = models.JSONField(

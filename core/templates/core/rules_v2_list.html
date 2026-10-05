@@ -56,7 +56,7 @@
     <div class="table-responsive">
       <table class="table table-hover align-middle table-sm">
         <thead class="table-light">
-          <tr>{% if not selected %}<th style="width: 22%;">Category</th>{% endif %}<th>Conditions</th><th>Note</th><th style="width: 130px;"></th></tr>
+          <tr>{% if not selected %}<th style="width: 22%;">Category</th>{% endif %}<th>Conditions</th><th>Note</th><th class="text-center">Transactions</th><th style="width: 130px;"></th></tr>
         </thead>
         <tbody>
           {% for rule in rules %}
@@ -76,6 +76,7 @@
               {% for k, v in rule.metadata.items %}<span class="badge bg-light text-dark border">{{ k }} = {{ v }}</span>{% endfor %}
             </td>
             <td class="text-muted small">{{ rule.detail }}</td>
+            <td class="text-center"><a href="{% url 'core:transaction_list' %}?rule={{ rule.pk }}&amp;return_to={{ request.get_full_path|urlencode }}" class="badge bg-secondary" aria-label="View transactions classified by this rule">{{ rule.txn_count }}</a></td>
             <td class="text-end text-nowrap">
               <button type="button" class="btn btn-sm btn-outline-primary rule-v2-edit">Edit</button>
               <button type="button" class="btn btn-sm btn-outline-danger rule-v2-delete">Delete</button>

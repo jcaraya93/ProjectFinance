@@ -1,0 +1,68 @@
+{% extends "core/base.html" %}
+{% block title %}Trips — Project Finance{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Trips</h2>
+
+<div class="card mb-4">
+  <div class="card-header fw-bold">{% if editing %}Edit trip{% else %}Add a trip{% endif %}</div>
+  <div class="card-body">
+    <form method="post" action="{% url 'core:trip_save' %}" class="row g-3 align-items-end">
+      {% csrf_token %}
+      {% if editing %}<input type="hidden" name="id" value="{{ editing.pk }}">{% endif %}
+      <div class="col-md-3">
+        <label class="form-label" for="tripName">Name</label>
+        <input type="text" class="form-control" id="tripName" name="name" maxlength="100" required value="{{ editing.name|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="tripStart">Start date</label>
+        <input type="date" class="form-control" id="tripStart" name="start_date" required value="{{ editing.start_date|date:'Y-m-d' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="tripEnd">End date</label>
+        <input type="date" class="form-control" id="tripEnd" name="end_date" required value="{{ editing.end_date|date:'Y-m-d' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="tripNotes">Notes</label>
+        <input type="text" class="form-control" id="tripNotes" name="notes" maxlength="500" value="{{ editing.notes|default:'' }}">
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">{% if editing %}Save{% else %}Add{% endif %}</button>
+        {% if editing %}<a href="{% url 'core:trip_list' %}" class="btn btn-outline-secondary">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if trips %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle table-sm">
+    <thead class="table-light">
+      <tr><th>Name</th><th>Start</th><th>End</th><th class="text-center">Days</th><th>Notes</th><th class="text-center">Transactions</th><th style="width: 130px;"></th></tr>
+    </thead>
+    <tbody>
+      {% for trip in trips %}
+      <tr>
+        <td>{{ trip.name }}</td>
+        <td>{{ trip.start_date|date:"Y-m-d" }}</td>
+        <td>{{ trip.end_date|date:"Y-m-d" }}</td>
+        <td class="text-center">{{ trip.duration_days }}</td>
+        <td class="text-muted small">{{ trip.notes }}</td>
+        <td class="text-center"><a href="{{ trip.txn_url }}" class="badge bg-secondary" aria-label="View transactions during {{ trip.name }}">{{ trip.txn_count }}</a></td>
+        <td class="text-end text-nowrap">
+          <a href="{% url 'core:trip_list' %}?edit={{ trip.pk }}" class="btn btn-sm btn-outline-primary">Edit</a>
+          <form method="post" action="{% url 'core:trip_delete' %}" class="d-inline" onsubmit="return confirm('Delete this trip?');">
+            {% csrf_token %}
+            <input type="hidden" name="id" value="{{ trip.pk }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-light border text-center">No trips registered yet.</div>
+{% endif %}
+{% endblock %}

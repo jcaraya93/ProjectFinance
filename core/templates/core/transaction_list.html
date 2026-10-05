@@ -30,6 +30,15 @@
               <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="last-year">Last Year</button>
               <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="all">All</button>
             </div>
+            {% if trips %}
+            <div class="dropdown-divider"></div>
+            <div class="small text-muted mt-2 mb-1">Trips</div>
+            <div class="d-flex flex-wrap gap-1 mb-2">
+              {% for trip in trips %}
+              <button type="button" class="btn btn-sm {% if start_date == trip.start_date|date:'Y-m-d' and end_date == trip.end_date|date:'Y-m-d' %}btn-primary{% else %}btn-outline-secondary{% endif %} date-preset" data-start="{{ trip.start_date|date:'Y-m-d' }}" data-end="{{ trip.end_date|date:'Y-m-d' }}" title="{{ trip.start_date|date:'Y-m-d' }} to {{ trip.end_date|date:'Y-m-d' }}">{{ trip.name }}</button>
+              {% endfor %}
+            </div>
+            {% endif %}
             <div class="dropdown-divider"></div>
             <div class="d-flex align-items-center gap-2 mt-2">
               <input type="date" name="start_date" id="startDate" class="form-control form-control-sm auto-submit" value="{{ start_date }}">
@@ -397,5 +406,5 @@
      data-saved-columns='{{ saved_columns_json }}'
      data-save-url="{% url 'core:save_transaction_columns' %}">
 </div>
-<script src="{% static 'core/js/transaction-list.js' %}?v=20261003-category-scope"></script>
+<script src="{% static 'core/js/transaction-list.js' %}?v=20261004-trip-presets"></script>
 {% endblock %}

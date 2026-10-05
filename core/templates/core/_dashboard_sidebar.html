@@ -22,7 +22,7 @@
         <a href="{% url 'core:income_composition_over_time_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_composition_over_time' %} active{% endif %}">Time Composition</a>
         <a href="{% url 'core:income_salary_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_salary' %} active{% endif %}">Salary</a>
         <a href="{% url 'core:income_bonus_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'income_bonus' %} active{% endif %}">Bonuses</a>
-        <a href="{% url 'core:reimbursement_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'reimbursement_overview' %} active{% endif %}">Reimbursement</a>
+        <a href="{% url 'core:reimbursement_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'reimbursement_overview' %} active{% endif %}">Refund</a>
         <a href="{% url 'core:bank_income_overview_dashboard' %}" class="list-group-item list-group-item-action{% if active_dashboard == 'bank_income_overview' %} active{% endif %}">Bank Income</a>
 
         {% elif dashboard_category == 'transfers' %}

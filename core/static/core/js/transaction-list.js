@@ -11,7 +11,10 @@
         return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
       }
 
-      if (range === 'this-month') {
+      if (this.dataset.start) {
+        start = this.dataset.start;
+        end = this.dataset.end;
+      } else if (range === 'this-month') {
         start = fmt(new Date(y, m, 1));
         end = fmt(now);
       } else if (range === 'last-month') {

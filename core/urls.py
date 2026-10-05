@@ -47,6 +47,9 @@ urlpatterns = [
     path('rules-v2/', views.rules_v2_list, name='rules_v2_list'),
     path('rules-v2/save/', views.rules_v2_save, name='rules_v2_save'),
     path('rules-v2/delete/', views.rules_v2_delete, name='rules_v2_delete'),
+    path('trips/', views.trip_list, name='trip_list'),
+    path('trips/save/', views.trip_save, name='trip_save'),
+    path('trips/delete/', views.trip_delete, name='trip_delete'),
     path('categories/delete-all/', views.yaml_category_delete_all, name='yaml_category_delete_all'),
     # Rules management
     path('rules/delete-all/', views.delete_all_rules, name='delete_all_rules'),

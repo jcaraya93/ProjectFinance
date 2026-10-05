@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 
 from ..models import (
-    Transaction, LogicalTransaction, RawTransaction,
+    Transaction, LogicalTransaction, RawTransaction, Trip,
     CategoryGroup, CategoryNode, CurrencyLedger, UserPreference,
 )
 from ..filters import TransactionFilter
@@ -59,6 +59,8 @@ def _transaction_return_link(request):
         return '', ''
     sources = {
         'category_v2_list': 'Categories',
+        'rules_v2_list': 'Rules',
+        'trip_list': 'Trips',
         'statement_list': 'Statements',
         'spending_income_dashboard': 'Expense Composition',
         'expense_composition_over_time_dashboard': 'Expense Time Composition',
@@ -67,7 +69,7 @@ def _transaction_return_link(request):
         'income_salary_dashboard': 'Salary',
         'income_bonus_dashboard': 'Bonuses',
         'bank_income_overview_dashboard': 'Bank Income',
-        'reimbursement_overview_dashboard': 'Reimbursements',
+        'reimbursement_overview_dashboard': 'Refunds',
         'car_dashboard': 'Car',
         'car_gas_dashboard': 'Car Gas',
         'car_parking_dashboard': 'Car Parking',
@@ -228,6 +230,7 @@ def transaction_list(request):
         'selected_cls_methods': cls_methods,
         'advanced_meta_filters': advanced_meta_filters,
         'rule_ids': rule_ids,
+        'trips': Trip.objects.filter(user=request.user),
         'statement_ids': statement_ids,
         'split_filter': split_filter,
         'amount_min': amount_min,

@@ -1847,8 +1847,19 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         .annotate(abs_total=Sum(abs_field))
         .order_by('-abs_total')
     )
-    breakdown_data = {'labels': [], 'values': [], 'colors': []}
+    breakdown_data = {'labels': [], 'values': [], 'colors': [], 'urls': []}
     top_data = {'labels': [], 'values': [], 'colors': []}
+    reimb_ids_by_name = _category_ids_by_name(
+        request.user, [r['category_v2__name'] for r in cat_breakdown], 'income')
+
+    def tx_url(cat_id, extra=(), with_period=True):
+        params = [('group', 'income'), ('category_scope', 'direct'), ('return_to', request.get_full_path()),
+                  ('category', cat_id)]
+        if with_period:
+            params.extend((k, period[k].isoformat()) for k in ('start_date', 'end_date') if period[k])
+        params.extend(extra)
+        return reverse('core:transaction_list') + '?' + urlencode(params)
+
     for r in cat_breakdown:
         name = r['category_v2__name'] or 'Uncategorized'
         val = float(r['abs_total'] or 0)
@@ -1856,6 +1867,7 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         breakdown_data['labels'].append(name)
         breakdown_data['values'].append(val)
         breakdown_data['colors'].append(color)
+        breakdown_data['urls'].append(tx_url(reimb_ids_by_name[name]) if name in reimb_ids_by_name else '')
         top_data['labels'].append(name)
         top_data['values'].append(val)
         top_data['colors'].append(color)
@@ -1881,6 +1893,8 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         stacked_series.append({
             'name': name,
             'data': [round(cat_series_map[name].get(m, 0)) for m in sorted_months],
+            'urls': _month_segment_urls(request, period, sorted_months, [reimb_ids_by_name[name]],
+                                        group_slug='income') if name in reimb_ids_by_name else [],
         })
         stacked_colors.append(cat_color_map[name])
 
@@ -1911,10 +1925,13 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
     scatter_colors = {}
     for d, amt, desc, cat_name, cat_color in individual_txns:
         cat = cat_name or 'Uncategorized'
+        day = d.isoformat() if hasattr(d, 'isoformat') else str(d)
         scatter_by_cat[cat].append({
-            'date': d.isoformat() if hasattr(d, 'isoformat') else str(d),
+            'date': day,
             'amount': round(abs(float(amt))) if amt else 0,
             'description': desc,
+            'url': tx_url(reimb_ids_by_name[cat], [('start_date', day), ('end_date', day), ('search', desc)],
+                          with_period=False) if cat in reimb_ids_by_name else '',
         })
         scatter_colors[cat] = cat_color or '#6c757d'
 
@@ -1951,6 +1968,8 @@ def reimbursement_overview_dashboard(request, display_currency, time_group):
         count_series.append({
             'name': name,
             'data': [count_cat_map[name].get(m, 0) for m in sorted_months],
+            'urls': _month_segment_urls(request, period, sorted_months, [reimb_ids_by_name[name]],
+                                        group_slug='income') if name in reimb_ids_by_name else [],
         })
         count_colors.append(count_color_map[name])
 
@@ -2001,7 +2020,7 @@ def _income_period_filter(request, qs, category_ids):
     return _dashboard_period_filter(request, qs, category_ids, 'income', 'income')
 
 
-def _month_segment_urls(request, period, months, category_ids, search=None):
+def _month_segment_urls(request, period, months, category_ids, search=None, group_slug='expense'):
     """Transaction-list URLs for one chart segment, one per 'YYYY-MM' month, clamped to the selected period."""
     from calendar import monthrange
     urls = []
@@ -2013,7 +2032,7 @@ def _month_segment_urls(request, period, months, category_ids, search=None):
             start = max(start, period['start_date'])
         if period['end_date']:
             end = min(end, period['end_date'])
-        params = [('group', 'expense'), ('category_scope', 'direct'), ('return_to', request.get_full_path())]
+        params = [('group', group_slug), ('category_scope', 'direct'), ('return_to', request.get_full_path())]
         params.extend(('category', cid) for cid in sorted(category_ids))
         params.extend([('start_date', start.isoformat()), ('end_date', end.isoformat())])
         if search:
@@ -2022,9 +2041,9 @@ def _month_segment_urls(request, period, months, category_ids, search=None):
     return urls
 
 
-def _category_ids_by_name(user, names):
+def _category_ids_by_name(user, names, group_slug='expense'):
     return dict(CategoryNode.objects.filter(
-        user=user, group__slug='expense', name__in=names,
+        user=user, group__slug=group_slug, name__in=names,
     ).values_list('name', 'id'))
 
 

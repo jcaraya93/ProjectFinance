@@ -47,7 +47,7 @@ class TestTransactionReturnLink:
         ('income_salary_dashboard', 'Salary'),
         ('income_bonus_dashboard', 'Bonuses'),
         ('bank_income_overview_dashboard', 'Bank Income'),
-        ('reimbursement_overview_dashboard', 'Reimbursements'),
+        ('reimbursement_overview_dashboard', 'Refunds'),
         ('manual_classification_dashboard', 'Manual Classification'),
         ('transaction_health_dashboard', 'Data Quality'),
     ])

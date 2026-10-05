@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db.models import Count
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -56,6 +57,7 @@ def rules_v2_list(request):
     CategoryNode.ensure_protected(request.user)
     rules = list(
         ClassificationRuleV2.objects.filter(user=request.user).select_related('category__group')
+        .annotate(txn_count=Count('matched_transactions'))
     )
     tree = _build_tree(list(CategoryNode.objects.filter(user=request.user).select_related('group')))
 
