@@ -1,6 +1,7 @@
 """Integration tests for transaction views."""
 import json
 import re
+from datetime import date
 from urllib.parse import parse_qs, urlsplit
 from decimal import Decimal
 
@@ -11,7 +12,7 @@ from core.models import (
     Transaction, LogicalTransaction, CategoryGroup, CategoryNode,
     ClassificationRuleV2, UserPreference, Tag, TagGroup,
 )
-from core.tests.factories import RawTransactionFactory, LogicalTransactionFactory
+from core.tests.factories import RawTransactionFactory, LogicalTransactionFactory, UserFactory
 
 
 class TestTransactionListSmoke:
@@ -62,17 +63,64 @@ class TestTransactionListSmoke:
         assert '<input type="hidden" name="sort" value="amount">' in content
         assert '<input type="hidden" name="dir" value="asc">' in content
 
-    def test_date_dropdown_has_explicit_clear_dates_button(self, auth_client):
+    def test_date_dropdown_replaces_legacy_shortcuts_with_all_time(self, auth_client):
         content = auth_client.get(reverse('core:transaction_list')).content.decode()
 
-        assert 'class="btn btn-sm btn-outline-danger date-preset" data-range="all">Clear dates</button>' in content
+        assert 'data-range="all">All Time</button>' in content
+        assert '>Clear dates</button>' not in content
+        for preset in ('this-month', 'last-month', '3-months', '6-months', 'ytd', 'last-year'):
+            assert f'data-range="{preset}"' not in content
 
     def test_table_width_toggle_is_available(self, auth_client):
         content = auth_client.get(reverse('core:transaction_list')).content.decode()
 
         assert 'id="toggleTransactionWidth"' in content
         assert '>Expand table</button>' in content
-        assert 'transaction-list.js?v=20261005-expand-table' in content
+        assert 'transaction-list.js?v=20261021-date-periods' in content
+
+    def test_date_presets_are_grouped_with_ungrouped_last(self, auth_client, user):
+        activities = TagGroup.objects.create(user=user, name='Activities')
+        trips = TagGroup.objects.create(user=user, name='Trips')
+        TagGroup.objects.create(user=user, name='Empty')
+        later = Tag.objects.create(user=user, group=activities, name='Later',
+                                   start_date='2025-06-01', end_date='2025-06-02')
+        earlier = Tag.objects.create(user=user, group=activities, name='Earlier',
+                                     start_date='2025-01-01', end_date='2025-01-02')
+        trip = Tag.objects.create(user=user, group=trips, name='Vacation',
+                                  start_date='2025-07-01', end_date='2025-07-10')
+        ungrouped = Tag.objects.create(user=user, name='Personal',
+                                       start_date='2025-08-01', end_date='2025-08-02')
+        Tag.objects.create(user=user, group=activities, name='Undated')
+        response = auth_client.get(reverse('core:transaction_list'))
+        sections = response.context['dated_tag_sections']
+
+        assert [section['group'] for section in sections] == [activities, trips, None]
+        assert [section['tags'] for section in sections] == [[later, earlier], [trip], [ungrouped]]
+        content = response.content.decode()
+        date_menu = content.split('>Tag dates</div>', 1)[1].split('</section>', 1)[0]
+        assert date_menu.index('>Activities</div>') < date_menu.index('>Trips</div>') < date_menu.index('>No group</div>')
+        assert date_menu.count('class="dated-tag-group"') == 3
+        assert 'Undated' not in date_menu and '>Empty</div>' not in date_menu
+
+    def test_date_presets_preserve_range_and_active_state(self, auth_client, user):
+        group = TagGroup.objects.create(user=user, name='Trips')
+        Tag.objects.create(user=user, group=group, name='Vacation',
+                           start_date='2025-07-01', end_date='2025-07-10')
+        content = auth_client.get(reverse('core:transaction_list'), {
+            'start_date': '2025-07-01', 'end_date': '2025-07-10',
+        }).content.decode()
+
+        assert 'btn-primary date-preset" data-start="2025-07-01" data-end="2025-07-10"' in content
+
+    def test_date_presets_exclude_other_users_tags_and_empty_sections(self, auth_client):
+        other = UserFactory()
+        Tag.objects.create(user=other, name='Private trip',
+                           start_date='2025-07-01', end_date='2025-07-10')
+        response = auth_client.get(reverse('core:transaction_list'))
+
+        assert response.context['dated_tag_sections'] == []
+        assert '>Tag dates</div>' not in response.content.decode()
+        assert 'Private trip' not in response.content.decode()
 
     def test_tags_have_a_dedicated_column(self, auth_client, user, sample_data):
         txn = sample_data['transactions'][0]
@@ -138,6 +186,77 @@ class TestTransactionListSmoke:
         assert 'data-col="tags" data-cell="6" checked> Tags' in content
         for key, cell in [('6', 7), ('10', 8), ('7', 9), ('8', 10), ('9', 11)]:
             assert f'data-col="{key}" data-cell="{cell}" checked>' in content
+
+
+class TestTransactionDatePeriods:
+    def test_period_choices_use_all_user_history_not_current_filters(self, auth_client, user):
+        LogicalTransactionFactory(user=user, date=date(2023, 12, 15), description='Earlier')
+        LogicalTransactionFactory(user=user, date=date(2024, 7, 2), description='Later')
+        LogicalTransactionFactory(date=date(2020, 1, 1))
+
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'start_date': '2024-07-01', 'end_date': '2024-07-31', 'search': 'Later',
+        })
+        sections = {section['key']: section['items'] for section in response.context['date_period_sections']}
+        assert [p['key'] for p in sections['month']] == [
+            '2024-07', '2024-06', '2024-05', '2024-04', '2024-03', '2024-02', '2024-01', '2023-12',
+        ]
+        assert [p['key'] for p in sections['year']] == ['last-12-months', '2024', '2023']
+        content = response.content.decode()
+        assert 'value="2024-07" data-start="2024-07-01" data-end="2024-07-31" selected' in content
+        assert [txn.description for txn in response.context['page_obj']] == ['Later']
+
+    @pytest.mark.parametrize('key,start,end', [
+        ('2024-02', '2024-02-01', '2024-02-29'),
+        ('2024-Q1', '2024-01-01', '2024-03-31'),
+        ('2024-H1', '2024-01-01', '2024-06-30'),
+        ('2024', '2024-01-01', '2024-12-31'),
+    ])
+    def test_period_dates_are_rendered_and_filter_inclusively(self, auth_client, user, key, start, end):
+        from datetime import timedelta
+
+        start_date, end_date = date.fromisoformat(start), date.fromisoformat(end)
+        included = [
+            LogicalTransactionFactory(user=user, date=start_date),
+            LogicalTransactionFactory(user=user, date=end_date),
+        ]
+        LogicalTransactionFactory(user=user, date=start_date - timedelta(days=1))
+        LogicalTransactionFactory(user=user, date=end_date + timedelta(days=1))
+        response = auth_client.get(reverse('core:transaction_list'), {'start_date': start, 'end_date': end})
+        assert {txn.pk for txn in response.context['page_obj']} == {txn.pk for txn in included}
+        assert f'value="{key}" data-start="{start}" data-end="{end}" selected' in response.content.decode()
+
+    def test_empty_history_still_offers_rolling_periods_and_all_time(self, auth_client):
+        response = auth_client.get(reverse('core:transaction_list'))
+        sections = response.context['date_period_sections']
+
+        assert [section['label'] for section in sections] == ['Month', 'Quarter', 'Semester', 'Year']
+        assert sections[0]['items'] == []
+        assert [section['items'][0]['key'] for section in sections[1:]] == [
+            'last-3-months', 'last-6-months', 'last-12-months',
+        ]
+        assert 'data-range="all">All Time</button>' in response.content.decode()
+
+    def test_period_choices_share_one_compact_accessible_toolbar(self, auth_client):
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+        toolbar = content.split('aria-label="Calendar periods">', 1)[1].split('</div>', 1)[0]
+
+        assert 'input-group input-group-sm flex-nowrap date-period-toolbar' in content
+        assert toolbar.count('<select ') == 4
+        for label in ('Month', 'Quarter', 'Semester', 'Year'):
+            assert f'aria-label="{label}"' in toolbar
+            assert f'<option value="">{label}</option>' in toolbar
+        assert 'data-range="all">All Time</button>' in toolbar
+
+    def test_date_range_precedes_period_and_tag_shortcuts(self, auth_client, user):
+        Tag.objects.create(user=user, name='Vacation',
+                           start_date='2025-07-01', end_date='2025-07-10')
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+
+        assert content.index('id="startDate"') < content.index('id="endDate"')
+        assert content.index('id="endDate"') < content.index('aria-label="Calendar periods"')
+        assert content.index('aria-label="Calendar periods"') < content.index('>Tag dates</div>')
+        assert content.count('id="startDate"') == content.count('id="endDate"') == 1
 
 
 class TestTransactionReturnLink:

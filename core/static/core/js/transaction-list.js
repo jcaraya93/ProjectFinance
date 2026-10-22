@@ -1,45 +1,34 @@
 (function () {
+  function applyDateRange(start, end) {
+    document.getElementById('startDate').value = start;
+    document.getElementById('endDate').value = end;
+    document.getElementById('filterForm').submit();
+  }
+
+  document.querySelectorAll('.date-period-select').forEach(function (select) {
+    select.addEventListener('change', function () {
+      var option = this.selectedOptions[0];
+      if (option.value) {
+        applyDateRange(option.dataset.start, option.dataset.end);
+      }
+    });
+  });
+
   // Date range presets
   document.querySelectorAll('.date-preset').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var range = this.dataset.range;
-      var now = new Date();
       var start = '', end = '';
-      var y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
-
-      function fmt(dt) {
-        return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
-      }
 
       if (this.dataset.start) {
         start = this.dataset.start;
         end = this.dataset.end;
-      } else if (range === 'this-month') {
-        start = fmt(new Date(y, m, 1));
-        end = fmt(now);
-      } else if (range === 'last-month') {
-        start = fmt(new Date(y, m - 1, 1));
-        end = fmt(new Date(y, m, 0));
-      } else if (range === '3-months') {
-        start = fmt(new Date(y, m - 2, 1));
-        end = fmt(now);
-      } else if (range === '6-months') {
-        start = fmt(new Date(y, m - 5, 1));
-        end = fmt(now);
-      } else if (range === 'ytd') {
-        start = fmt(new Date(y, 0, 1));
-        end = fmt(now);
-      } else if (range === 'last-year') {
-        start = fmt(new Date(y - 1, 0, 1));
-        end = fmt(new Date(y - 1, 11, 31));
       } else if (range === 'all') {
         start = '';
         end = '';
       }
 
-      document.getElementById('startDate').value = start;
-      document.getElementById('endDate').value = end;
-      document.getElementById('filterForm').submit();
+      applyDateRange(start, end);
     });
   });
 

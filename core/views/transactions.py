@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import date
 from urllib.parse import urlsplit
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -17,6 +18,7 @@ from ..models import (
 )
 from ..filters import TransactionFilter
 from ..ratelimit import ratelimit
+from ..services.periods import build_period_options
 from ._helpers import _bulk_selection_url, _safe_next_url
 
 from .categories_v2 import _build_tree
@@ -100,7 +102,7 @@ def _transaction_return_link(request):
 
 @login_required
 def transaction_list(request):
-    from django.db.models import Count, Subquery, OuterRef
+    from django.db.models import Count, Min, Max, Subquery, OuterRef
     qs = Transaction.objects.filter(user=request.user).select_related(
         'category_v2__group', 'matched_rule_v2', 'raw_transaction__ledger',
         'raw_transaction__ledger__statement_import',
@@ -111,6 +113,16 @@ def transaction_list(request):
             .values('raw_transaction').annotate(c=Count('id')).values('c')
         )
     )
+
+    date_range = qs.aggregate(earliest=Min('date'), latest=Max('date'))
+    period_options = build_period_options(date_range['earliest'], date_range['latest'], date.today())
+    date_period_sections = [
+        {'key': key, 'label': label, 'items': items}
+        for (key, label), items in zip(
+            [('month', 'Month'), ('quarter', 'Quarter'), ('semester', 'Semester'), ('year', 'Year')],
+            period_options,
+        )
+    ]
 
     # Apply filters via django-filter
     start_date = request.GET.get('start_date')
@@ -241,6 +253,7 @@ def transaction_list(request):
         'meta_keys': meta_keys,
         'start_date': start_date or '',
         'end_date': end_date or '',
+        'date_period_sections': date_period_sections,
         'selected_categories': categories,
         'selected_wallets': wallet_ids,
         'selected_groups': groups,
@@ -248,7 +261,10 @@ def transaction_list(request):
         'selected_cls_methods': cls_methods,
         'advanced_meta_filters': advanced_meta_filters,
         'rule_ids': rule_ids,
-        'dated_tags': Tag.objects.filter(user=request.user, start_date__isnull=False).order_by('-start_date', 'name'),
+        'dated_tag_sections': _tag_sections(
+            Tag.objects.filter(user=request.user, start_date__isnull=False)
+            .select_related('group').order_by('-start_date', 'name')
+        ),
         'tags': Tag.objects.filter(user=request.user),
         'selected_tags': request.GET.getlist('tag'),
         'account_types': Account.ACCOUNT_TYPES,

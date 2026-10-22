@@ -9,6 +9,23 @@
     max-width: none;
     width: 100%;
   }
+  .transaction-date-menu {
+    width: min(440px, calc(100vw - 2rem));
+    min-width: 0;
+    max-height: 75vh;
+    overflow-y: auto;
+  }
+  .date-period-toolbar .form-select {
+    min-width: 0;
+    padding-left: .4rem;
+    padding-right: 1.25rem;
+    background-position: right .25rem center;
+    font-size: .75rem;
+  }
+  .date-period-toolbar .btn {
+    font-size: .75rem;
+    white-space: nowrap;
+  }
 </style>
 {% if return_to %}
 <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
@@ -28,31 +45,40 @@
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
             Date {% if start_date or end_date %}<span class="badge bg-primary">1</span>{% endif %}
           </button>
-          <div class="dropdown-menu p-2" style="min-width: 320px;">
-            <div class="d-flex flex-wrap gap-1 mb-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="this-month">This Month</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="last-month">Last Month</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="3-months">3 Months</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="6-months">6 Months</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="ytd">YTD</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="last-year">Last Year</button>
-              <button type="button" class="btn btn-sm btn-outline-danger date-preset" data-range="all">Clear dates</button>
+          <div class="dropdown-menu p-2 transaction-date-menu">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <input type="date" name="start_date" id="startDate" class="form-control form-control-sm auto-submit" value="{{ start_date }}" aria-label="Start date">
+              <span class="text-muted small">—</span>
+              <input type="date" name="end_date" id="endDate" class="form-control form-control-sm auto-submit" value="{{ end_date }}" aria-label="End date">
             </div>
-            {% if dated_tags %}
             <div class="dropdown-divider"></div>
+            <div class="input-group input-group-sm flex-nowrap date-period-toolbar mb-2" role="group" aria-label="Calendar periods">
+              {% for section in date_period_sections %}
+                <select id="datePeriod-{{ section.key }}" class="form-select form-select-sm date-period-select" aria-label="{{ section.label }}">
+                  <option value="">{{ section.label }}</option>
+                  {% for period in section.items %}
+                  <option value="{{ period.key }}" data-start="{{ period.start|date:'Y-m-d' }}" data-end="{{ period.end|date:'Y-m-d' }}"{% if start_date == period.start|date:'Y-m-d' and end_date == period.end|date:'Y-m-d' %} selected{% endif %}>{{ period.label }}</option>
+                  {% endfor %}
+                </select>
+              {% endfor %}
+              <button type="button" class="btn {% if not start_date and not end_date %}btn-primary{% else %}btn-outline-secondary{% endif %} date-preset" data-range="all">All Time</button>
+            </div>
+            {% if dated_tag_sections %}
+            <div class="dropdown-divider"></div>
+            <section aria-label="Tag date shortcuts">
             <div class="small text-muted mt-2 mb-1">Tag dates</div>
+            {% for section in dated_tag_sections %}
+            <div class="dated-tag-group">
+            <div class="small fw-semibold mb-1">{{ section.group.name|default:"No group" }}</div>
             <div class="d-flex flex-wrap gap-1 mb-2">
-              {% for trip in dated_tags %}
+              {% for trip in section.tags %}
               <button type="button" class="btn btn-sm {% if start_date == trip.start_date|date:'Y-m-d' and end_date == trip.end_date|date:'Y-m-d' %}btn-primary{% else %}btn-outline-secondary{% endif %} date-preset" data-start="{{ trip.start_date|date:'Y-m-d' }}" data-end="{{ trip.end_date|date:'Y-m-d' }}" title="{{ trip.start_date|date:'Y-m-d' }} to {{ trip.end_date|date:'Y-m-d' }}">{{ trip.name }}</button>
               {% endfor %}
             </div>
-            {% endif %}
-            <div class="dropdown-divider"></div>
-            <div class="d-flex align-items-center gap-2 mt-2">
-              <input type="date" name="start_date" id="startDate" class="form-control form-control-sm auto-submit" value="{{ start_date }}">
-              <span class="text-muted small">—</span>
-              <input type="date" name="end_date" id="endDate" class="form-control form-control-sm auto-submit" value="{{ end_date }}">
             </div>
+            {% endfor %}
+            </section>
+            {% endif %}
           </div>
         </div>
         <div class="dropdown">
@@ -485,5 +511,5 @@
   });
 })();
 </script>
-<script src="{% static 'core/js/transaction-list.js' %}?v=20261005-expand-table"></script>
+<script src="{% static 'core/js/transaction-list.js' %}?v=20261021-date-periods"></script>
 {% endblock %}

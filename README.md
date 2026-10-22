@@ -8,6 +8,9 @@ A personal finance web application for importing bank statements, classifying tr
 - **Dual Currency** — Handles CRC (Costa Rican Colón) and USD with automatic exchange rate conversion.
 - **Transaction Management** — List, filter, sort, search, edit, split/unsplit transactions. Bulk category assignment. Inline category editing.
 - Transactions show all grouped and ungrouped tags as clickable colored badges in a single Tags column. The Columns menu has one Tags toggle, initially visible independently of the former per-group visibility settings; other column preferences are preserved.
+- The Transactions Date dropdown groups dated tag shortcuts by tag group, with No group last and the most recent dates first within each group. Undated tags and empty groups are omitted.
+- The same dropdown offers Month, Quarter, Semester, Year, and All Time selections, including the dashboard's rolling Last 3/6/12 Months options. Calendar choices span the user's transaction history and use complete calendar boundaries; selections preserve the other transaction filters.
+- The Date dropdown shows custom start/end dates first, followed by one compact row of period choices and then grouped tag shortcuts. The former This Month, Last Month, 3/6 Months, YTD, Last Year, and Clear dates buttons are removed; All Time clears the date range.
 - Tag row action menus float outside their group's scrollable table, keeping Edit and Delete accessible without scrolling inside the group.
 - **Rule-Based Classification** — Auto-classify transactions by description keywords, account type, metadata fields, and amount ranges. Rules stored in the database.
 - The Rules V2 page includes **Apply Rules to Unclassified**, which runs all saved rules only on unclassified transactions, preserves existing rule/manual classifications, and returns to the selected category.

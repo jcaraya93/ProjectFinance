@@ -12,6 +12,11 @@ from django.contrib.auth.decorators import login_required
 from ..models import Transaction, LogicalTransaction, CategoryNode, ClassificationRuleV2
 from ..services.stats import get_dashboard_stats
 from ..services.income_categories import income_category_roles, dashboard_income_ids
+from ..services.periods import (
+    build_calendar_periods as _build_calendar_periods,
+    build_period_options,
+    months_before as _months_before,
+)
 from ..instrumentation import tracer, dashboard_duration
 
 __all__ = [
@@ -519,79 +524,6 @@ def manual_classification_dashboard(request, display_currency, time_group):
     return context
 
 
-def _build_calendar_periods(earliest, latest):
-    """Build newest-first lists of calendar Month/Quarter/Semester/Year periods
-    spanning from `earliest` to `latest` (inclusive), each with a stable `key`,
-    display `label`, and `start`/`end` dates (calendar-aligned, not rolling
-    windows).
-    """
-    from calendar import monthrange
-
-    months, quarters, semesters, years = [], [], [], []
-    if not earliest or not latest:
-        return months, quarters, semesters, years
-
-    def _month_end(d):
-        return d.replace(day=monthrange(d.year, d.month)[1])
-
-    # ── Months ──
-    y, m = latest.year, latest.month
-    earliest_first = earliest.replace(day=1)
-    while date(y, m, 1) >= earliest_first:
-        start = date(y, m, 1)
-        months.append({'key': f'{y:04d}-{m:02d}', 'label': start.strftime('%b %Y'),
-                        'start': start, 'end': _month_end(start)})
-        m -= 1
-        if m < 1:
-            m, y = 12, y - 1
-
-    # ── Quarters ──
-    def _q(d):
-        return (d.month - 1) // 3 + 1
-
-    y, q = latest.year, _q(latest)
-    ey, eq = earliest.year, _q(earliest)
-    while (y, q) >= (ey, eq):
-        start_month = (q - 1) * 3 + 1
-        start = date(y, start_month, 1)
-        end = _month_end(date(y, start_month + 2, 1))
-        quarters.append({'key': f'{y:04d}-Q{q}', 'label': f'Q{q} {y}', 'start': start, 'end': end})
-        q -= 1
-        if q < 1:
-            q, y = 4, y - 1
-
-    # ── Semesters ──
-    def _h(d):
-        return 1 if d.month <= 6 else 2
-
-    y, h = latest.year, _h(latest)
-    ey, eh = earliest.year, _h(earliest)
-    while (y, h) >= (ey, eh):
-        start_month = 1 if h == 1 else 7
-        start = date(y, start_month, 1)
-        end = _month_end(date(y, start_month + 5, 1))
-        semesters.append({'key': f'{y:04d}-H{h}', 'label': f'H{h} {y}', 'start': start, 'end': end})
-        h -= 1
-        if h < 1:
-            h, y = 2, y - 1
-
-    # ── Years ──
-    for y in range(latest.year, earliest.year - 1, -1):
-        years.append({'key': f'{y:04d}', 'label': str(y), 'start': date(y, 1, 1), 'end': date(y, 12, 31)})
-
-    return months, quarters, semesters, years
-
-
-def _months_before(value, months):
-    from calendar import monthrange
-
-    total_months = (value.year * 12 + value.month - 1) - months
-    year = total_months // 12
-    month = total_months % 12 + 1
-    day = min(value.day, monthrange(year, month)[1])
-    return value.replace(year=year, month=month, day=day)
-
-
 EXPENSE_LEVELS = [1, 2]
 
 
@@ -659,29 +591,9 @@ def _expense_period_context(request, default_period=None, group_slug=None, defau
     if group_slug:
         qs = qs.filter(category_v2__group__slug=group_slug)
     date_range = qs.aggregate(earliest=Min('date'), latest=Max('date'))
-    months, quarters, semesters, years = _build_calendar_periods(date_range['earliest'], date_range['latest'])
-    today = date.today()
-    rolling_year = {
-        'key': 'last-12-months',
-        'label': 'Last 12 Months',
-        'start': _months_before(today, 12),
-        'end': today,
-    }
-    rolling_semester = {
-        'key': 'last-6-months',
-        'label': 'Last 6 Months',
-        'start': _months_before(today, 6),
-        'end': today,
-    }
-    rolling_quarter = {
-        'key': 'last-3-months',
-        'label': 'Last 3 Months',
-        'start': _months_before(today, 3),
-        'end': today,
-    }
-    years.insert(0, rolling_year)
-    semesters.insert(0, rolling_semester)
-    quarters.insert(0, rolling_quarter)
+    months, quarters, semesters, years = build_period_options(
+        date_range['earliest'], date_range['latest'], date.today(),
+    )
     period_lookup = {
         'month': {p['key']: p for p in months},
         'quarter': {p['key']: p for p in quarters},
