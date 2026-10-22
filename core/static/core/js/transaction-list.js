@@ -83,9 +83,11 @@
   var txnTable = document.querySelector('.table-responsive table');
   var transactionWidthToggle = document.getElementById('toggleTransactionWidth');
   var transactionMain = document.querySelector('main.container');
+  var transactionNavigation = document.querySelector('.navbar > .container');
   var transactionWidthKey = 'transactions-expanded-width';
   function setTransactionWidthExpanded(expanded) {
     transactionMain.classList.toggle('transactions-expanded', expanded);
+    transactionNavigation.classList.toggle('transactions-expanded', expanded);
     transactionWidthToggle.setAttribute('aria-pressed', String(expanded));
     transactionWidthToggle.textContent = expanded ? 'Restore table width' : 'Expand table';
     localStorage.setItem(transactionWidthKey, expanded ? 'true' : 'false');

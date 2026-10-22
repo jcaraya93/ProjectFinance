@@ -76,7 +76,8 @@ class TestTransactionListSmoke:
 
         assert 'id="toggleTransactionWidth"' in content
         assert '>Expand table</button>' in content
-        assert 'transaction-list.js?v=20261021-date-periods' in content
+        assert 'transaction-list.js?v=20261021-expanded-navigation' in content
+        assert '.navbar > .container.transactions-expanded' in content
 
     def test_date_presets_are_grouped_with_ungrouped_last(self, auth_client, user):
         activities = TagGroup.objects.create(user=user, name='Activities')
