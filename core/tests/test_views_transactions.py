@@ -79,6 +79,30 @@ class TestTransactionListSmoke:
         assert 'transaction-list.js?v=20261021-expanded-navigation' in content
         assert '.navbar > .container.transactions-expanded' in content
 
+    @pytest.mark.parametrize('params,visible', [
+        ({}, False), ({'adv_open': '1'}, True), ({'transaction_code': 'PT'}, True),
+    ])
+    def test_classification_actions_follow_advanced_search_visibility(self, auth_client, params, visible):
+        content = auth_client.get(reverse('core:transaction_list'), params).content.decode()
+
+        expected_class = 'collapse show' if visible else 'collapse '
+        assert f'class="{expected_class}" id="classificationAdvanced"' in content
+        assert 'data-bs-target="#advancedSearch, #classificationAdvanced"' in content
+
+    def test_toolbar_separates_classification_and_display_actions(self, auth_client):
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+        left, right = content.split('id="transactionClassificationActions"', 1)[1].split(
+            'id="transactionDisplayActions"', 1,
+        )
+
+        assert 'Apply Rules to Unclassified' in left
+        assert '        Reset' in left
+        assert 'id="toggleTransactionWidth"' not in left
+        assert 'd-flex gap-2 align-items-center ms-auto' in left
+        assert 'id="toggleTransactionWidth"' in right
+        assert 'id="displayCurrency"' in right
+        assert '      Columns' in right
+
     def test_date_presets_are_grouped_with_ungrouped_last(self, auth_client, user):
         activities = TagGroup.objects.create(user=user, name='Activities')
         trips = TagGroup.objects.create(user=user, name='Trips')
@@ -187,6 +211,117 @@ class TestTransactionListSmoke:
         assert 'data-col="tags" data-cell="6" checked> Tags' in content
         for key, cell in [('6', 7), ('10', 8), ('7', 9), ('8', 10), ('9', 11)]:
             assert f'data-col="{key}" data-cell="{cell}" checked>' in content
+
+
+class TestTransactionDisplayCurrency:
+    def test_currency_selector_precedes_columns_and_submits_filter_form(self, auth_client):
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+
+        assert 'value="original" form="filterForm"' in content
+        assert 'id="displayCurrency" class="btn btn-sm btn-outline-secondary dropdown-toggle"' in content
+        assert content.count('onchange="this.form.requestSubmit()"') == 3
+        button = content.split('id="displayCurrency"', 1)[1].split('</button>', 1)[0]
+        assert 'Currency' in button
+        assert 'Original' not in button
+        assert content.index('</form>', content.index('id="filterForm"')) < content.index('id="displayCurrency"')
+        assert content.index('id="displayCurrency"') < content.index('      Columns')
+
+    @pytest.fixture
+    def currency_transactions(self, user):
+        crc = LogicalTransactionFactory(
+            user=user, raw_transaction__ledger__currency='CRC',
+            amount=Decimal('-1000'), amount_crc=Decimal('-1000'), amount_usd=Decimal('-2'),
+        )
+        usd = LogicalTransactionFactory(
+            user=user, raw_transaction__ledger__currency='USD',
+            amount=Decimal('-5.25'), amount_crc=Decimal('-2625'), amount_usd=Decimal('-5.25'),
+        )
+        return crc, usd
+
+    @pytest.mark.parametrize('currency,expected', [
+        (None, ('₡-1000', '$-5.25')),
+        ('original', ('₡-1000', '$-5.25')),
+        ('CRC', ('₡-1000', '₡-2625')),
+        ('USD', ('$-2.00', '$-5.25')),
+    ])
+    def test_display_amounts_in_selected_currency(self, auth_client, currency_transactions, currency, expected):
+        response = auth_client.get(reverse('core:transaction_list'),
+                                   {'display_currency': currency} if currency else {})
+        content = response.content.decode()
+
+        assert response.context['display_currency'] == (currency or 'original')
+        for txn, amount in zip(currency_transactions, expected):
+            body = content.split('<tbody>', 1)[1].split('</tbody>', 1)[0]
+            row = next(row for row in body.split('<tr>') if f'value="{txn.pk}"' in row)
+            cells = re.findall(r'<td\b[^>]*>(.*?)</td>', row.split('</tr>', 1)[0], re.S)
+            assert amount in cells[10]
+        assert re.search(
+            rf'name="display_currency" value="{currency or "original"}"[^>]* checked',
+            content,
+        )
+
+    @pytest.mark.parametrize('currency,direction,reversed_order', [
+        ('original', 'asc', False), ('original', 'desc', True),
+        ('CRC', 'asc', True), ('CRC', 'desc', False),
+        ('USD', 'asc', True), ('USD', 'desc', False),
+    ])
+    def test_amount_sort_uses_selected_currency(self, auth_client, currency_transactions, currency, direction, reversed_order):
+        crc, usd = currency_transactions
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'display_currency': currency, 'sort': 'amount', 'dir': direction,
+        })
+        expected = [usd.pk, crc.pk] if reversed_order else [crc.pk, usd.pk]
+        assert [txn.pk for txn in response.context['page_obj']] == expected
+
+    @pytest.mark.parametrize('direction', ['asc', 'desc'])
+    def test_missing_conversions_are_unavailable_and_sort_last(self, auth_client, user, direction):
+        missing = LogicalTransactionFactory(user=user, amount=Decimal('99'), amount_usd=None)
+        zero = LogicalTransactionFactory(user=user, amount=Decimal('0'), amount_usd=Decimal('0'))
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'display_currency': 'USD', 'sort': 'amount', 'dir': direction,
+        })
+
+        assert [txn.pk for txn in response.context['page_obj']] == [zero.pk, missing.pk]
+        content = response.content.decode()
+        assert 'Unavailable (USD)' in content
+        assert '$0.00' in content
+        assert '$99.00' not in content
+
+    def test_invalid_currency_is_reported_and_normalized(self, auth_client):
+        response = auth_client.get(reverse('core:transaction_list'), {'display_currency': 'EUR'})
+
+        assert response.context['display_currency'] == 'original'
+        assert 'Invalid display currency; showing original amounts.' in response.content.decode()
+        assert parse_qs(response.context['filter_qs'])['display_currency'] == ['original']
+
+    def test_currency_and_filters_are_preserved_in_navigation(self, auth_client, user):
+        raw = RawTransactionFactory(user=user)
+        txns = LogicalTransactionFactory.create_batch(51, user=user, raw_transaction=raw, description='Currency test')
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'display_currency': 'CRC', 'search': 'Currency test', 'sort': 'amount', 'dir': 'asc',
+            'category_scope': 'direct', 'return_to': '/food/',
+        })
+        content = response.content.decode()
+
+        for key in ('filter_qs', 'pagination_qs'):
+            params = parse_qs(response.context[key])
+            assert params['display_currency'] == ['CRC']
+            assert params['search'] == ['Currency test']
+            assert params['return_to'] == ['/food/']
+        assert '<input type="hidden" name="category_scope" value="direct">' in content
+        assert 'name="display_currency"' in content
+        assert 'display_currency%3DCRC' in content
+        assert response.context['page_obj'].has_next()
+        assert response.context['total_count'] == len(txns)
+
+    def test_amount_filters_remain_in_original_currency(self, auth_client, currency_transactions):
+        crc, usd = currency_transactions
+        response = auth_client.get(reverse('core:transaction_list'), {
+            'display_currency': 'USD', 'amount_min': '-10',
+        })
+
+        assert [txn.pk for txn in response.context['page_obj']] == [usd.pk]
+        assert 'Original currency amounts' in response.content.decode()
 
 
 class TestTransactionDatePeriods:

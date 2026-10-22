@@ -41,6 +41,7 @@
       {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
       <input type="hidden" name="sort" value="{{ sort_col }}">
       <input type="hidden" name="dir" value="{{ sort_dir }}">
+      {% if category_scope == 'direct' %}<input type="hidden" name="category_scope" value="direct">{% endif %}
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
@@ -233,6 +234,7 @@
             Amount {% if amount_min or amount_max %}<span class="badge bg-primary">1</span>{% endif %}
           </button>
           <div class="dropdown-menu p-2" style="min-width: 240px;">
+            <div class="small text-muted mb-1">Original currency amounts</div>
             <div class="d-flex align-items-center gap-2">
               <input type="number" name="amount_min" class="form-control form-control-sm" placeholder="Min" value="{{ amount_min }}" step="0.01">
               <span class="text-muted small">—</span>
@@ -245,8 +247,8 @@
                onblur="if(this.value!=='{{ search }}'){document.getElementById('filterForm').submit();}" style="width: 180px;">
         <button type="submit" class="btn btn-sm btn-primary">Apply</button>
         <a href="{% url 'core:transaction_list' %}{% if return_to %}?return_to={{ return_to|urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm">Clear</a>
-        <a href="#" class="small text-decoration-none ms-auto" data-bs-toggle="collapse" data-bs-target="#advancedSearch">
-          Advanced search {% if advanced_meta_filters or rule_ids or statement_ids or transaction_code or reference_number %}<span class="badge bg-primary">✓</span>{% endif %}
+        <a href="#" class="small text-decoration-none ms-auto" data-bs-toggle="collapse" data-bs-target="#advancedSearch, #classificationAdvanced" aria-controls="advancedSearch classificationAdvanced">
+          Advanced {% if advanced_meta_filters or rule_ids or statement_ids or transaction_code or reference_number %}<span class="badge bg-primary">✓</span>{% endif %}
         </a>
         </div>
       </div>
@@ -269,21 +271,20 @@
   </div>
 </div>
 
-<div class="d-flex justify-content-between align-items-center mb-2">
+<div class="d-flex flex-wrap gap-2 align-items-center mb-2">
   <p class="text-muted small mb-0">{{ page_obj.paginator.count }} result{{ page_obj.paginator.count|pluralize }}</p>
-  <div class="d-flex gap-2 align-items-center">
+  <div class="collapse {% if rule_ids or statement_ids or transaction_code or reference_number or adv_open %}show{% endif %}" id="classificationAdvanced">
+  <div class="d-flex gap-2 align-items-center" id="transactionClassificationActions">
     <form method="post" action="{% url 'core:classify_unclassified' %}" class="d-inline">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <button type="submit" class="btn btn-sm btn-outline-secondary">Apply Rules to Unclassified</button>
     </form>
-    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleTransactionWidth"
-            aria-pressed="false">Expand table</button>
     <div class="dropdown">
       <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
         Reset
       </button>
-      <div class="dropdown-menu dropdown-menu-end">
+      <div class="dropdown-menu">
         <form method="post" action="{% url 'core:clear_classifications' %}">
           {% csrf_token %}
           <input type="hidden" name="method" value="rule">
@@ -309,6 +310,27 @@
             Clear All Classifications
           </button>
         </form>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="d-flex gap-2 align-items-center ms-auto" id="transactionDisplayActions">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleTransactionWidth"
+            aria-pressed="false">Expand table</button>
+    <div class="dropdown">
+      <button id="displayCurrency" class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Show amounts">
+        Currency{% if display_currency != 'original' %} <span class="badge bg-primary">{{ display_currency }}</span>{% endif %}
+      </button>
+      <div class="dropdown-menu dropdown-menu-end p-2">
+        <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+          <input type="radio" name="display_currency" value="original" form="filterForm" class="form-check-input" onchange="this.form.requestSubmit()"{% if display_currency == 'original' %} checked{% endif %}> Original
+        </label>
+        <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+          <input type="radio" name="display_currency" value="CRC" form="filterForm" class="form-check-input" onchange="this.form.requestSubmit()"{% if display_currency == 'CRC' %} checked{% endif %}> CRC
+        </label>
+        <label class="dropdown-item d-flex align-items-center gap-2 px-2">
+          <input type="radio" name="display_currency" value="USD" form="filterForm" class="form-check-input" onchange="this.form.requestSubmit()"{% if display_currency == 'USD' %} checked{% endif %}> USD
+        </label>
       </div>
     </div>
     <div class="dropdown">
@@ -405,9 +427,11 @@
           <td class="small text-muted text-nowrap">
             {% for k, v in txn.account_metadata.items %}<code>{{ k }}={{ v }}</code>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
           </td>
-          <td class="text-end text-nowrap {% if txn.amount > 0 %}text-success{% elif txn.amount < 0 %}text-danger{% endif %}">
+          <td class="text-end text-nowrap {% if txn.display_amount > 0 %}text-success{% elif txn.display_amount < 0 %}text-danger{% endif %}">
             {% if txn.split_count > 1 %}<span class="badge bg-info me-1" title="{{ txn.split_count }} splits">⇅{{ txn.split_count }}</span>{% endif %}
-            {% if txn.ledger.currency == 'CRC' %}₡{{ txn.amount|floatformat:0 }}{% else %}${{ txn.amount|floatformat:2 }}{% endif %}
+            {% if txn.display_amount is None %}
+            <span class="text-muted" title="No stored {{ display_currency }} conversion is available">Unavailable ({{ display_currency }})</span>
+            {% elif display_currency == 'CRC' or display_currency == 'original' and txn.currency == 'CRC' %}₡{{ txn.display_amount|floatformat:0 }}{% else %}${{ txn.display_amount|floatformat:2 }}{% endif %}
           </td>
           <td class="text-end text-nowrap">
             <a href="{% url 'core:edit_transaction' txn.raw_transaction_id %}?next={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-outline-secondary py-0 px-1">Edit</a>

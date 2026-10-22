@@ -102,12 +102,19 @@ def _transaction_return_link(request):
 
 @login_required
 def transaction_list(request):
-    from django.db.models import Count, Min, Max, Subquery, OuterRef
+    from django.db.models import Count, F, Min, Max, Subquery, OuterRef
+    display_currency = request.GET.get('display_currency', 'original')
+    amount_fields = {'original': 'amount', 'CRC': 'amount_crc', 'USD': 'amount_usd'}
+    if display_currency not in amount_fields:
+        messages.warning(request, 'Invalid display currency; showing original amounts.')
+        display_currency = 'original'
+    amount_field = amount_fields[display_currency]
     qs = Transaction.objects.filter(user=request.user).select_related(
         'category_v2__group', 'matched_rule_v2', 'raw_transaction__ledger',
         'raw_transaction__ledger__statement_import',
         'raw_transaction__ledger__statement_import__account'
     ).prefetch_related('tags', 'matched_rule_v2__tags').annotate(
+        display_amount=F(amount_field),
         split_count=Subquery(
             LogicalTransaction.objects.filter(user=request.user).filter(raw_transaction=OuterRef('raw_transaction'))
             .values('raw_transaction').annotate(c=Count('id')).values('c')
@@ -173,7 +180,7 @@ def transaction_list(request):
         'category': 'category_v2__name',
         'description': 'description',
         'note': 'note',
-        'amount': 'amount',
+        'amount': amount_field,
     }
     sort_col = request.GET.get('sort', 'date')
     sort_dir = request.GET.get('dir', 'desc')
@@ -182,7 +189,9 @@ def transaction_list(request):
     if sort_dir not in ('asc', 'desc'):
         sort_dir = 'desc'
     order_field = SORT_FIELDS[sort_col]
-    if sort_dir == 'desc':
+    if sort_col == 'amount' and display_currency != 'original':
+        order_field = F(order_field).desc(nulls_last=True) if sort_dir == 'desc' else F(order_field).asc(nulls_last=True)
+    elif sort_dir == 'desc':
         order_field = '-' + order_field
     qs = qs.order_by(order_field, '-id')
 
@@ -212,6 +221,8 @@ def transaction_list(request):
     # Build query strings for links
     return_to, return_label = _transaction_return_link(request)
     query_params = request.GET.copy()
+    if 'display_currency' in query_params:
+        query_params['display_currency'] = display_currency
     query_params.pop('return_to', None)
     if return_to:
         query_params['return_to'] = return_to
@@ -255,6 +266,8 @@ def transaction_list(request):
         'end_date': end_date or '',
         'date_period_sections': date_period_sections,
         'selected_categories': categories,
+        'category_scope': request.GET.get('category_scope', ''),
+        'display_currency': display_currency,
         'selected_wallets': wallet_ids,
         'selected_groups': groups,
         'selected_meta': meta_filters,
