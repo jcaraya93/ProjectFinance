@@ -1,5 +1,6 @@
 """Integration tests for transaction views."""
 import json
+import re
 from urllib.parse import parse_qs, urlsplit
 from decimal import Decimal
 
@@ -80,30 +81,63 @@ class TestTransactionListSmoke:
 
         content = auth_client.get(reverse('core:transaction_list')).content.decode()
 
-        assert content.index('>Category') < content.index('<th>Ungrouped tags</th>') < content.index('>Description')
+        assert content.index('>Category') < content.index('<th>Tags</th>') < content.index('>Description')
         assert f'<td>{txn.description}</td>' in content
         assert f'href="/transactions/?tag={tag.pk}" class="badge' in content
-        assert 'data-col="11" data-cell="6" checked> Ungrouped tags' in content
+        assert 'data-col="tags" data-cell="6" checked> Tags' in content
 
-    def test_tag_groups_have_separate_columns(self, auth_client, user, sample_data):
+    def test_grouped_and_ungrouped_tags_share_one_column(self, auth_client, user, sample_data):
         txn = sample_data['transactions'][-1]
         trips = TagGroup.objects.create(user=user, name='Trips')
         work = TagGroup.objects.create(user=user, name='Work')
         trip_tag = Tag.objects.create(user=user, group=trips, name='Vacation')
         work_tag = Tag.objects.create(user=user, group=work, name='Reimbursement')
-        txn.tags.add(trip_tag, work_tag)
+        ungrouped_tag = Tag.objects.create(user=user, name='Personal')
+        txn.tags.add(trip_tag, work_tag, ungrouped_tag)
 
         response = auth_client.get(reverse('core:transaction_list'))
         content = response.content.decode()
 
-        assert f'<th data-tag-group="{trips.pk}">Trips</th>' in content
-        assert f'<th data-tag-group="{work.pk}">Work</th>' in content
-        assert f'data-col="tag-group-column-{trips.pk}"' in content
-        assert f'data-col="tag-group-column-{work.pk}"' in content
-        trips_cell = content.split(f'<td class="text-nowrap" data-tag-group="{trips.pk}">', 1)[1].split('</td>', 1)[0]
-        work_cell = content.split(f'<td class="text-nowrap" data-tag-group="{work.pk}">', 1)[1].split('</td>', 1)[0]
-        assert 'Vacation' in trips_cell and 'Reimbursement' not in trips_cell
-        assert 'Reimbursement' in work_cell and 'Vacation' not in work_cell
+        assert 'data-tag-group=' not in content
+        assert 'tag-group-column-' not in content
+        header = content.split('<thead', 1)[1].split('</thead>', 1)[0]
+        assert len(re.findall(r'<th[ >]', header)) == 12
+        body = content.split('<tbody>', 1)[1].split('</tbody>', 1)[0]
+        row = next(row for row in body.split('<tr>') if f'value="{txn.pk}"' in row)
+        cells = re.findall(r'<td\b[^>]*>(.*?)</td>', row.split('</tr>', 1)[0], re.S)
+        assert len(cells) == 12
+        for tag in (trip_tag, work_tag, ungrouped_tag):
+            assert f'href="/transactions/?tag={tag.pk}"' in cells[6]
+            assert f'background-color: {tag.color};' in cells[6]
+            assert f'>{tag.name}</a>' in cells[6]
+        assert cells[7] == txn.description
+
+    def test_untagged_transaction_shows_placeholder(self, auth_client, sample_data):
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+        tag_cells = re.findall(r'<td data-column="tags">(.*?)</td>', content, re.S)
+
+        assert len(tag_cells) == len(sample_data['transactions'])
+        assert all('<span class="text-muted">—</span>' in cell for cell in tag_cells)
+
+    def test_empty_table_has_fixed_column_span_with_tag_groups(self, auth_client, user):
+        TagGroup.objects.create(user=user, name='Trips')
+        content = auth_client.get(reverse('core:transaction_list')).content.decode()
+
+        assert '<td colspan="12"' in content
+        assert '<th>Tags</th>' in content
+
+    @pytest.mark.parametrize('tags_visible', [True, False])
+    def test_unified_tags_preference_is_independent_of_legacy_columns(self, auth_client, user, tags_visible):
+        columns = {'11': False, 'tag-group-column-1': False, '6': False, 'tags': tags_visible}
+        UserPreference.objects.create(user=user, transaction_columns=columns)
+
+        response = auth_client.get(reverse('core:transaction_list'))
+        content = response.content.decode()
+
+        assert json.loads(response.context['saved_columns_json']) == columns
+        assert 'data-col="tags" data-cell="6" checked> Tags' in content
+        for key, cell in [('6', 7), ('10', 8), ('7', 9), ('8', 10), ('9', 11)]:
+            assert f'data-col="{key}" data-cell="{cell}" checked>' in content
 
 
 class TestTransactionReturnLink:

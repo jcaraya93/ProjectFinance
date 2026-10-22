@@ -7,6 +7,8 @@ A personal finance web application for importing bank statements, classifying tr
 - **Statement Import** — Upload credit card (Credit-2918) and debit card (Debit-2651) CSV files with auto-detection, SHA-256 duplicate prevention, and multi-file upload support.
 - **Dual Currency** — Handles CRC (Costa Rican Colón) and USD with automatic exchange rate conversion.
 - **Transaction Management** — List, filter, sort, search, edit, split/unsplit transactions. Bulk category assignment. Inline category editing.
+- Transactions show all grouped and ungrouped tags as clickable colored badges in a single Tags column. The Columns menu has one Tags toggle, initially visible independently of the former per-group visibility settings; other column preferences are preserved.
+- Tag row action menus float outside their group's scrollable table, keeping Edit and Delete accessible without scrolling inside the group.
 - **Rule-Based Classification** — Auto-classify transactions by description keywords, account type, metadata fields, and amount ranges. Rules stored in the database.
 - The Rules V2 page includes **Apply Rules to Unclassified**, which runs all saved rules only on unclassified transactions, preserves existing rule/manual classifications, and returns to the selected category.
 - Selecting a category on Rules V2 shows only rules assigned directly to it, not rules of its children. All rules remains the combined view.

@@ -189,6 +189,11 @@
   var tagDeleteModal = modal('tagDeleteModal'), groupDeleteModal = modal('tagGroupDeleteModal');
   var defaultColor = $('tagColor').value;
 
+  document.querySelectorAll('.tag-menu-btn').forEach(function (btn) {
+    // Escape the responsive table's overflow without removing horizontal scrolling.
+    new bootstrap.Dropdown(btn, { popperConfig: { strategy: 'fixed' } });
+  });
+
   function syncDateRequired() {
     var start = $('tagStart'), end = $('tagEnd');
     start.required = !!end.value;

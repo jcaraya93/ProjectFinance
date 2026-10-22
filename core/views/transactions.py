@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 
 from ..models import (
-    Account, Transaction, LogicalTransaction, RawTransaction, Tag, TagGroup,
+    Account, Transaction, LogicalTransaction, RawTransaction, Tag,
     CategoryGroup, CategoryNode, CurrencyLedger, UserPreference,
 )
 from ..filters import TransactionFilter
@@ -250,7 +250,6 @@ def transaction_list(request):
         'rule_ids': rule_ids,
         'dated_tags': Tag.objects.filter(user=request.user, start_date__isnull=False).order_by('-start_date', 'name'),
         'tags': Tag.objects.filter(user=request.user),
-        'transaction_tag_groups': TagGroup.objects.filter(user=request.user).order_by('name'),
         'selected_tags': request.GET.getlist('tag'),
         'account_types': Account.ACCOUNT_TYPES,
         'tag_sections': _tag_sections(Tag.objects.filter(user=request.user).select_related('group')),

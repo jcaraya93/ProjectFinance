@@ -87,6 +87,15 @@ class TestTagManagement:
         assert 'class="dropdown-item tag-edit"' in row
         assert 'class="dropdown-item text-danger tag-delete"' in row
 
+    def test_tag_row_menus_escape_the_responsive_table(self, auth_client, user):
+        Tag.objects.create(user=user, name='Mexico')
+
+        html = auth_client.get(reverse('core:tag_list')).content.decode()
+
+        assert 'class="table-responsive"' in html
+        assert "document.querySelectorAll('.tag-menu-btn')" in html
+        assert "new bootstrap.Dropdown(btn, { popperConfig: { strategy: 'fixed' } });" in html
+
     def test_create_edit_delete(self, auth_client, user):
         auth_client.post(reverse('core:tag_save'), {'name': 'Mexico', 'color': '#ff0000'})
         tag = Tag.objects.get(user=user)
