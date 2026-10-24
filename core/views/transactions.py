@@ -88,6 +88,7 @@ def _transaction_return_link(request):
         'car_gas_dashboard': 'Car Gas',
         'car_parking_dashboard': 'Car Parking',
         'food_dashboard': 'Food',
+        'food_tags_dashboard': 'Food · Travel',
         'manual_classification_dashboard': 'Manual Classification',
         'transaction_health_dashboard': 'Data Quality',
     }

@@ -13,6 +13,7 @@ DASHBOARD_URLS = [
     'core:car_gas_dashboard',
     'core:car_parking_dashboard',
     'core:food_dashboard',
+    'core:food_tags_dashboard',
     'core:income_salary_dashboard',
     'core:income_overview_dashboard',
     'core:income_composition_over_time_dashboard',
@@ -462,7 +463,9 @@ class TestSpendingIncomeLevel:
         ('expense_range_dashboard', 'expense', [
             'spending_income_dashboard', 'expense_composition_over_time_dashboard', 'expense_range_dashboard',
         ]),
-        ('car_dashboard', 'category', ['car_dashboard', 'car_gas_dashboard', 'car_parking_dashboard', 'food_dashboard']),
+        ('car_dashboard', 'category', [
+            'car_dashboard', 'car_gas_dashboard', 'car_parking_dashboard', 'food_dashboard', 'food_tags_dashboard',
+        ]),
     ])
     def test_dashboard_sections_have_separate_sidebars(self, auth_client, route, group, links):
         response = auth_client.get(reverse('core:' + route))

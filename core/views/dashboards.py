@@ -33,6 +33,7 @@ __all__ = [
     'car_gas_dashboard',
     'car_parking_dashboard',
     'food_dashboard',
+    'food_tags_dashboard',
     'income_salary_dashboard',
     'income_bonus_dashboard',
     'income_overview_dashboard',
@@ -87,13 +88,13 @@ DASHBOARD_CATEGORIES = {
     'credit_transfers': 'transfers', 'external_transfers': 'transfers',
     'transaction_pairing': 'transfers',
     'car': 'category', 'car_gas': 'category', 'car_parking': 'category',
-    'food': 'category',
+    'food': 'category', 'food_tags': 'category',
     'transaction_health': 'data_quality', 'rule_matching': 'data_quality',
     'default_buckets': 'data_quality', 'manual_classification': 'data_quality',
 }
 
 
-def dashboard_view(name, template, default_time_group='monthly'):
+def dashboard_view(name, template, default_time_group='monthly', partial_template=None):
     """Decorator that handles common dashboard boilerplate:
     - login_required
     - OpenTelemetry span + duration metric
@@ -117,7 +118,8 @@ def dashboard_view(name, template, default_time_group='monthly'):
                 elapsed_ms = (time.monotonic() - t0) * 1000
                 span.set_attribute("dashboard.type", name)
                 dashboard_duration.record(elapsed_ms, {"dashboard": name})
-                return render(request, template, context)
+                response_template = partial_template if partial_template and request.GET.get('partial') == 'top-places' else template
+                return render(request, response_template, context)
         return wrapper
     return decorator
 
@@ -1362,9 +1364,56 @@ def car_parking_dashboard(request, display_currency, time_group):
     return context
 
 
-@dashboard_view("food", "core/dashboard_food.html")
+@dashboard_view("food", "core/dashboard_food.html", partial_template="core/_food_top_places_table.html")
 def food_dashboard(request, display_currency, time_group):
     """Dashboard focused on the Food category and its sub categories."""
+    from django.contrib import messages
+
+    context, food_qs = _food_dashboard_context(request, display_currency)
+    selected = request.GET.get('merchant_category', 'all')
+    category = next((
+        option for option in context['food_merchant_categories'] if option['value'] == selected
+    ), None)
+    if selected != 'all' and category is None:
+        context['merchant_category_warning'] = 'Invalid food sub-category; showing places across all sub-categories.'
+        if request.GET.get('partial') != 'top-places':
+            messages.warning(request, context['merchant_category_warning'])
+        selected = 'all'
+    if category:
+        context['top_merchants'] = _food_top_merchants(
+            food_qs.filter(category_v2_id__in=category['ids']), display_currency,
+        )
+    context['selected_merchant_category'] = selected
+    if selected != 'all':
+        context['period_extra_params'] = urlencode({'merchant_category': selected})
+        context['category_currency_params'] += '&' + context['period_extra_params']
+    return context
+
+
+@dashboard_view("food_tags", "core/dashboard_food_tags.html")
+def food_tags_dashboard(request, display_currency, time_group):
+    """Separate Food dashboard comparing local and international travel."""
+    from django.db.models import Q
+    from ..models import Tag, TagGroup
+    from ..services.food_tags import build_food_tag_analysis, TRAVEL_GROUP_NAMES
+
+    context, food_qs = _food_dashboard_context(request, display_currency)
+    groups = list(TagGroup.objects.filter(user=request.user).filter(
+        Q(name__iexact=TRAVEL_GROUP_NAMES[0]) | Q(name__iexact=TRAVEL_GROUP_NAMES[1]),
+    ))
+    tags = Tag.objects.filter(user=request.user, group__in=groups).select_related('group')
+
+    context.update(build_food_tag_analysis(
+        food_qs, tags, display_currency, context, request.get_full_path(),
+    ))
+    existing_names = {group.name.casefold() for group in groups}
+    context['missing_travel_groups'] = [
+        name for name in TRAVEL_GROUP_NAMES if name.casefold() not in existing_names
+    ]
+    return context
+
+
+def _food_dashboard_context(request, display_currency):
     from collections import defaultdict
     from django.db.models import Sum, Count
     from django.db.models.functions import TruncMonth, Abs
@@ -1399,6 +1448,16 @@ def food_dashboard(request, display_currency, time_group):
         segments.append({'name': f'{FOOD_CATEGORY} (other)', 'color': '#95A5A6', 'ids': [root['id']]})
         node_segment[root['id']] = segments[-1]['name']
     all_ids = set(node_segment)
+    merchant_categories = []
+    if root:
+        def add_merchant_categories(parent, prefix=''):
+            for child in sorted(children_of[parent['id']], key=lambda node: node['name']):
+                label = prefix + child['name']
+                merchant_categories.append({
+                    'value': str(child['id']), 'name': label, 'ids': subtree(child),
+                })
+                add_merchant_categories(child, label + ' / ')
+        add_merchant_categories(root)
 
     food_qs = Transaction.objects.filter(user=request.user, category_v2_id__in=all_ids,
                                          **{f'{amount_field}__isnull': False})
@@ -1452,11 +1511,7 @@ def food_dashboard(request, display_currency, time_group):
         })
     subcategory_table.sort(key=lambda r: -r['total'])
 
-    top_merchants = list(food_qs.values('description')
-                         .annotate(count=Count('id'), total=Sum(abs_field)).order_by('-total')[:10])
-    for r in top_merchants:
-        r['total'] = float(r['total'])
-        r['avg'] = r['total'] / r['count'] if r['count'] else 0
+    top_merchants = _food_top_merchants(food_qs, display_currency)
 
     context = {
         **period,
@@ -1471,6 +1526,7 @@ def food_dashboard(request, display_currency, time_group):
         'food_count_total': sum(month_counts),
         'subcategory_table': subcategory_table,
         'top_merchants': top_merchants,
+        'food_merchant_categories': merchant_categories,
         'food_data': json.dumps({
             'labels': sorted_months,
             'spend_datasets': spend_datasets,
@@ -1483,7 +1539,21 @@ def food_dashboard(request, display_currency, time_group):
             },
         }, cls=DecimalEncoder),
     }
-    return context
+    return context, food_qs
+
+
+def _food_top_merchants(qs, display_currency):
+    from django.db.models import Count, Sum
+    from django.db.models.functions import Abs
+
+    amount_field = 'amount_crc' if display_currency == 'CRC' else 'amount_usd'
+    merchants = list(qs.values('description').annotate(
+        count=Count('id'), total=Sum(Abs(amount_field)),
+    ).order_by('-total', 'description')[:10])
+    for merchant in merchants:
+        merchant['total'] = float(merchant['total'])
+        merchant['avg'] = merchant['total'] / merchant['count'] if merchant['count'] else 0
+    return merchants
 
 
 @dashboard_view("income_salary", "core/dashboard_income_salary.html", default_time_group="biweekly")

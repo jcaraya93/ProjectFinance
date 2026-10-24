@@ -1,0 +1,28 @@
+{% load finance_filters l10n %}
+<div data-selected-category="{{ selected_merchant_category }}">
+  {% if merchant_category_warning %}<div class="alert alert-warning" role="alert">{{ merchant_category_warning }}</div>{% endif %}
+  <div class="table-responsive">
+    <table class="table table-hover table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Place</th>
+          <th scope="col" class="text-center" aria-sort="none"><button type="button" class="btn btn-link btn-sm p-0 text-reset fw-bold text-decoration-none" data-place-sort="count">Transactions <span data-sort-indicator aria-hidden="true">&#8597;</span></button></th>
+          <th scope="col" class="text-end" aria-sort="none"><button type="button" class="btn btn-link btn-sm p-0 text-reset fw-bold text-decoration-none" data-place-sort="avg">Avg per Transaction <span data-sort-indicator aria-hidden="true">&#8597;</span></button></th>
+          <th scope="col" class="text-end" aria-sort="descending"><button type="button" class="btn btn-link btn-sm p-0 text-reset fw-bold text-decoration-none" data-place-sort="total">Period Total <span data-sort-indicator aria-hidden="true">&#8595;</span></button></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in top_merchants %}
+        <tr data-count="{{ m.count|unlocalize }}" data-avg="{{ m.avg|unlocalize }}" data-total="{{ m.total|unlocalize }}">
+          <td>{{ m.description }}</td>
+          <td class="text-center">{{ m.count }}</td>
+          <td class="text-end">{{ currency_symbol }}{{ m.avg|format_number }}</td>
+          <td class="text-end">{{ currency_symbol }}{{ m.total|format_number }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted text-center">No food expenses in this sub-category for the selected period.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

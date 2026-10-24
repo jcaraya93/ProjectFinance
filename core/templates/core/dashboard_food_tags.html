@@ -1,0 +1,99 @@
+{% extends "core/base.html" %}
+{% load finance_filters static %}
+{% block title %}Food Travel - Project Finance{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-2">
+    {% include "core/_dashboard_sidebar.html" with active_dashboard="food_tags" %}
+  </div>
+  <div class="col-md-10">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <div>
+        <h4 class="mb-1">Food &middot; Travel <span class="badge bg-secondary fs-6">Experimental copy</span></h4>
+        <a href="{% url 'core:food_dashboard' %}?{{ category_currency_params }}&display_currency={{ display_currency }}" class="small">Open original Food dashboard</a>
+      </div>
+      {% include "core/_currency_toggle.html" with extra_params=category_currency_params %}
+    </div>
+    {% include "core/_category_dashboard_filters.html" %}
+    {% if not food_found %}
+    <div class="alert alert-info">No expense category named &ldquo;Food&rdquo; was found.</div>
+    {% else %}
+    <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Travel Local vs Travel International vs Other Food</h5>
+    <p class="small text-muted">Travel food has an assigned tag in the Travel Local or Travel International group. Other food has neither travel group, even if it has activity or other tags. Tag date ranges do not automatically assign expenses.</p>
+    {% if missing_travel_groups %}
+    <div class="alert alert-info">Travel tag groups not found: {{ missing_travel_groups|join:", " }}. Only explicitly assigned tags in existing travel groups count as travel food.</div>
+    {% endif %}
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100"><div class="card-body">
+          <h6 class="card-subtitle text-muted">Travel food &middot; {{ period_label }}</h6>
+          <h3 class="card-title mb-1">{{ currency_symbol }}{{ tagged_total|format_number }}</h3>
+          <div class="small text-muted">{{ tagged_count }} transactions &middot; {{ tagged_share|floatformat:1 }}% of food spend</div>
+          {% if tagged_transactions_url %}<a href="{{ tagged_transactions_url }}" class="small">View travel food transactions</a>{% endif %}
+        </div></div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100"><div class="card-body">
+          <h6 class="card-subtitle text-muted">Other food &middot; {{ period_label }}</h6>
+          <h3 class="card-title mb-1">{{ currency_symbol }}{{ other_food_total|format_number }}</h3>
+          <div class="small text-muted">{{ other_food_count }} transactions</div>
+        </div></div>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100"><div class="card-body">
+          <h6 class="card-subtitle text-muted">Average per transaction</h6>
+          <div class="mt-2">Travel: {% if tagged_avg is not None %}<strong>{{ currency_symbol }}{{ tagged_avg|format_number }}</strong>{% else %}<span class="text-muted">No transactions</span>{% endif %}</div>
+          <div>Other: {% if other_food_avg is not None %}<strong>{{ currency_symbol }}{{ other_food_avg|format_number }}</strong>{% else %}<span class="text-muted">No transactions</span>{% endif %}</div>
+          {% if tag_avg_difference_pct is not None %}<div class="small text-muted mt-1">{{ tag_avg_difference_pct|floatformat:1 }}% difference versus other food</div>{% endif %}
+        </div></div>
+      </div>
+    </div>
+    {% if not food_count_total %}
+    <div class="alert alert-info">No food expenses in this period.</div>
+    {% endif %}
+    <div class="row g-3 mb-4">
+      <div class="col-12"><div class="card"><div class="card-body">
+        <h6 class="card-title">Monthly Food Spend by Travel Group</h6>
+        <p class="small text-muted">Travel Local, Travel International, and Other food. Each transaction is counted once, even with multiple tags.</p>
+        {% if mixed_travel_count %}<p class="small text-muted">{{ mixed_travel_count }} transactions belong to both travel groups and appear in a separate Travel Local + International segment.</p>{% endif %}
+        <div id="foodTagSpendChart"></div>
+      </div></div></div>
+    </div>
+    <div class="alert alert-light border small">These comparisons show associations, not causes: a higher average can also reflect different restaurants, groceries, or purchase sizes, not only higher prices.</div>
+    {% if not tag_rows %}
+    <div class="alert alert-info">No food expenses have Travel Local or Travel International tags in this period. Assign a trip tag to the relevant transactions to include them.</div>
+    {% endif %}
+    <div class="card mb-4">
+      <div class="card-header fw-bold">Food by Trip &middot; {{ period_label }}</div>
+      <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-light"><tr>
+            <th>Tag</th><th>Group</th><th class="text-end">Transactions</th><th class="text-end">Total</th>
+            <th class="text-end">Avg per Transaction</th><th class="text-end">Avg vs Other Food</th>
+          </tr></thead>
+          <tbody>
+            {% for row in tag_rows %}
+            <tr>
+              <td><span class="d-inline-block rounded-circle me-2" style="width:10px;height:10px;background:{{ row.color }}"></span><a href="{{ row.url }}">{{ row.name }}</a></td>
+              <td>{{ row.group_name }}</td><td class="text-end">{{ row.count }}</td>
+              <td class="text-end">{{ currency_symbol }}{{ row.total|format_number }}</td>
+              <td class="text-end">{{ currency_symbol }}{{ row.avg|format_number }}</td>
+              <td class="text-end">{% if row.vs_other_pct is not None %}{{ row.vs_other_pct|floatformat:1 }}%{% else %}<span class="text-muted">N/A</span>{% endif %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="6" class="text-muted text-center">No travel food transactions</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer small text-muted">An expense with multiple selected tags appears under each tag; tag totals are not additive. {{ overlapping_tag_count }} transactions have overlapping selected tags.</div>
+    </div>
+
+    {% endif %}
+  </div>
+</div>
+{{ food_tag_data|json_script:"foodTagData" }}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'core/js/food_tag_charts.js' %}"></script>
+{% endblock %}

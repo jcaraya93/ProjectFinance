@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% load finance_filters %}
+{% load finance_filters static %}
 {% block title %}Food — Project Finance{% endblock %}
 
 {% block content %}
@@ -75,41 +75,6 @@
       </div>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header fw-bold">Sub Categories · {{ period_label }}</div>
-          <div class="table-responsive">
-            <table class="table table-hover table-sm align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Sub Category</th>
-                  <th class="text-center">Transactions</th>
-                  <th class="text-end">Avg per Transaction</th>
-                  <th class="text-end">Share</th>
-                  <th class="text-end">Period Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in subcategory_table %}
-                <tr>
-                  <td><span class="d-inline-block rounded-circle me-2" style="width:10px;height:10px;background:{{ row.color }}"></span><a href="{{ row.url }}" class="text-decoration-none">{{ row.name }}</a></td>
-                  <td class="text-center">{{ row.count }}</td>
-                  <td class="text-end">{{ currency_symbol }}{{ row.avg|format_number }}</td>
-                  <td class="text-end">{{ row.share|floatformat:1 }}%</td>
-                  <td class="text-end">{{ currency_symbol }}{{ row.total|format_number }}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="5" class="text-muted text-center">No food expenses in this period</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-            {% include "core/_category_dashboard_transactions.html" %}
-          </div>
-        </div>
-      </div>
-    </div>
-
     <h5 class="text-muted text-uppercase small fw-bold border-bottom pb-2 mb-3">Events</h5>
 
     <div class="row g-3 mb-3">
@@ -130,6 +95,14 @@
           </div>
         </div>
       </div>
+      <div class="col-sm-6 col-lg-4">
+        <div class="card h-100" id="foodPeriodTransactionCount">
+          <div class="card-body">
+            <h6 class="card-subtitle text-muted">Total · {{ period_label }}</h6>
+            <h3 class="card-title mb-1">{{ food_count_total }} transactions</h3>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -143,37 +116,32 @@
       </div>
     </div>
 
-    {% if top_merchants %}
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-4" id="foodTopPlaces">
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-bold">Top Places by Spend · {{ period_label }}</div>
-          <div class="table-responsive">
-            <table class="table table-hover table-sm align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Place</th>
-                  <th class="text-center">Transactions</th>
-                  <th class="text-end">Avg per Transaction</th>
-                  <th class="text-end">Period Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for m in top_merchants %}
-                <tr>
-                  <td>{{ m.description }}</td>
-                  <td class="text-center">{{ m.count }}</td>
-                  <td class="text-end">{{ currency_symbol }}{{ m.avg|format_number }}</td>
-                  <td class="text-end">{{ currency_symbol }}{{ m.total|format_number }}</td>
-                </tr>
+          <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="fw-bold">Top Places by Spend · {{ period_label }}</span>
+            <form id="foodTopPlacesForm" method="get" action="{% url 'core:food_dashboard' %}#foodTopPlaces" class="d-flex flex-wrap align-items-center gap-2">
+              <input type="hidden" name="period_type" value="{{ period_type }}">
+              <input type="hidden" name="period" value="{{ period_key }}">
+              <input type="hidden" name="display_currency" value="{{ display_currency }}">
+              <label for="foodMerchantCategory" class="small mb-0">Sub-category</label>
+              <select name="merchant_category" id="foodMerchantCategory" class="form-select form-select-sm w-auto">
+                <option value="all"{% if selected_merchant_category == 'all' %} selected{% endif %}>All sub-categories</option>
+                {% for option in food_merchant_categories %}
+                <option value="{{ option.value }}"{% if selected_merchant_category == option.value %} selected{% endif %}>{{ option.name }}</option>
                 {% endfor %}
-              </tbody>
-            </table>
+              </select>
+              <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+            </form>
+          </div>
+          <div id="foodTopPlacesStatus" class="small px-3 pt-2" role="status" aria-live="polite"></div>
+          <div id="foodTopPlacesResults">
+            {% include "core/_food_top_places_table.html" %}
           </div>
         </div>
       </div>
     </div>
-    {% endif %}
     {% endif %}
 
   </div>
@@ -183,6 +151,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'core/js/food_top_places.js' %}"></script>
 <script>
 (function() {
   var food = JSON.parse(document.getElementById('foodData').textContent);
